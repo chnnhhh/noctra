@@ -32,20 +32,46 @@ class JAVScanner:
 
         支持格式：
         - SSIS-123.mp4
-        - ABP-456-C.mp4
+        - ABP-456-C.mp4 -> ABP-456（去掉 -C）
+        - MVSD-662-C.mp4 -> MVSD-662（去掉 -C）
+        - FPRE-123C.mp4 -> FPRE-123（去掉 C）
         - FC2-PPV-1234567.mp4
         - ABC-123_字幕版.mp4
         - ABC-123 [Uncensored].mp4
+
+        规则：
+        1. 第一段必须包含字母
+        2. 中间段：字母或字母数字组合
+        3. 最后一段：数字
+        4. 识别后去掉 -C、-UC、C、UC 等后缀，只保留纯番号
         """
         # 去掉扩展名
         name_without_ext = os.path.splitext(filename)[0]
 
+        # 先移除常见后缀（带连字符和不带连字符的）
+        # 先处理带连字符的：-C、-UC
+        for suffix in ['-C', '-UC', '_C', '_UC']:
+            name_without_ext = name_without_ext.replace(suffix, '')
+
+        # 再处理纯字母后缀：C、UC（如 FPRE-123C）
+        # 模式：番号 + 纯字母后缀
+        # 如：SSIS-123C -> SSIS-123
+        # 如：FPRE-123UC -> FPRE-123
+        # 如：SSIS-123字幕版 -> SSIS-123
+        for suffix in ['字幕版', 'Uncensored', '字幕', 'uncensored']:
+            name_without_ext = name_without_ext.replace(suffix, '')
+            name_without_ext = name_without_ext.replace(suffix, '')
+
+        # 移除纯字母后缀（单字母，如 C、UC）
+        # 匹配：番号（字母-数字） + 纯字母
+        pattern_suffix = r'^([A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*-\d+)[A-Z]+$'
+        match = re.match(pattern_suffix, name_without_ext)
+        if match:
+            name_without_ext = match.group(1)
+
         # 主流番号格式：字母或字母数字组合开头，连字符，数字
-        # 例：SSIS-123, ABP-456-C, FC2-PPV-1234567
-        # 第一段：必须包含字母
-        # 中间段：字母或字母数字组合
-        # 最后一段：数字
-        pattern = r'^([A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*-\d+(?:-[A-Za-z0-9]+)?)'
+        # 例：SSIS-123, ABP-456, FC2-PPV-123456
+        pattern = r'^([A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*-\d+)'
 
         match = re.search(pattern, name_without_ext)
         if match:
@@ -121,7 +147,9 @@ def test_identify():
 
     test_cases = [
         ('SSIS-123.mp4', 'SSIS-123'),
-        ('ABP-456-C.mp4', 'ABP-456-C'),
+        ('ABP-456-C.mp4', 'ABP-456'),
+        ('MVSD-662-C.mp4', 'MVSD-662'),
+        ('FPRE-123C.mp4', 'FPRE-123'),
         ('FC2-PPV-1234567.mp4', 'FC2-PPV-1234567'),
         ('ABC-123_字幕版.mp4', 'ABC-123'),
         ('ABC-123 [Uncensored].mp4', 'ABC-123'),

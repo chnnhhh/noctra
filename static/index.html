@@ -474,20 +474,22 @@
             background-color: #1a202c;
             color: white;
             text-align: left;
-            padding: 12px;
-            border-radius: 6px;
+            padding: 16px;
+            border-radius: 8px;
             position: absolute;
             z-index: 1000;
-            bottom: 125%;
+            bottom: 135%;
             left: 50%;
             transform: translateX(-50%);
             opacity: 0;
             transition: opacity 0.3s;
-            max-width: 400px;
-            font-size: 12px;
+            max-width: 600px;
+            min-width: 300px;
+            font-size: 13px;
             font-family: 'Monaco', 'Consolas', monospace;
             word-break: break-all;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            line-height: 1.6;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         }
 
         .tooltip:hover .tooltip-text {
@@ -709,7 +711,7 @@
                             <th style="width: 50px" x-show="view === 'scan'">
                                 <input type="checkbox" class="checkbox" @change="toggleAll" :checked="allSelected">
                             </th>
-                            <th style="width: 140px">番号</th>
+                            <th style="width: 180px">番号</th>
                             <th style="width: 220px">文件名</th>
                             <th>目标路径</th>
                             <th style="width: 100px">状态</th>
@@ -732,13 +734,15 @@
                                     </template>
                                 </td>
                                 <td>
-                                    <span class="filename" x-text="getFilename(file.original_path)"></span>
-                                    <template x-if="file.original_path">
-                                        <div class="tooltip" style="margin-top: 4px;">
-                                            <span style="color: #718096; font-size: 11px;">点击查看完整路径</span>
-                                            <span class="tooltip-text" x-text="file.original_path"></span>
-                                        </div>
-                                    </template>
+                                    <div style="cursor: pointer;" @click="copyToClipboard(file.original_path)">
+                                        <span class="filename" x-text="getFilename(file.original_path)"></span>
+                                        <template x-if="file.original_path">
+                                            <div class="tooltip" style="margin-top: 4px;">
+                                                <span style="color: #718096; font-size: 11px;">点击复制完整路径</span>
+                                                <span class="tooltip-text" x-text="file.original_path"></span>
+                                            </div>
+                                        </template>
+                                    </div>
                                 </td>
                                 <td>
                                     <template x-if="file.target_path">
@@ -875,6 +879,19 @@
                 getFilename(path) {
                     if (!path) return '-';
                     return path.split('/').pop();
+                },
+
+                async copyToClipboard(text) {
+                    try {
+                        await navigator.clipboard.writeText(text);
+                        // 显示成功提示
+                        this.success = '路径已复制到剪贴板';
+                        setTimeout(() => {
+                            this.success = null;
+                        }, 2000);
+                    } catch (err) {
+                        this.error = '复制失败：' + err.message;
+                    }
                 },
 
                 setFilter(filter) {
