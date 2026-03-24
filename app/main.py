@@ -1,0 +1,340 @@
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+import aiosqlite
+import os
+from pathlib import Path
+from typing import Optional
+from datetime import datetime
+
+from app.models import (
+    ScanResult, OrganizeRequest, OrganizeResult,
+    HistoryResult, FileRecord
+)
+from app.scanner import JAVScanner
+from app.organizer import JAVOrganizer
+
+app = FastAPI(title="Noctra JAV Organizer", version="1.0.0")
+
+# 环境变量
+SOURCE_DIR = os.getenv('SOURCE_DIR', '/source')
+DIST_DIR = os.getenv('DIST_DIR', '/dist')
+DB_PATH = os.getenv('DB_PATH', '/app/data/noctra.db')
+
+# 初始化组件
+scanner = JAVScanner(SOURCE_DIR, DIST_DIR)
+organizer = JAVOrganizer(DIST_DIR)
+
+# 挂载静态文件
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+async def init_db():
+    """初始化数据库"""
+    db_dir = Path(DB_PATH).parent
+    db_dir.mkdir(parents=True, exist_ok=True)
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute('''
+            CREATE TABLE IF NOT EXISTS files (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                original_path TEXT UNIQUE NOT NULL,
+                identified_code TEXT,
+                target_path TEXT,
+                status TEXT NOT NULL DEFAULT 'pending',
+                file_size INTEGER NOT NULL,
+                file_mtime REAL NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        ''')
+        await db.commit()
+
+
+@app.on_event("startup")
+async def startup_event():
+    await init_db()
+
+
+async def upsert_file(
+    original_path: str,
+    identified_code: Optional[str],
+    target_path: Optional[str],
+    status: str,
+    file_size: int,
+    file_mtime: float
+) -> int:
+    """
+    插入或更新文件记录
+
+    返回：文件 ID
+    """
+    now = datetime.now().isoformat()
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            '''
+            INSERT OR REPLACE INTO files
+            (original_path, identified_code, target_path, status, file_size, file_mtime, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''',
+            (original_path, identified_code, target_path, status, file_size, file_mtime, now, now)
+        )
+        await db.commit()
+        return cursor.lastrowid
+
+
+async def update_file_status(file_id: int, status: str, target_path: Optional[str] = None):
+    """更新文件状态"""
+    now = datetime.now().isoformat()
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        if target_path:
+            await db.execute(
+                'UPDATE files SET status = ?, target_path = ?, updated_at = ? WHERE id = ?',
+                (status, target_path, now, file_id)
+            )
+        else:
+            await db.execute(
+                'UPDATE files SET status = ?, updated_at = ? WHERE id = ?',
+                (status, now, file_id)
+            )
+        await db.commit()
+
+
+async def get_all_files() -> list[dict]:
+    """获取所有文件记录"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute('SELECT * FROM files ORDER BY id DESC')
+        rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
+
+
+async def get_file_by_path(original_path: str) -> Optional[dict]:
+    """根据原路径获取文件记录"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            'SELECT * FROM files WHERE original_path = ?',
+            (original_path,)
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+
+@app.get("/")
+async def index():
+    """前端页面"""
+    return FileResponse("static/index.html")
+
+
+@app.get("/api/scan", response_model=ScanResult)
+async def scan_files(force_rescan: bool = False):
+    """
+    扫描 /source 目录
+
+    参数：
+    - force_rescan: 是否强制重新扫描（默认 false）
+    """
+    # 扫描文件系统
+    scanned_files = scanner.scan()
+
+    total = 0
+    identified = 0
+    unidentified = 0
+    pending = 0
+    processed = 0
+
+    file_records = []
+
+    for file_info in scanned_files:
+        total += 1
+
+        original_path = file_info['path']
+        code = file_info['identified_code']
+
+        # 判断是否已识别
+        if code:
+            identified += 1
+            status = 'pending'
+            # 计算目标路径
+            filename = file_info['filename']
+            target_path = organizer.get_target_path(code, filename)
+        else:
+            unidentified += 1
+            status = 'skipped'
+            target_path = None
+
+        # 检查历史记录
+        if not force_rescan:
+            existing = await get_file_by_path(original_path)
+            if existing:
+                # 文件未变化（大小和 mtime 相同）
+                if existing['file_size'] == file_info['size'] and existing['file_mtime'] == file_info['mtime']:
+                    status = existing['status']
+                    target_path = existing['target_path']
+                    if status == 'processed':
+                        processed += 1
+                else:
+                    # 文件已变化，更新记录
+                    await upsert_file(
+                        original_path=original_path,
+                        identified_code=code,
+                        target_path=target_path,
+                        status=status,
+                        file_size=file_info['size'],
+                        file_mtime=file_info['mtime']
+                    )
+                file_records.append(FileRecord(
+                    id=existing['id'],
+                    original_path=original_path,
+                    identified_code=code,
+                    target_path=target_path,
+                    status=status,
+                    file_size=file_info['size'],
+                    file_mtime=file_info['mtime'],
+                    created_at=existing['created_at'],
+                    updated_at=existing['updated_at']
+                ))
+                continue
+
+        # 插入新记录
+        file_id = await upsert_file(
+            original_path=original_path,
+            identified_code=code,
+            target_path=target_path,
+            status=status,
+            file_size=file_info['size'],
+            file_mtime=file_info['mtime']
+        )
+
+        if status == 'processed':
+            processed += 1
+        elif status == 'pending':
+            pending += 1
+
+        now = datetime.now().isoformat()
+        file_records.append(FileRecord(
+            id=file_id,
+            original_path=original_path,
+            identified_code=code,
+            target_path=target_path,
+            status=status,
+            file_size=file_info['size'],
+            file_mtime=file_info['mtime'],
+            created_at=now,
+            updated_at=now
+        ))
+
+    return ScanResult(
+        total_files=total,
+        identified=identified,
+        unidentified=unidentified,
+        pending=pending,
+        processed=processed,
+        files=file_records
+    )
+
+
+@app.post("/api/organize", response_model=OrganizeResult)
+async def organize_files(request: OrganizeRequest):
+    """
+    执行整理操作
+
+    请求：
+    {
+        "file_ids": [1, 2, 3]
+    }
+    """
+    # 获取要处理的文件
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        placeholders = ','.join('?' * len(request.file_ids))
+        cursor = await db.execute(
+            f'SELECT * FROM files WHERE id IN ({placeholders}) AND status = ?',
+            (*request.file_ids, 'pending')
+        )
+        rows = await cursor.fetchall()
+
+    if not rows:
+        return OrganizeResult(
+            success_count=0,
+            failed_count=0,
+            results=[]
+        )
+
+    # 准备整理任务
+    organize_tasks = []
+    for row in rows:
+        row_dict = dict(row)
+        organize_tasks.append({
+            'file_id': row_dict['id'],
+            'original_path': row_dict['original_path'],
+            'identified_code': row_dict['identified_code'],
+            'filename': Path(row_dict['original_path']).name
+        })
+
+    # 执行整理
+    results = organizer.organize(organize_tasks)
+
+    # 更新数据库
+    success_count = 0
+    failed_count = 0
+
+    for result in results:
+        file_id = result['file_id']
+        target_path = result['target_path']
+        status = result['status']
+
+        if status == 'moved':
+            await update_file_status(file_id, 'processed', target_path)
+            success_count += 1
+        else:
+            await update_file_status(file_id, 'failed')
+            failed_count += 1
+
+    return OrganizeResult(
+        success_count=success_count,
+        failed_count=failed_count,
+        results=results
+    )
+
+
+@app.get("/api/history", response_model=HistoryResult)
+async def get_history():
+    """
+    获取历史记录
+    """
+    all_files = await get_all_files()
+
+    processed = sum(1 for f in all_files if f['status'] == 'processed')
+    skipped = sum(1 for f in all_files if f['status'] == 'skipped')
+
+    file_records = [
+        FileRecord(
+            id=f['id'],
+            original_path=f['original_path'],
+            identified_code=f['identified_code'],
+            target_path=f['target_path'],
+            status=f['status'],
+            file_size=f['file_size'],
+            file_mtime=f['file_mtime'],
+            created_at=f['created_at'],
+            updated_at=f['updated_at']
+        )
+        for f in all_files
+    ]
+
+    return HistoryResult(
+        total=len(all_files),
+        processed=processed,
+        skipped=skipped,
+        files=file_records
+    )
+
+
+@app.get("/api/health")
+async def health_check():
+    """健康检查"""
+    return {"status": "ok", "source_dir": SOURCE_DIR, "dist_dir": DIST_DIR}
