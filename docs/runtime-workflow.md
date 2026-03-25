@@ -25,6 +25,8 @@ cp config/profiles/local.env.example config/profiles/local.env
 cp config/profiles/nas.env.example config/profiles/nas.env
 ```
 
+For the concrete local startup checklist and script map, see `docs/local-startup.md`.
+
 ## Local Workflow
 
 Foreground run:

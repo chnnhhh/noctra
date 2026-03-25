@@ -3,6 +3,7 @@ import tempfile
 from pathlib import Path
 
 from app.scanner import JAVScanner
+from app.statuses import resolve_scan_status
 
 
 class TestJAVScanner:
@@ -96,6 +97,16 @@ class TestJAVScanner:
             # dist 中的文件不应该被扫描到
             paths = [r['path'] for r in results]
             assert not any('dist' in p for p in paths)
+
+    def test_resolve_scan_status_marks_existing_target(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir) / 'dist' / 'FPRE-123' / 'FPRE-123-C.mp4'
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text('existing target')
+
+            assert resolve_scan_status('FPRE-123', str(target)) == 'target_exists'
+            assert resolve_scan_status('SSIS-123', str(target.parent / 'SSIS-123.mp4')) == 'pending'
+            assert resolve_scan_status(None, None) == 'skipped'
 
 
 if __name__ == '__main__':

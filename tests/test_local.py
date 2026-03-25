@@ -5,10 +5,13 @@
 
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 # 添加项目路径
 project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+from app.statuses import resolve_scan_status
 
 # 直接运行 scanner 和 organizer 文件
 exec(open(project_root / 'app' / 'scanner.py').read())
@@ -63,6 +66,7 @@ def test_organizer():
         ('ABP-456', 'ABP-456-C.mp4', 'ABP-456-C.mp4'),
         ('MVSD-662', 'MVSD-662-C.mp4', 'MVSD-662-C.mp4'),
         ('MVSD-662', 'MVSD-662-UC.mkv', 'MVSD-662-UC.mkv'),
+        ('FPRE-123', 'FPRE-123_字幕版.mp4', 'FPRE-123-C.mp4'),
         ('SSIS-123', 'SSIS-123.mp4', 'SSIS-123.mp4'),  # 无后缀，不变
     ]
 
@@ -82,12 +86,44 @@ def test_organizer():
     return failed == 0
 
 
+def test_scan_status():
+    """测试扫描状态判定"""
+    print("\n=== 测试扫描状态判定 ===\n")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        target = Path(tmpdir) / 'dist' / 'FPRE-123' / 'FPRE-123-C.mp4'
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text('existing target')
+
+        test_cases = [
+            ('FPRE-123', str(target), 'target_exists'),
+            ('SSIS-123', str(target.parent / 'SSIS-123.mp4'), 'pending'),
+            (None, None, 'skipped'),
+        ]
+
+        passed = 0
+        failed = 0
+
+        for code, target_path, expected_status in test_cases:
+            result_status = resolve_scan_status(code, target_path)
+            if result_status == expected_status:
+                print(f"✓ {code or 'None':15} + {target_path or '-':40} -> {result_status}")
+                passed += 1
+            else:
+                print(f"✗ {code or 'None':15} + {target_path or '-':40} -> {result_status} (期望: {expected_status})")
+                failed += 1
+
+        print(f"\n结果: {passed}/{passed+failed} 通过\n")
+        return failed == 0
+
+
 if __name__ == '__main__':
     scanner_ok = test_scanner()
     organizer_ok = test_organizer()
+    status_ok = test_scan_status()
 
     print("\n=== 总体结果 ===")
-    if scanner_ok and organizer_ok:
+    if scanner_ok and organizer_ok and status_ok:
         print("✓ 所有测试通过")
         sys.exit(0)
     else:

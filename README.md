@@ -5,6 +5,7 @@
 ## 运行与部署
 
 统一的环境配置和脚本工作流见 `docs/runtime-workflow.md`。
+本地启动说明见 `docs/local-startup.md`。
 推荐优先使用：
 
 ```bash

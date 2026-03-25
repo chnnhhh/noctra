@@ -33,3 +33,4 @@ test_data/*.db
 test_data/*.db-shm
 test_data/*.db-wal
 test_data/*.db-journal
+.gstack/

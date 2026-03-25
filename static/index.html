@@ -233,6 +233,17 @@
             border-color: #a0aec0;
         }
 
+        button.ghost {
+            background: #fff7ed;
+            color: #9a3412;
+            border: 2px solid #fdba74;
+        }
+
+        button.ghost:hover {
+            background: #ffedd5;
+            border-color: #fb923c;
+        }
+
         button.danger {
             background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
             color: white;
@@ -357,10 +368,54 @@
             border: 2px solid #6ee7b7;
         }
 
+        .badge.target_exists {
+            background: #fff7ed;
+            color: #9a3412;
+            border: 2px solid #fdba74;
+        }
+
         .badge.skipped {
             background: #f1f5f9;
             color: #475569;
             border: 2px solid #cbd5e0;
+        }
+
+        .status-action {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            white-space: nowrap;
+        }
+
+        .status-trigger {
+            padding: 0;
+            border: none;
+            background: transparent;
+            box-shadow: none;
+        }
+
+        .status-trigger:hover,
+        .status-trigger:active {
+            transform: none;
+            box-shadow: none;
+        }
+
+        .status-popover {
+            display: inline-flex;
+            align-items: center;
+            min-width: 84px;
+            padding: 4px;
+            border-radius: 10px;
+            background: white;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 12px 24px rgba(15, 23, 42, 0.16);
+        }
+
+        .status-popover button {
+            width: 100%;
+            justify-content: center;
+            padding: 8px 12px;
+            font-size: 13px;
         }
 
         /* ========== Checkbox ========== */
@@ -605,6 +660,14 @@
             word-break: break-all;
         }
 
+        .modal-code-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 240px;
+            overflow-y: auto;
+        }
+
         .modal-actions {
             display: flex;
             gap: 12px;
@@ -614,6 +677,11 @@
         .modal-actions button {
             min-width: 100px;
             justify-content: center;
+        }
+
+        .modal-actions.split {
+            justify-content: space-between;
+            flex-wrap: wrap;
         }
 
         /* ========== Responsive ========== */
@@ -658,7 +726,7 @@
             <h1>🎬 Noctra JAV 整理工具</h1>
             <div class="header-nav">
                 <a href="#" @click.prevent="switchView('scan')" :class="{ 'active': view === 'scan' }">📂 扫描</a>
-                <a href="#" @click.prevent="loadHistory" :class="{ 'active': view === 'history' }">📋 历史</a>
+                <a href="#" @click.prevent="switchView('history')" :class="{ 'active': view === 'history' }">📋 历史</a>
             </div>
         </div>
 
@@ -735,6 +803,7 @@
                 <button class="filter-button" :class="{ 'active': currentFilter === 'identified' }" @click="setFilter('identified')">已识别</button>
                 <button class="filter-button" :class="{ 'active': currentFilter === 'unidentified' }" @click="setFilter('unidentified')">未识别</button>
                 <button class="filter-button" :class="{ 'active': currentFilter === 'pending' }" @click="setFilter('pending')">待处理</button>
+                <button class="filter-button" :class="{ 'active': currentFilter === 'target_exists' }" @click="setFilter('target_exists')">已存在</button>
                 <button class="filter-button" :class="{ 'active': currentFilter === 'processed' }" @click="setFilter('processed')">已处理</button>
             </div>
         </div>
@@ -750,8 +819,8 @@
                             </th>
                             <th style="width: 220px">番号</th>
                             <th style="width: 240px">文件名</th>
-                            <th style="width: 42%">目标路径</th>
-                            <th style="width: 100px">状态</th>
+                            <th style="width: 38%">目标路径</th>
+                            <th style="width: 170px">状态</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -790,7 +859,24 @@
                                     </template>
                                 </td>
                                 <td>
-                                    <span class="badge" :class="getBadgeClass(file)" x-text="getStatusText(file.status)"></span>
+                                    <template x-if="hasStatusAction(file)">
+                                        <div class="status-action" @click.outside="closeStatusMenu()">
+                                            <button class="status-trigger"
+                                                    @click.stop="toggleStatusMenu(file.id)"
+                                                    :aria-expanded="activeStatusMenuId === file.id">
+                                                <span class="badge" :class="getBadgeClass(file)" x-text="getStatusText(file.status)"></span>
+                                            </button>
+                                            <div class="status-popover" x-show="activeStatusMenuId === file.id">
+                                                <button :class="getStatusActionButtonClass(file)"
+                                                        @click.stop="handleStatusAction(file)">
+                                                    <span x-text="getStatusActionText(file)"></span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <template x-if="!hasStatusAction(file)">
+                                        <span class="badge" :class="getBadgeClass(file)" x-text="getStatusText(file.status)"></span>
+                                    </template>
                                 </td>
                             </tr>
                         </template>
@@ -820,21 +906,40 @@
                     🚀 确认执行整理
                 </div>
                 <div class="modal-content">
-                    确定要整理选中的 <strong x-text="selectedCount"></strong> 个文件吗？
+                    本次将整理以下 <strong x-text="confirmCodes.length"></strong> 个番号：
                 </div>
-                <div class="modal-info">
-                    <div class="modal-info-label">移动到：</div>
-                    <div class="modal-info-value" x-text="distDir"></div>
-                </div>
-                <div class="modal-info">
-                    <div class="modal-info-label">文件将按以下格式整理：</div>
-                    <div class="modal-info-value">
-                        /dist/{番号}/{规范化后的文件名}
+                <div class="modal-info" x-show="confirmCodes.length > 0">
+                    <div class="modal-code-list">
+                        <template x-for="code in confirmCodes" :key="code">
+                            <div class="modal-info-value" x-text="code"></div>
+                        </template>
                     </div>
                 </div>
                 <div class="modal-actions">
-                    <button class="secondary" @click="showConfirmModal = false">取消</button>
+                    <button class="secondary" @click="showConfirmModal = false; confirmFiles = []">取消</button>
                     <button class="primary danger" @click="executeOrganize">确认执行</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Delete Modal -->
+        <div x-show="showDeleteModal" class="modal-overlay">
+            <div class="modal">
+                <div class="modal-title">
+                    🗑️ 处理扫描文件
+                </div>
+                <div class="modal-content">
+                    <span x-text="deleteTargetFile?.identified_code || getFilename(deleteTargetFile?.original_path || '')"></span>
+                    <span x-text="getDeleteModalDescription()"></span>
+                </div>
+                <div class="modal-info" x-show="deleteTargetFile">
+                    <div class="modal-info-label">原始文件：</div>
+                    <div class="modal-info-value" x-text="deleteTargetFile?.original_path"></div>
+                </div>
+                <div class="modal-actions split">
+                    <button class="danger" @click="executeDelete('delete_source')">删除原始文件</button>
+                    <button class="secondary" @click="executeDelete('ignore_scan')">仅删除扫描记录</button>
+                    <button class="secondary" @click="closeDeleteModal">取消</button>
                 </div>
             </div>
         </div>
@@ -848,6 +953,8 @@
                 error: null,
                 success: null,
                 files: [],
+                scanFilesCache: [],
+                historyFilesCache: [],
                 selectedFiles: {},
                 stats: {
                     total_files: 0,
@@ -856,9 +963,15 @@
                     pending: 0,
                     processed: 0
                 },
+                scanLoaded: false,
+                historyLoaded: false,
                 view: 'scan', // 'scan' or 'history'
                 currentFilter: 'all',
+                activeStatusMenuId: null,
                 showConfirmModal: false,
+                confirmFiles: [],
+                showDeleteModal: false,
+                deleteTargetFile: null,
                 distDir: '/dist',
 
                 get allSelected() {
@@ -874,6 +987,23 @@
                     return Object.values(this.selectedFiles).filter(v => v).length;
                 },
 
+                get selectedEntries() {
+                    return this.files.filter(file => this.selectedFiles[file.id]);
+                },
+
+                get confirmCodes() {
+                    const seen = new Set();
+                    return this.confirmFiles
+                        .map(file => file.identified_code || this.getFilename(file.original_path))
+                        .filter(code => {
+                            if (!code || seen.has(code)) {
+                                return false;
+                            }
+                            seen.add(code);
+                            return true;
+                        });
+                },
+
                 get filteredFiles() {
                     if (this.currentFilter === 'all') {
                         return this.files;
@@ -883,6 +1013,7 @@
                         'identified': 'identified',
                         'unidentified': 'unidentified',
                         'pending': 'pending',
+                        'target_exists': 'target_exists',
                         'processed': 'processed'
                     };
 
@@ -907,10 +1038,42 @@
                 getStatusText(status) {
                     const map = {
                         'pending': '待处理',
+                        'target_exists': '已存在',
                         'processed': '已处理',
-                        'skipped': '跳过'
+                        'skipped': '跳过',
+                        'failed': '失败'
                     };
                     return map[status] || status;
+                },
+
+                hasStatusAction(file) {
+                    return this.view === 'scan' && ['pending', 'skipped', 'target_exists'].includes(file.status);
+                },
+
+                getStatusActionText(file) {
+                    return file.status === 'pending' ? '整理' : '删除';
+                },
+
+                getStatusActionButtonClass(file) {
+                    return file.status === 'pending' ? 'primary' : 'ghost';
+                },
+
+                toggleStatusMenu(fileId) {
+                    this.activeStatusMenuId = this.activeStatusMenuId === fileId ? null : fileId;
+                },
+
+                closeStatusMenu() {
+                    this.activeStatusMenuId = null;
+                },
+
+                handleStatusAction(file) {
+                    this.closeStatusMenu();
+                    if (file.status === 'pending') {
+                        this.confirmFiles = [file];
+                        this.showConfirmModal = true;
+                        return;
+                    }
+                    this.openDeleteModal(file);
                 },
 
                 getFilename(path) {
@@ -956,11 +1119,61 @@
                     this.currentFilter = filter;
                 },
 
-                switchView(viewName) {
-                    this.view = viewName;
-                    if (viewName === 'scan') {
-                        this.scanFiles();
+                getResultLabel(result) {
+                    const match = this.scanFilesCache.find(file => file.id === result.file_id)
+                        || this.historyFilesCache.find(file => file.id === result.file_id);
+                    return match?.identified_code || this.getFilename(result.original_path);
+                },
+
+                formatOrganizeFailures(results) {
+                    const failedResults = results.filter(result => result.status === 'failed');
+                    if (failedResults.length === 0) {
+                        return null;
                     }
+
+                    const details = failedResults.slice(0, 3).map(result => {
+                        const label = this.getResultLabel(result);
+                        const reason = result.reason || '未知原因';
+                        return `${label}：${reason}`;
+                    });
+                    const suffix = failedResults.length > 3 ? ' 等' : '';
+                    return `${failedResults.length} 个文件整理失败：${details.join('；')}${suffix}`;
+                },
+
+                updateStats(data) {
+                    this.stats = {
+                        total_files: data.total_files,
+                        identified: data.identified,
+                        unidentified: data.unidentified,
+                        pending: data.pending,
+                        processed: data.processed
+                    };
+                },
+
+                switchVisibleFiles() {
+                    this.files = this.view === 'history' ? this.historyFilesCache : this.scanFilesCache;
+                    this.selectedFiles = {};
+                    this.closeStatusMenu();
+                },
+
+                async switchView(viewName) {
+                    this.view = viewName;
+
+                    this.currentFilter = 'all';
+                    this.error = null;
+                    this.success = null;
+
+                    if (viewName === 'scan') {
+                        if (!this.scanLoaded) {
+                            await this.scanFiles();
+                            return;
+                        }
+                    } else if (!this.historyLoaded) {
+                        await this.loadHistory();
+                        return;
+                    }
+
+                    this.switchVisibleFiles();
                 },
 
                 async scanFiles() {
@@ -974,16 +1187,13 @@
                         const response = await fetch('/api/scan');
                         const data = await response.json();
 
-                        this.stats = {
-                            total_files: data.total_files,
-                            identified: data.identified,
-                            unidentified: data.unidentified,
-                            pending: data.pending,
-                            processed: data.processed
-                        };
-
+                        this.updateStats(data);
+                        this.scanFilesCache = data.files;
                         this.files = data.files;
+                        this.scanLoaded = true;
                         this.selectedFiles = {};
+                        this.confirmFiles = [];
+                        this.closeStatusMenu();
                         this.view = 'scan';
                         this.distDir = '/dist'; // 默认值
                     } catch (e) {
@@ -1004,16 +1214,13 @@
                         const response = await fetch('/api/history');
                         const data = await response.json();
 
-                        this.stats = {
-                            total_files: data.total,
-                            identified: '-',
-                            unidentified: '-',
-                            pending: '-',
-                            processed: data.processed
-                        };
-
-                        this.files = data.files;
+                        this.updateStats(data);
+                        this.historyFilesCache = data.files.filter(file => file.status === 'processed');
+                        this.files = this.historyFilesCache;
+                        this.historyLoaded = true;
                         this.selectedFiles = {};
+                        this.confirmFiles = [];
+                        this.closeStatusMenu();
                         this.view = 'history';
                     } catch (e) {
                         this.error = '加载历史失败: ' + e.message;
@@ -1023,15 +1230,24 @@
                 },
 
                 confirmOrganize() {
-                    const fileIds = Object.entries(this.selectedFiles)
-                        .filter(([id, selected]) => selected)
-                        .map(([id]) => parseInt(id));
+                    this.confirmFiles = this.selectedEntries.filter(file => file.status === 'pending');
 
-                    if (fileIds.length === 0) {
+                    if (this.confirmFiles.length === 0) {
                         return;
                     }
 
                     this.showConfirmModal = true;
+                },
+
+                openDeleteModal(file) {
+                    this.closeStatusMenu();
+                    this.deleteTargetFile = file;
+                    this.showDeleteModal = true;
+                },
+
+                closeDeleteModal() {
+                    this.showDeleteModal = false;
+                    this.deleteTargetFile = null;
                 },
 
                 async executeOrganize() {
@@ -1041,9 +1257,7 @@
                     this.error = null;
                     this.success = null;
 
-                    const fileIds = Object.entries(this.selectedFiles)
-                        .filter(([id, selected]) => selected)
-                        .map(([id]) => parseInt(id));
+                    const fileIds = this.confirmFiles.map(file => file.id);
 
                     try {
                         const response = await fetch('/api/organize', {
@@ -1055,19 +1269,73 @@
                         });
                         const data = await response.json();
 
+                        await this.scanFiles();
+
                         if (data.success_count > 0) {
                             this.success = `成功整理 ${data.success_count} 个文件`;
-                            await this.scanFiles(); // 重新扫描
                         }
 
                         if (data.failed_count > 0) {
-                            this.error = `${data.failed_count} 个文件整理失败`;
+                            this.error = this.formatOrganizeFailures(data.results);
                         }
                     } catch (e) {
                         this.error = '整理失败: ' + e.message;
                     } finally {
+                        this.confirmFiles = [];
                         this.loading = false;
                     }
+                },
+
+                async executeDelete(action) {
+                    if (!this.deleteTargetFile) {
+                        return;
+                    }
+
+                    this.loading = true;
+                    this.loadingText = action === 'delete_source' ? '正在删除原始文件...' : '正在忽略扫描记录...';
+                    this.error = null;
+                    this.success = null;
+                    const fileId = this.deleteTargetFile.id;
+                    this.closeDeleteModal();
+
+                    try {
+                        const response = await fetch(`/api/files/${fileId}/delete`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ action })
+                        });
+                        const data = await response.json();
+
+                        if (!response.ok) {
+                            throw new Error(data.detail || '删除失败');
+                        }
+
+                        this.success = data.message;
+                        this.historyLoaded = false;
+                        await this.scanFiles();
+                    } catch (e) {
+                        this.error = '删除失败: ' + e.message;
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                getDeleteModalDescription() {
+                    if (!this.deleteTargetFile) {
+                        return '请选择处理方式：';
+                    }
+
+                    if (this.deleteTargetFile.status === 'target_exists') {
+                        return '已存在于目标目录中。请选择处理方式：';
+                    }
+
+                    if (this.deleteTargetFile.status === 'skipped') {
+                        return '当前处于跳过状态。请选择处理方式：';
+                    }
+
+                    return '请选择处理方式：';
                 },
 
                 toggleAll() {

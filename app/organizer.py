@@ -12,6 +12,7 @@ class JAVOrganizer:
         re.IGNORECASE,
     )
     CODE_PATTERN = re.compile(r'([A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*-\d+)', re.IGNORECASE)
+    SUBTITLE_MARKER_PATTERN = re.compile(r'字幕版|字幕')
 
     def __init__(self, dist_dir: str):
         self.dist_dir = Path(dist_dir).resolve()
@@ -27,6 +28,7 @@ class JAVOrganizer:
         - ABP-456-C.mp4 -> (ABP-456, .mp4, -C)
         - MVSD-662-UC.mkv -> (MVSD-662, .mkv, -UC)
         - SSIS-123.mp4 -> (SSIS-123, .mp4, None)
+        - FPRE-123_字幕版.mp4 -> (FPRE-123, .mp4, -C)
         """
         name_without_ext = os.path.splitext(filename)[0]
         match = self.CODE_WITH_SUFFIX_PATTERN.match(name_without_ext)
@@ -38,7 +40,7 @@ class JAVOrganizer:
         else:
             code_match = self.CODE_PATTERN.search(name_without_ext)
             base_code = code_match.group(1).upper() if code_match else name_without_ext
-            suffix = None
+            suffix = '-C' if code_match and self.SUBTITLE_MARKER_PATTERN.search(name_without_ext) else None
 
         ext = os.path.splitext(filename)[1]
         return (base_code, ext, suffix)
@@ -48,14 +50,15 @@ class JAVOrganizer:
         生成目标文件名
 
         规则：
-        - 检测原文件名是否有 -C、-UC 等后缀
-        - 如果有，生成格式：{番号}-{后缀}{扩展名}
+        - 检测原文件名是否有 -C、-UC 或 字幕版/字幕 标记
+        - 如果有，生成格式：{番号}{后缀}{扩展名}
         - 如果没有，使用原文件名
 
         例：
         - FPRE-123C.mp4, FPRE-123 -> FPRE-123-C.mp4
         - ABP-456-C.mp4, ABP-456 -> ABP-456-C.mp4
         - MVSD-662-UC.mkv, MVSD-662 -> MVSD-662-UC.mkv
+        - FPRE-123_字幕版.mp4, FPRE-123 -> FPRE-123-C.mp4
         - SSIS-123.mp4, SSIS-123 -> SSIS-123.mp4（不变）
         """
         # 解析原文件名
@@ -80,29 +83,32 @@ class JAVOrganizer:
         target_path = target_dir / filename
         return str(target_path)
 
-    def move_file(self, source_path: str, target_path: str) -> bool:
+    def move_file(self, source_path: str, target_path: str) -> tuple[bool, Optional[str]]:
         """
         移动文件
 
-        返回：是否成功
+        返回：(是否成功, 失败原因)
         """
         try:
             source = Path(source_path)
             target = Path(target_path)
+
+            if not source.exists():
+                return (False, '源文件不存在')
 
             # 创建目标目录
             target.parent.mkdir(parents=True, exist_ok=True)
 
             # 如果目标文件已存在，跳过
             if target.exists():
-                return False
+                return (False, '目标文件已存在')
 
             # 移动文件
             shutil.move(str(source), str(target))
-            return True
+            return (True, None)
         except (OSError, shutil.Error) as e:
             print(f'移动失败: {source_path} -> {target_path}: {e}')
-            return False
+            return (False, str(e))
 
     def organize(self, files: list[dict]) -> list[dict]:
         """
@@ -141,13 +147,14 @@ class JAVOrganizer:
             target_path = self.get_target_path(code, filename)
 
             # 执行移动
-            success = self.move_file(original_path, target_path)
+            (success, reason) = self.move_file(original_path, target_path)
 
             results.append({
                 'file_id': file_id,
                 'original_path': original_path,
                 'target_path': target_path,
-                'status': 'moved' if success else 'failed'
+                'status': 'moved' if success else 'failed',
+                'reason': reason,
             })
 
         return results
@@ -164,7 +171,8 @@ def test_get_filename_parts():
         ('MVSD-662-C.mp4', ('MVSD-662', '.mp4', '-C')),
         ('MVSD-662-UC.mkv', ('MVSD-662', '.mkv', '-UC')),
         ('SSIS-123.mp4', ('SSIS-123', '.mp4', None)),
-        ('FPRE-123_字幕版.mp4', ('FPRE-123', '.mp4', None)),
+        ('FPRE-123_字幕版.mp4', ('FPRE-123', '.mp4', '-C')),
+        ('SSIS-123字幕版.mp4', ('SSIS-123', '.mp4', '-C')),
     ]
 
     print('=== 测试文件名解析 ===')
@@ -186,6 +194,7 @@ def test_generate_filename():
         ('ABP-456', 'ABP-456-C.mp4', 'ABP-456-C.mp4'),
         ('MVSD-662', 'MVSD-662-C.mp4', 'MVSD-662-C.mp4'),
         ('MVSD-662', 'MVSD-662-UC.mkv', 'MVSD-662-UC.mkv'),
+        ('FPRE-123', 'FPRE-123_字幕版.mp4', 'FPRE-123-C.mp4'),
         ('SSIS-123', 'SSIS-123.mp4', 'SSIS-123.mp4'),  # 无后缀，不变
     ]
 
@@ -209,6 +218,7 @@ def test_get_target_path():
         ('ABP-456', 'ABP-456-C.mp4', str(dist_root / 'ABP-456' / 'ABP-456-C.mp4')),
         ('MVSD-662', 'MVSD-662-C.mp4', str(dist_root / 'MVSD-662' / 'MVSD-662-C.mp4')),
         ('MVSD-662', 'MVSD-662-UC.mkv', str(dist_root / 'MVSD-662' / 'MVSD-662-UC.mkv')),
+        ('FPRE-123', 'FPRE-123_字幕版.mp4', str(dist_root / 'FPRE-123' / 'FPRE-123-C.mp4')),
         ('SSIS-123', 'SSIS-123.mp4', str(dist_root / 'SSIS-123' / 'SSIS-123.mp4')),
     ]
 

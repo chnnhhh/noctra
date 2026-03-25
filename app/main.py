@@ -9,10 +9,11 @@ from datetime import datetime
 
 from app.models import (
     ScanResult, OrganizeRequest, OrganizeResult,
-    HistoryResult, FileRecord
+    HistoryResult, FileRecord, DeleteFileRequest, DeleteFileResult
 )
 from app.scanner import JAVScanner
 from app.organizer import JAVOrganizer
+from app.statuses import resolve_scan_status
 
 app = FastAPI(title="Noctra JAV Organizer", version="1.0.0")
 
@@ -102,6 +103,29 @@ async def update_file_status(file_id: int, status: str, target_path: Optional[st
         await db.commit()
 
 
+async def refresh_file_record(
+    file_id: int,
+    identified_code: Optional[str],
+    target_path: Optional[str],
+    status: str,
+    file_size: int,
+    file_mtime: float
+):
+    """刷新扫描得到的文件元数据，避免沿用旧规则生成的目标路径。"""
+    now = datetime.now().isoformat()
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            '''
+            UPDATE files
+            SET identified_code = ?, target_path = ?, status = ?, file_size = ?, file_mtime = ?, updated_at = ?
+            WHERE id = ?
+            ''',
+            (identified_code, target_path, status, file_size, file_mtime, now, file_id)
+        )
+        await db.commit()
+
+
 async def get_all_files() -> list[dict]:
     """获取所有文件记录"""
     async with aiosqlite.connect(DB_PATH) as db:
@@ -123,6 +147,65 @@ async def get_file_by_path(original_path: str) -> Optional[dict]:
         return dict(row) if row else None
 
 
+async def get_file_by_id(file_id: int) -> Optional[dict]:
+    """根据 ID 获取文件记录"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            'SELECT * FROM files WHERE id = ?',
+            (file_id,)
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+
+async def delete_file_record(file_id: int):
+    """删除文件记录"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute('DELETE FROM files WHERE id = ?', (file_id,))
+        await db.commit()
+
+
+def build_global_stats(files: list[object]) -> dict[str, int]:
+    """根据文件记录生成统一的全局统计。"""
+    total_files = 0
+    identified = 0
+    unidentified = 0
+    pending = 0
+    processed = 0
+
+    for file in files:
+        if isinstance(file, dict):
+            identified_code = file.get('identified_code')
+            status = file.get('status')
+        else:
+            identified_code = getattr(file, 'identified_code', None)
+            status = getattr(file, 'status', None)
+
+        if status == 'ignored':
+            continue
+
+        total_files += 1
+
+        if identified_code:
+            identified += 1
+        else:
+            unidentified += 1
+
+        if status == 'pending':
+            pending += 1
+        elif status == 'processed':
+            processed += 1
+
+    return {
+        'total_files': total_files,
+        'identified': identified,
+        'unidentified': unidentified,
+        'pending': pending,
+        'processed': processed,
+    }
+
+
 @app.get("/")
 async def index():
     """前端页面"""
@@ -140,42 +223,70 @@ async def scan_files(force_rescan: bool = False):
     # 扫描文件系统
     scanned_files = scanner.scan()
 
-    total = 0
-    identified = 0
-    unidentified = 0
-    pending = 0
-    processed = 0
-
     file_records = []
 
     for file_info in scanned_files:
-        total += 1
-
         original_path = file_info['path']
         code = file_info['identified_code']
+        existing = await get_file_by_path(original_path)
 
         # 判断是否已识别
         if code:
-            identified += 1
-            status = 'pending'
             # 计算目标路径
             filename = file_info['filename']
             target_path = organizer.get_target_path(code, filename)
+            status = resolve_scan_status(code, target_path)
         else:
-            unidentified += 1
-            status = 'skipped'
             target_path = None
+            status = resolve_scan_status(code, target_path)
+
+        if existing and existing['status'] == 'ignored':
+            metadata_changed = (
+                existing['identified_code'] != code
+                or existing['target_path'] != target_path
+                or existing['file_size'] != file_info['size']
+                or existing['file_mtime'] != file_info['mtime']
+            )
+            if metadata_changed:
+                await refresh_file_record(
+                    file_id=existing['id'],
+                    identified_code=code,
+                    target_path=target_path,
+                    status='ignored',
+                    file_size=file_info['size'],
+                    file_mtime=file_info['mtime']
+                )
+            continue
 
         # 检查历史记录
         if not force_rescan:
-            existing = await get_file_by_path(original_path)
             if existing:
                 # 文件未变化（大小和 mtime 相同）
                 if existing['file_size'] == file_info['size'] and existing['file_mtime'] == file_info['mtime']:
-                    status = existing['status']
-                    target_path = existing['target_path']
-                    if status == 'processed':
-                        processed += 1
+                    if existing['status'] == 'processed' and status == 'pending':
+                        status = existing['status']
+                        target_path = existing['target_path']
+                    else:
+                        metadata_changed = (
+                            existing['identified_code'] != code
+                            or existing['target_path'] != target_path
+                            or existing['status'] != status
+                        )
+                        if metadata_changed:
+                            await refresh_file_record(
+                                file_id=existing['id'],
+                                identified_code=code,
+                                target_path=target_path,
+                                status=status,
+                                file_size=file_info['size'],
+                                file_mtime=file_info['mtime']
+                            )
+                            existing['identified_code'] = code
+                            existing['target_path'] = target_path
+                            existing['status'] = status
+                            existing['file_size'] = file_info['size']
+                            existing['file_mtime'] = file_info['mtime']
+                            existing['updated_at'] = datetime.now().isoformat()
                 else:
                     # 文件已变化，更新记录
                     await upsert_file(
@@ -209,11 +320,6 @@ async def scan_files(force_rescan: bool = False):
             file_mtime=file_info['mtime']
         )
 
-        if status == 'processed':
-            processed += 1
-        elif status == 'pending':
-            pending += 1
-
         now = datetime.now().isoformat()
         file_records.append(FileRecord(
             id=file_id,
@@ -227,12 +333,15 @@ async def scan_files(force_rescan: bool = False):
             updated_at=now
         ))
 
+    all_files = await get_all_files()
+    stats = build_global_stats(all_files)
+
     return ScanResult(
-        total_files=total,
-        identified=identified,
-        unidentified=unidentified,
-        pending=pending,
-        processed=processed,
+        total_files=stats['total_files'],
+        identified=stats['identified'],
+        unidentified=stats['unidentified'],
+        pending=stats['pending'],
+        processed=stats['processed'],
         files=file_records
     )
 
@@ -301,15 +410,49 @@ async def organize_files(request: OrganizeRequest):
     )
 
 
+@app.post("/api/files/{file_id}/delete", response_model=DeleteFileResult)
+async def delete_file(file_id: int, request: DeleteFileRequest):
+    """处理已存在文件：删除原始文件或忽略扫描记录。"""
+    file_record = await get_file_by_id(file_id)
+    if not file_record:
+        raise HTTPException(status_code=404, detail='文件记录不存在')
+
+    if request.action == 'ignore_scan':
+        await update_file_status(file_id, 'ignored', file_record['target_path'])
+        return DeleteFileResult(
+            file_id=file_id,
+            action=request.action,
+            message='已忽略该记录，后续扫描将不再显示'
+        )
+
+    if request.action == 'delete_source':
+        source_path = Path(file_record['original_path'])
+        if source_path.exists():
+            source_path.unlink()
+            message = '已删除原始文件并清理扫描记录'
+        else:
+            message = '源文件不存在，已清理扫描记录'
+
+        await delete_file_record(file_id)
+        return DeleteFileResult(
+            file_id=file_id,
+            action=request.action,
+            message=message
+        )
+
+    raise HTTPException(status_code=400, detail='不支持的删除动作')
+
+
 @app.get("/api/history", response_model=HistoryResult)
 async def get_history():
     """
     获取历史记录
     """
     all_files = await get_all_files()
+    stats = build_global_stats(all_files)
 
-    processed = sum(1 for f in all_files if f['status'] == 'processed')
     skipped = sum(1 for f in all_files if f['status'] == 'skipped')
+    processed_files = [f for f in all_files if f['status'] == 'processed']
 
     file_records = [
         FileRecord(
@@ -323,12 +466,15 @@ async def get_history():
             created_at=f['created_at'],
             updated_at=f['updated_at']
         )
-        for f in all_files
+        for f in processed_files
     ]
 
     return HistoryResult(
-        total=len(all_files),
-        processed=processed,
+        total_files=stats['total_files'],
+        identified=stats['identified'],
+        unidentified=stats['unidentified'],
+        pending=stats['pending'],
+        processed=stats['processed'],
         skipped=skipped,
         files=file_records
     )
