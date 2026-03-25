@@ -771,7 +771,7 @@
             min-height: 40px;
             height: 40px;
             margin: 0 auto;
-            overflow: hidden;
+            overflow: visible;
             white-space: nowrap;
             border-radius: 999px;
             border: 1px solid var(--status-border);
@@ -833,6 +833,8 @@
             position: relative;
             z-index: 1;
             cursor: default;
+            overflow: hidden;
+            border-radius: 999px;
         }
 
         .status-label {
@@ -856,6 +858,7 @@
             gap: 6px;
             height: 100%;
             padding: 0 8px 0 4px;
+            overflow: visible;
             opacity: 0;
             visibility: hidden;
             transform: translateX(6px) scale(0.92);
@@ -925,9 +928,10 @@
         .icon-action[data-tooltip]::after {
             content: attr(data-tooltip);
             position: absolute;
-            right: calc(100% + 10px);
-            top: 50%;
-            transform: translateY(-50%) translateX(4px);
+            left: 50%;
+            bottom: calc(100% + 10px);
+            z-index: 12;
+            transform: translateX(-50%) translateY(4px);
             padding: 6px 10px;
             border-radius: 8px;
             background: #161b22;
@@ -946,7 +950,7 @@
         .icon-action:focus-visible::after {
             opacity: 1;
             visibility: visible;
-            transform: translateY(-50%) translateX(0);
+            transform: translateX(-50%) translateY(0);
         }
 
         .status-action.visible,
@@ -1224,11 +1228,13 @@
             left: 0;
             right: 0;
             bottom: 0;
+            padding: 24px;
             background: rgba(0,0,0,0.5);
             display: flex;
             align-items: center;
             justify-content: center;
             z-index: 9999;
+            overflow-y: auto;
             animation: fadeIn 0.2s;
         }
 
@@ -1377,8 +1383,8 @@
         }
     </style>
 </head>
-<body>
-    <div class="container" x-data="app()">
+<body x-data="app()">
+    <div class="container">
         <!-- Header -->
         <div class="header">
             <div class="header-copy">
@@ -1580,48 +1586,49 @@
             </div>
         </div>
 
-        <!-- Confirmation Modal -->
-        <div x-show="showConfirmModal" class="modal-overlay">
-            <div class="modal">
-                <div class="modal-title">
-                    🚀 确认执行整理
-                </div>
-                <div class="modal-content">
-                    本次将整理以下 <strong x-text="confirmCodes.length"></strong> 个番号：
-                </div>
-                <div class="modal-info" x-show="confirmCodes.length > 0">
-                    <div class="modal-code-list">
-                        <template x-for="code in confirmCodes" :key="code">
-                            <div class="modal-info-value" x-text="code"></div>
-                        </template>
-                    </div>
-                </div>
-                <div class="modal-actions">
-                    <button class="secondary" @click="showConfirmModal = false; confirmFiles = []">取消</button>
-                    <button class="primary danger" @click="executeOrganize">确认执行</button>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div x-show="showConfirmModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-title">
+                🚀 确认执行整理
+            </div>
+            <div class="modal-content">
+                本次将整理以下 <strong x-text="confirmCodes.length"></strong> 个番号：
+            </div>
+            <div class="modal-info" x-show="confirmCodes.length > 0">
+                <div class="modal-code-list">
+                    <template x-for="code in confirmCodes" :key="code">
+                        <div class="modal-info-value" x-text="code"></div>
+                    </template>
                 </div>
             </div>
+            <div class="modal-actions">
+                <button class="secondary" @click="showConfirmModal = false; confirmFiles = []">取消</button>
+                <button class="primary danger" @click="executeOrganize">确认执行</button>
+            </div>
         </div>
+    </div>
 
-        <!-- Delete Modal -->
-        <div x-show="showDeleteModal" class="modal-overlay">
-            <div class="modal">
-                <div class="modal-title">
-                    🗑️ 处理扫描文件
-                </div>
-                <div class="modal-content">
-                    <span x-text="deleteTargetFile?.identified_code || getFilename(deleteTargetFile?.original_path || '')"></span>
-                    <span x-text="getDeleteModalDescription()"></span>
-                </div>
-                <div class="modal-info" x-show="deleteTargetFile">
-                    <div class="modal-info-label">原始文件：</div>
-                    <div class="modal-info-value" x-text="deleteTargetFile?.original_path"></div>
-                </div>
-                <div class="modal-actions split">
-                    <button class="danger" @click="executeDelete('delete_source')">删除原始文件</button>
-                    <button class="secondary" @click="executeDelete('ignore_scan')">仅删除扫描记录</button>
-                    <button class="secondary" @click="closeDeleteModal">取消</button>
-                </div>
+    <!-- Delete Modal -->
+    <div x-show="showDeleteModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-title">
+                🗑️ 处理扫描文件
+            </div>
+            <div class="modal-content">
+                <span x-text="deleteTargetFile?.identified_code || getFilename(deleteTargetFile?.original_path || '')"></span>
+                <span x-text="getDeleteModalDescription()"></span>
+            </div>
+            <div class="modal-info" x-show="deleteTargetFile">
+                <div class="modal-info-label">原始文件：</div>
+                <div class="modal-info-value" x-text="deleteTargetFile?.original_path"></div>
+            </div>
+            <div class="modal-actions split">
+                <button class="danger" @click="executeDelete('delete_source')">删除原始文件</button>
+                <button class="secondary" @click="executeDelete('ignore_scan')">仅删除扫描记录</button>
+                <button class="secondary" @click="closeDeleteModal">取消</button>
             </div>
         </div>
     </div>
