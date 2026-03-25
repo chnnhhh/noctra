@@ -381,9 +381,9 @@
         }
 
         .status-action {
+            position: relative;
             display: inline-flex;
             align-items: center;
-            gap: 10px;
             white-space: nowrap;
         }
 
@@ -392,30 +392,56 @@
             border: none;
             background: transparent;
             box-shadow: none;
+            cursor: default;
         }
 
         .status-trigger:hover,
-        .status-trigger:active {
+        .status-trigger:active,
+        .status-trigger:focus {
             transform: none;
             box-shadow: none;
         }
 
         .status-popover {
+            position: absolute;
+            top: 50%;
+            left: calc(100% + 6px);
+            z-index: 1200;
             display: inline-flex;
             align-items: center;
-            min-width: 84px;
             padding: 4px;
-            border-radius: 10px;
+            border-radius: 9px;
             background: white;
             border: 1px solid #e2e8f0;
             box-shadow: 0 12px 24px rgba(15, 23, 42, 0.16);
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            transform: translate(4px, -50%);
+            transition: opacity 0.16s ease, transform 0.16s ease, visibility 0.16s ease;
         }
 
         .status-popover button {
-            width: 100%;
+            min-width: 60px;
             justify-content: center;
-            padding: 8px 12px;
-            font-size: 13px;
+            padding: 5px 10px;
+            font-size: 12px;
+            line-height: 1.2;
+            border-radius: 7px;
+        }
+
+        .status-popover button:hover,
+        .status-popover button:active {
+            transform: none;
+        }
+
+        .status-action.visible .status-popover,
+        .status-action:hover .status-popover,
+        .status-action:focus-within .status-popover {
+            opacity: 1;
+            visibility: visible;
+            pointer-events: auto;
+            transform: translate(0, -50%);
         }
 
         /* ========== Checkbox ========== */
@@ -860,15 +886,16 @@
                                 </td>
                                 <td>
                                     <template x-if="hasStatusAction(file)">
-                                        <div class="status-action" @click.outside="closeStatusMenu()">
-                                            <button class="status-trigger"
-                                                    @click.stop="toggleStatusMenu(file.id)"
-                                                    :aria-expanded="activeStatusMenuId === file.id">
+                                        <div class="status-action"
+                                             :class="{ 'visible': activeStatusMenuId === file.id }"
+                                             @mouseenter="showStatusMenu(file.id)"
+                                             @mouseleave="scheduleStatusMenuHide(file.id)">
+                                            <button type="button" class="status-trigger">
                                                 <span class="badge" :class="getBadgeClass(file)" x-text="getStatusText(file.status)"></span>
                                             </button>
-                                            <div class="status-popover" x-show="activeStatusMenuId === file.id">
+                                            <div class="status-popover">
                                                 <button :class="getStatusActionButtonClass(file)"
-                                                        @click.stop="handleStatusAction(file)">
+                                                        @click="handleStatusAction(file)">
                                                     <span x-text="getStatusActionText(file)"></span>
                                                 </button>
                                             </div>
@@ -968,6 +995,7 @@
                 view: 'scan', // 'scan' or 'history'
                 currentFilter: 'all',
                 activeStatusMenuId: null,
+                statusHideTimer: null,
                 showConfirmModal: false,
                 confirmFiles: [],
                 showDeleteModal: false,
@@ -1058,11 +1086,32 @@
                     return file.status === 'pending' ? 'primary' : 'ghost';
                 },
 
-                toggleStatusMenu(fileId) {
-                    this.activeStatusMenuId = this.activeStatusMenuId === fileId ? null : fileId;
+                showStatusMenu(fileId) {
+                    if (this.statusHideTimer) {
+                        clearTimeout(this.statusHideTimer);
+                        this.statusHideTimer = null;
+                    }
+                    this.activeStatusMenuId = fileId;
+                },
+
+                scheduleStatusMenuHide(fileId) {
+                    if (this.statusHideTimer) {
+                        clearTimeout(this.statusHideTimer);
+                    }
+
+                    this.statusHideTimer = setTimeout(() => {
+                        if (this.activeStatusMenuId === fileId) {
+                            this.activeStatusMenuId = null;
+                        }
+                        this.statusHideTimer = null;
+                    }, 300);
                 },
 
                 closeStatusMenu() {
+                    if (this.statusHideTimer) {
+                        clearTimeout(this.statusHideTimer);
+                        this.statusHideTimer = null;
+                    }
                     this.activeStatusMenuId = null;
                 },
 
