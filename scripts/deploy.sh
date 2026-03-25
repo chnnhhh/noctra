@@ -67,6 +67,20 @@ if [ "\$NOCTRA_REMOTE_DEPLOY_MODE" = "docker" ]; then
     fi
 
     docker compose -p "\$NOCTRA_REMOTE_DOCKER_PROJECT_NAME" -f "\$NOCTRA_REMOTE_COMPOSE_FILE" up -d --build
+elif [ "\$NOCTRA_REMOTE_DEPLOY_MODE" = "docker-image" ]; then
+    command -v docker >/dev/null 2>&1 || {
+        echo "Docker is required for docker-image deploy mode." >&2
+        exit 1
+    }
+
+    if pgrep -af 'uvicorn app.main:app' >/dev/null 2>&1; then
+        echo "Stopping legacy uvicorn process before switching to Docker..."
+        pkill -f 'uvicorn app.main:app' || true
+        sleep 2
+    fi
+
+    docker compose -p "\$NOCTRA_REMOTE_DOCKER_PROJECT_NAME" -f "\$NOCTRA_REMOTE_COMPOSE_FILE" pull
+    docker compose -p "\$NOCTRA_REMOTE_DOCKER_PROJECT_NAME" -f "\$NOCTRA_REMOTE_COMPOSE_FILE" up -d
 else
     if [ ! -x '.venv/bin/python' ]; then
         '$NOCTRA_REMOTE_PYTHON_BIN' -m venv .venv

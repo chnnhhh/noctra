@@ -1,0 +1,22 @@
+services:
+  noctra:
+    image: ${NOCTRA_DOCKER_IMAGE:-acyua/noctra:latest}
+    pull_policy: ${NOCTRA_DOCKER_PULL_POLICY:-always}
+    container_name: noctra
+    ports:
+      - "${NOCTRA_PORT:-8888}:8000"
+    volumes:
+      - ${NOCTRA_SOURCE_DIR:?set NOCTRA_SOURCE_DIR}:/source
+      - ${NOCTRA_DIST_DIR:?set NOCTRA_DIST_DIR}:/dist
+      - ${NOCTRA_DATA_DIR:-./data}:/app/data
+    environment:
+      SOURCE_DIR: /source
+      DIST_DIR: /dist
+      DB_PATH: /app/data/noctra.db
+      NOCTRA_PROFILE: ${NOCTRA_PROFILE:-nas-docker}
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
