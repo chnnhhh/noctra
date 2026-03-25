@@ -1,0 +1,27 @@
+# Local virtual environments
+.venv/
+venv/
+
+# Python cache and tooling
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+
+# macOS / editor noise
+.DS_Store
+*.swp
+*.tmp
+
+# Runtime logs and pid files
+logs/*.log
+logs/*.pid
+
+# Local SQLite runtime files
+*.sqlite3
+test_data/*.db
+test_data/*.db-shm
+test_data/*.db-wal
+test_data/*.db-journal
