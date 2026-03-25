@@ -42,6 +42,8 @@ NOCTRA_DOCKER_IMAGE=acyua/noctra:latest
 - `noctra-watchtower`: 轮询 Docker Hub 并在镜像变化时自动更新 `noctra`
 
 默认轮询间隔是 300 秒，可通过 `NOCTRA_WATCHTOWER_INTERVAL` 调整。
+如果 NAS 需要代理访问 Docker Hub，给 `NOCTRA_WATCHTOWER_HTTP_PROXY`、
+`NOCTRA_WATCHTOWER_HTTPS_PROXY` 和 `NOCTRA_WATCHTOWER_NO_PROXY` 赋值即可。
 
 ## Docker Hub 代理
 

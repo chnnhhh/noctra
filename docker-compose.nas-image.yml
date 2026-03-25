@@ -31,6 +31,12 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       TZ: ${NOCTRA_TIMEZONE:-Asia/Shanghai}
+      HTTP_PROXY: ${NOCTRA_WATCHTOWER_HTTP_PROXY:-}
+      HTTPS_PROXY: ${NOCTRA_WATCHTOWER_HTTPS_PROXY:-}
+      NO_PROXY: ${NOCTRA_WATCHTOWER_NO_PROXY:-}
+      http_proxy: ${NOCTRA_WATCHTOWER_HTTP_PROXY:-}
+      https_proxy: ${NOCTRA_WATCHTOWER_HTTPS_PROXY:-}
+      no_proxy: ${NOCTRA_WATCHTOWER_NO_PROXY:-}
     command:
       - --interval
       - ${NOCTRA_WATCHTOWER_INTERVAL:-300}
