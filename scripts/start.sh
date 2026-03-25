@@ -8,6 +8,7 @@ source "$SCRIPT_DIR/lib/noctra.sh"
 
 noctra_load_env
 
+
 cd "$NOCTRA_REPO_ROOT"
 
 if noctra_is_running; then
