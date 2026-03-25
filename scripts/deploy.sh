@@ -4,6 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 export NOCTRA_PROFILE="${1:-${NOCTRA_PROFILE:-nas}}"
+export NOCTRA_SKIP_ENSURE_DIRS=1
 
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/lib/noctra.sh"
@@ -45,14 +46,34 @@ if [ "$NOCTRA_SYNC_PROFILE" = "1" ] && [ -f "$NOCTRA_PROFILE_FILE" ]; then
     scp "$NOCTRA_PROFILE_FILE" "$NOCTRA_REMOTE_HOST:$REMOTE_PROFILE_FILE"
 fi
 
-ssh "$NOCTRA_REMOTE_HOST" "
+ssh "$NOCTRA_REMOTE_HOST" bash <<EOF
 set -euo pipefail
 cd '$NOCTRA_REMOTE_PATH'
-if [ ! -x '.venv/bin/python' ]; then
-    '$NOCTRA_REMOTE_PYTHON_BIN' -m venv .venv
+source './scripts/lib/noctra.sh'
+export NOCTRA_PROFILE='$NOCTRA_REMOTE_PROFILE'
+export NOCTRA_PROFILE_FILE='$REMOTE_PROFILE_FILE'
+noctra_load_env
+
+if [ "\$NOCTRA_REMOTE_DEPLOY_MODE" = "docker" ]; then
+    command -v docker >/dev/null 2>&1 || {
+        echo "Docker is required for docker deploy mode." >&2
+        exit 1
+    }
+
+    if pgrep -af 'uvicorn app.main:app' >/dev/null 2>&1; then
+        echo "Stopping legacy uvicorn process before switching to Docker..."
+        pkill -f 'uvicorn app.main:app' || true
+        sleep 2
+    fi
+
+    docker compose -p "\$NOCTRA_REMOTE_DOCKER_PROJECT_NAME" -f "\$NOCTRA_REMOTE_COMPOSE_FILE" up -d --build
+else
+    if [ ! -x '.venv/bin/python' ]; then
+        '$NOCTRA_REMOTE_PYTHON_BIN' -m venv .venv
+    fi
+    .venv/bin/pip install -r requirements.txt
+    NOCTRA_PROFILE='$NOCTRA_REMOTE_PROFILE' NOCTRA_PROFILE_FILE='$REMOTE_PROFILE_FILE' ./scripts/start.sh
 fi
-.venv/bin/pip install -r requirements.txt
-NOCTRA_PROFILE='$NOCTRA_REMOTE_PROFILE' NOCTRA_PROFILE_FILE='$REMOTE_PROFILE_FILE' ./scripts/start.sh
-"
+EOF
 
 echo "✓ Deployment finished"

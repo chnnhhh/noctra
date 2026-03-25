@@ -1,6 +1,11 @@
 services:
   noctra:
-    build: .
+    build:
+      context: .
+      args:
+        PYTHON_BASE_IMAGE: ${NOCTRA_PYTHON_BASE_IMAGE:-python:3.11-slim}
+        NOCTRA_PIP_INDEX_URL: ${NOCTRA_PIP_INDEX_URL:-}
+        NOCTRA_PIP_TRUSTED_HOST: ${NOCTRA_PIP_TRUSTED_HOST:-}
     container_name: noctra
     ports:
       - "${NOCTRA_PORT:-8888}:8000"

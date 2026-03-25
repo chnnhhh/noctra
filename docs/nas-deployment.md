@@ -2,7 +2,7 @@
 
 ## 部署方案
 
-### 方案一：使用 docker-compose（推荐）
+### 方案一：使用 docker compose（推荐）
 
 适用于支持 SSH 的 NAS（Synology、QNAP 等）
 
@@ -19,7 +19,7 @@
    cd ~/noctra
    ```
 
-3. **下载或上传配置文件**
+3. **准备代码和 profile**
    
    方式 A：从 GitHub 克隆
    ```bash
@@ -27,35 +27,39 @@
    cd noctra
    ```
 
-   方式 B：从本地上传
+   方式 B：从本地部署脚本同步
    ```bash
    # 在本地执行
-   scp docker-compose.yml user@nas-ip:~/noctra/
+   ./scripts/deploy.sh nas
    ```
 
-4. **修改 docker-compose.yml**
-   
-   编辑 `docker-compose.yml`，修改以下挂载路径：
-   ```yaml
-   volumes:
-     # 修改为 NAS 上的实际路径
-     - /volume1/videos:/source          # 待整理的视频目录
-     - /volume1/jav:/dist              # 整理后的目录
-     - ./data:/app/data                 # 数据持久化
+4. **配置 NAS profile**
+
+   复制 `config/profiles/nas.env.example` 为 `config/profiles/nas.env`，至少确认以下变量：
+   ```bash
+   NOCTRA_SOURCE_DIR=/vol2/1000/porn/ChaosJAV
+   NOCTRA_DIST_DIR=/vol2/1000/porn/OrderedJAV
+   NOCTRA_DATA_DIR=/vol2/1000/appdata/noctra/data
+   NOCTRA_REMOTE_HOST=nas-jieliu
+   NOCTRA_REMOTE_PATH=/home/jieliu/noctra
+   NOCTRA_REMOTE_DEPLOY_MODE=docker
    ```
 
 5. **启动容器**
    ```bash
-   docker-compose up -d
+   set -a
+   source config/profiles/nas.env
+   set +a
+   docker compose -f docker-compose.nas.yml up -d --build
    ```
 
 6. **验证部署**
    ```bash
    # 查看容器状态
-   docker-compose ps
+   docker compose ps
    
    # 查看日志
-   docker-compose logs -f
+   docker compose logs -f
    ```
 
 7. **访问 Web 界面**
@@ -119,7 +123,7 @@
 volumes:
   - /volume1/Downloads/videos:/source
   - /volume1/Media/JAV:/dist
-  - /volume1/docker/noctra/data:/app/data
+     - /volume1/docker/noctra/data:/app/data
 ports:
   - "8888:8000"  # 使用 8888 端口访问
 ```
