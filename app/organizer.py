@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 from pathlib import Path
 from typing import Optional
@@ -9,31 +10,51 @@ class JAVOrganizer:
     def __init__(self, dist_dir: str):
         self.dist_dir = Path(dist_dir).resolve()
 
-    def get_suffix(self, filename: str, code: str) -> Optional[str]:
+    def get_filename_parts(self, filename: str) -> tuple[str, str, Optional[str]]:
         """
-        提取文件名中的后缀（-C、-UC 等）
+        解析文件名各部分
+
+        返回：(纯文件名, 扩展名, 后缀)
 
         例：
-        - FPRE-123C.mp4 -> -C（补上连字符）
-        - ABP-456-C.mp4 -> -C
-        - MVSD-662-UC.mkv -> -UC
-        - SSIS-123.mp4 -> None（没有后缀）
+        - FPRE-123C.mp4 -> (FPRE-123, .mp4, -C)
+        - ABP-456-C.mp4 -> (ABP-456, .mp4, -C)
+        - MVSD-662-UC.mkv -> (MVSD-662, .mkv, -UC)
+        - SSIS-123.mp4 -> (SSIS-123, .mp4, None)
         """
         # 去掉扩展名
         name_without_ext = os.path.splitext(filename)[0]
 
-        # 检查是否有番号（从番号开始）
-        if name_without_ext.startswith(code):
-            # 提取番号后的部分
-            suffix = name_without_ext[len(code):]
-            # 如果有内容，返回（可能是 C、-C、-UC 等）
-            # 如果后缀没有连字符，补充连字符
-            if suffix:
-                if not suffix.startswith('-'):
-                    suffix = '-' + suffix
-                return suffix
+        # Step 1：提取核心番号
+        # 使用简单稳定规则：prefix = 字母部分, number = 数字部分
+        # code = prefix + "-" + number
+        pattern_code = r'^([A-Za-z]+)-?(\d+)'
+        match_code = re.match(pattern_code, name_without_ext)
 
-        return None
+        if match_code:
+            base_code = match_code.group(1) + '-' + match_code.group(2)
+        else:
+            base_code = name_without_ext
+
+        # Step 2：提取 suffix
+        # 支持：-C, -UC, C（无连字符）, UC（无连字符）
+        # 统一输出为带连字符的格式（如 -C）
+        suffix = None
+
+        # 先尝试匹配带连字符的后缀（优先）
+        for s in ['-C', '-UC']:
+            if name_without_ext.endswith(s):
+                suffix = s
+                break
+
+        # 如果没找到，尝试匹配不带连字符的纯字母后缀（1-3个）
+        if not suffix and len(name_without_ext) > len(base_code):
+            potential_suffix = name_without_ext[len(base_code):]
+            if potential_suffix.isalpha() and len(potential_suffix) <= 3:
+                suffix = '-' + potential_suffix
+
+        ext = os.path.splitext(filename)[1]
+        return (base_code, ext, suffix)
 
     def generate_filename(self, code: str, original_filename: str) -> str:
         """
@@ -50,25 +71,23 @@ class JAVOrganizer:
         - MVSD-662-UC.mkv, MVSD-662 -> MVSD-662-UC.mkv
         - SSIS-123.mp4, SSIS-123 -> SSIS-123.mp4（不变）
         """
-        # 提取扩展名
-        ext = os.path.splitext(original_filename)[1]
+        # 解析原文件名
+        (clean_name, ext, suffix) = self.get_filename_parts(original_filename)
 
-        # 提取后缀
-        suffix = self.get_suffix(original_filename, code)
+        # 如果原文件名以纯番号结尾（如 SSIS-123），并且有后缀
+        # 则生成 {番号}-{后缀}{扩展名}
+        if suffix and clean_name == code:
+            return f"{code}{suffix}{ext}"
 
-        if suffix:
-            # 有后缀，生成新文件名
-            new_filename = f"{code}{suffix}{ext}"
-            return new_filename
-        else:
-            # 没有后缀，使用原文件名
-            return original_filename
+        # 其他情况，使用原文件名
+        return original_filename
 
     def get_target_path(self, code: str, original_filename: str) -> str:
         """
         生成目标路径
 
         格式：/dist/{番号}/{文件名}
+        目录名使用纯番号
         文件名根据后缀规则生成
         """
         target_dir = self.dist_dir / code
@@ -147,3 +166,73 @@ class JAVOrganizer:
             })
 
         return results
+
+
+def test_get_filename_parts():
+    """测试文件名解析"""
+    organizer = JAVOrganizer('/tmp/dist')
+
+    test_cases = [
+        # (文件名, 期望: 纯文件名, 期望: 扩展名, 期望: 后缀)
+        ('FPRE-123C.mp4', ('FPRE-123', '.mp4', '-C')),
+        ('ABP-456-C.mp4', ('ABP-456', '.mp4', '-C')),
+        ('MVSD-662-UC.mkv', ('MVSD-662', '.mkv', '-UC')),
+        ('SSIS-123.mp4', ('SSIS-123', '.mp4', None)),
+        ('FPRE-123_字幕版.mp4', ('FPRE-123', '.mp4', '-字幕版')),
+    ]
+
+    print('=== 测试文件名解析 ===')
+    for filename, (expected_name, expected_ext, expected_suffix) in test_cases:
+        (name, ext, suffix) = organizer.get_filename_parts(filename)
+        status = '✓' if (name == expected_name and ext == expected_ext and suffix == expected_suffix) else '✗'
+        print(f'{status} {filename:30} -> ({name}, {ext}, {suffix})')
+
+    print('\n=== 测试通过 ===')
+
+
+def test_generate_filename():
+    """测试文件名生成"""
+    organizer = JAVOrganizer('/tmp/dist')
+
+    test_cases = [
+        # (番号, 原文件名, 期望文件名)
+        ('FPRE-123', 'FPRE-123C.mp4', 'FPRE-123-C.mp4'),
+        ('ABP-456', 'ABP-456-C.mp4', 'ABP-456-C.mp4'),
+        ('MVSD-662', 'MVSD-662-UC.mkv', 'MVSD-662-UC.mkv'),
+        ('SSIS-123', 'SSIS-123.mp4', 'SSIS-123.mp4'),  # 无后缀，不变
+    ]
+
+    print('\n=== 测试文件名生成 ===')
+    for code, original_filename, expected_filename in test_cases:
+        result_filename = organizer.generate_filename(code, original_filename)
+        status = '✓' if result_filename == expected_filename else '✗'
+        print(f'{status} {code:10} + {original_filename:20} -> {result_filename}')
+
+    print('\n=== 测试通过 ===')
+
+
+def test_get_target_path():
+    """测试目标路径生成"""
+    organizer = JAVOrganizer('/tmp/dist')
+
+    test_cases = [
+        # (番号, 原文件名, 期望路径)
+        ('FPRE-123', 'FPRE-123C.mp4', '/tmp/dist/FPRE-123/FPRE-123-C.mp4'),
+        ('ABP-456', 'ABP-456-C.mp4', '/tmp/dist/ABP-456/ABP-456-C.mp4'),
+        ('MVSD-662', 'MVSD-662-UC.mkv', '/tmp/dist/MVSD-662/MVSD-662-UC.mkv'),
+        ('SSIS-123', 'SSIS-123.mp4', '/tmp/dist/SSIS-123/SSIS-123.mp4'),
+    ]
+
+    print('\n=== 测试目标路径生成 ===')
+    for code, original_filename, expected_path in test_cases:
+        result_path = organizer.get_target_path(code, original_filename)
+        status = '✓' if result_path == expected_path else '✗'
+        print(f'{status} {expected_path}')
+
+    print('\n=== 测试通过 ===')
+
+
+if __name__ == '__main__':
+    test_get_filename_parts()
+    test_generate_filename()
+    test_get_target_path()
