@@ -288,7 +288,8 @@
         .table-container {
             background: white;
             border-radius: 8px;
-            overflow: hidden;
+            overflow-x: auto;
+            overflow-y: visible;
             border: 1px solid #e2e8f0;
             margin-bottom: 24px;
         }
@@ -296,6 +297,7 @@
         table {
             width: 100%;
             border-collapse: collapse;
+            table-layout: fixed;
         }
 
         th {
@@ -379,13 +381,38 @@
             border-radius: 6px;
             display: inline-block;
             font-family: 'Monaco', 'Consolas', monospace;
+            white-space: nowrap;
         }
 
         /* ========== Filename ========== */
+        .filename-copy {
+            cursor: pointer;
+        }
+
         .filename {
             font-size: 14px;
             color: #2d3748;
             font-weight: 500;
+        }
+
+        .copy-hint {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 6px;
+            font-size: 11px;
+            color: #718096;
+            padding: 4px 8px;
+            border-radius: 999px;
+            background: #edf2f7;
+            border: 1px solid #e2e8f0;
+            transition: all 0.2s;
+        }
+
+        .filename-copy:hover .copy-hint {
+            color: #2b6cb0;
+            background: #ebf8ff;
+            border-color: #bee3f8;
         }
 
         /* ========== Path Cell ========== */
@@ -393,7 +420,8 @@
             font-family: 'Monaco', 'Consolas', monospace;
             font-size: 12px;
             color: #718096;
-            word-break: break-all;
+            word-break: break-word;
+            overflow-wrap: anywhere;
             line-height: 1.5;
         }
 
@@ -467,6 +495,8 @@
         /* ========== Tooltip ========== */
         .tooltip {
             position: relative;
+            display: inline-block;
+            max-width: 100%;
         }
 
         .tooltip-text {
@@ -478,16 +508,17 @@
             border-radius: 8px;
             position: absolute;
             z-index: 1000;
-            bottom: 135%;
-            left: 50%;
-            transform: translateX(-50%);
+            bottom: calc(100% + 10px);
+            left: 0;
             opacity: 0;
             transition: opacity 0.3s;
-            max-width: 600px;
-            min-width: 300px;
+            width: min(720px, calc(100vw - 120px));
+            max-width: min(720px, calc(100vw - 120px));
+            min-width: min(420px, calc(100vw - 120px));
             font-size: 13px;
             font-family: 'Monaco', 'Consolas', monospace;
-            word-break: break-all;
+            word-break: break-word;
+            overflow-wrap: anywhere;
             line-height: 1.6;
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         }
@@ -611,6 +642,12 @@
                 gap: 16px;
                 align-items: flex-start;
             }
+
+            .tooltip-text {
+                min-width: min(280px, calc(100vw - 40px));
+                width: min(520px, calc(100vw - 40px));
+                max-width: min(520px, calc(100vw - 40px));
+            }
         }
     </style>
 </head>
@@ -711,9 +748,9 @@
                             <th style="width: 50px" x-show="view === 'scan'">
                                 <input type="checkbox" class="checkbox" @change="toggleAll" :checked="allSelected">
                             </th>
-                            <th style="width: 180px">番号</th>
-                            <th style="width: 220px">文件名</th>
-                            <th>目标路径</th>
+                            <th style="width: 220px">番号</th>
+                            <th style="width: 240px">文件名</th>
+                            <th style="width: 42%">目标路径</th>
                             <th style="width: 100px">状态</th>
                         </tr>
                     </thead>
@@ -734,11 +771,11 @@
                                     </template>
                                 </td>
                                 <td>
-                                    <div style="cursor: pointer;" @click="copyToClipboard(file.original_path)">
+                                    <div class="filename-copy" @click="copyToClipboard(file.original_path)">
                                         <span class="filename" x-text="getFilename(file.original_path)"></span>
                                         <template x-if="file.original_path">
-                                            <div class="tooltip" style="margin-top: 4px;">
-                                                <span style="color: #718096; font-size: 11px;">点击复制完整路径</span>
+                                            <div class="tooltip">
+                                                <span class="copy-hint">点击复制完整路径</span>
                                                 <span class="tooltip-text" x-text="file.original_path"></span>
                                             </div>
                                         </template>
@@ -792,7 +829,7 @@
                 <div class="modal-info">
                     <div class="modal-info-label">文件将按以下格式整理：</div>
                     <div class="modal-info-value">
-                        /dist/{番号}/{原文件名}
+                        /dist/{番号}/{规范化后的文件名}
                     </div>
                 </div>
                 <div class="modal-actions">
@@ -881,11 +918,32 @@
                     return path.split('/').pop();
                 },
 
+                fallbackCopyToClipboard(text) {
+                    const textarea = document.createElement('textarea');
+                    textarea.value = text;
+                    textarea.setAttribute('readonly', '');
+                    textarea.style.position = 'fixed';
+                    textarea.style.opacity = '0';
+                    textarea.style.pointerEvents = 'none';
+                    document.body.appendChild(textarea);
+                    textarea.select();
+                    const copied = document.execCommand('copy');
+                    document.body.removeChild(textarea);
+
+                    if (!copied) {
+                        throw new Error('当前浏览器不支持复制');
+                    }
+                },
+
                 async copyToClipboard(text) {
                     try {
-                        await navigator.clipboard.writeText(text);
-                        // 显示成功提示
+                        if (navigator.clipboard && window.isSecureContext) {
+                            await navigator.clipboard.writeText(text);
+                        } else {
+                            this.fallbackCopyToClipboard(text);
+                        }
                         this.success = '路径已复制到剪贴板';
+                        this.error = null;
                         setTimeout(() => {
                             this.success = null;
                         }, 2000);

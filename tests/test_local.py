@@ -25,6 +25,7 @@ def test_scanner():
         ('SSIS-123.mp4', 'SSIS-123'),
         ('ABP-456-C.mp4', 'ABP-456'),
         ('MVSD-662-C.mp4', 'MVSD-662'),
+        ('MVSD-662-UC.mkv', 'MVSD-662'),
         ('FPRE-123C.mp4', 'FPRE-123'),
         ('FC2-PPV-1234567.mp4', 'FC2-PPV-1234567'),
         ('ABC-123_字幕版.mp4', 'ABC-123'),
@@ -60,6 +61,7 @@ def test_organizer():
         # (番号, 原文件名, 期望文件名)
         ('FPRE-123', 'FPRE-123C.mp4', 'FPRE-123-C.mp4'),
         ('ABP-456', 'ABP-456-C.mp4', 'ABP-456-C.mp4'),
+        ('MVSD-662', 'MVSD-662-C.mp4', 'MVSD-662-C.mp4'),
         ('MVSD-662', 'MVSD-662-UC.mkv', 'MVSD-662-UC.mkv'),
         ('SSIS-123', 'SSIS-123.mp4', 'SSIS-123.mp4'),  # 无后缀，不变
     ]

@@ -1,5 +1,4 @@
 import pytest
-import os
 import tempfile
 from pathlib import Path
 
@@ -13,7 +12,10 @@ class TestJAVScanner:
 
         test_cases = [
             ('SSIS-123.mp4', 'SSIS-123'),
-            ('ABP-456-C.mp4', 'ABP-456-C'),
+            ('ABP-456-C.mp4', 'ABP-456'),
+            ('MVSD-662-C.mp4', 'MVSD-662'),
+            ('MVSD-662-UC.mkv', 'MVSD-662'),
+            ('FPRE-123C.mp4', 'FPRE-123'),
             ('FC2-PPV-1234567.mp4', 'FC2-PPV-1234567'),
             ('ABC-123_字幕版.mp4', 'ABC-123'),
             ('ABC-123 [Uncensored].mp4', 'ABC-123'),
@@ -67,25 +69,29 @@ class TestJAVScanner:
         with tempfile.TemporaryDirectory() as tmpdir:
             source_dir = Path(tmpdir) / 'source'
             dist_dir = source_dir / 'dist'
+            actress_dir = source_dir / '北野未奈'
             source_dir.mkdir(parents=True)
             dist_dir.mkdir()
+            actress_dir.mkdir()
 
             # 创建测试文件
             (source_dir / 'SSIS-123.mp4').write_text('fake')
-            (source_dir / 'ABP-456-C.mkv').write_text('fake')
+            (actress_dir / 'FPRE-123C.mp4').write_text('fake')
+            (actress_dir / 'MVSD-662-C.mp4').write_text('fake')
             (source_dir / 'unknown.txt').write_text('fake')
             (dist_dir / 'FC2-123.mp4').write_text('fake')  # 在 dist 中，应该被跳过
 
             scanner = JAVScanner(str(source_dir), str(dist_dir))
             results = scanner.scan()
 
-            # 应该识别 2 个视频文件
-            assert len(results) == 2
+            # 应该识别 3 个视频文件
+            assert len(results) == 3
 
             # 检查识别结果
-            codes = [r['identified_code'] for r in results]
-            assert 'SSIS-123' in codes
-            assert 'ABP-456-C' in codes
+            code_map = {r['filename']: r['identified_code'] for r in results}
+            assert code_map['SSIS-123.mp4'] == 'SSIS-123'
+            assert code_map['FPRE-123C.mp4'] == 'FPRE-123'
+            assert code_map['MVSD-662-C.mp4'] == 'MVSD-662'
 
             # dist 中的文件不应该被扫描到
             paths = [r['path'] for r in results]
