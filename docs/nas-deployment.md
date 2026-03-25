@@ -36,6 +36,13 @@ NOCTRA_DOCKER_IMAGE=acyua/noctra:latest
 
 部署脚本会同步代码、同步 `nas.env`，然后在 NAS 上拉取镜像并启动容器。
 
+`docker-compose.nas-image.yml` 默认会同时启动：
+
+- `noctra`: 主服务
+- `noctra-watchtower`: 轮询 Docker Hub 并在镜像变化时自动更新 `noctra`
+
+默认轮询间隔是 300 秒，可通过 `NOCTRA_WATCHTOWER_INTERVAL` 调整。
+
 ## Docker Hub 代理
 
 `docker pull` 走的是 NAS 上的 Docker daemon，不是当前 shell。所以仅在命令前加 `HTTP_PROXY` 不够，必须给 Docker daemon 配代理。
@@ -74,6 +81,7 @@ http://192.168.7.2:7890
 docker info | sed -n '/HTTP Proxy/,+4p'
 docker pull acyua/noctra:latest
 curl http://127.0.0.1:8888/api/health
+docker logs --tail 20 noctra-watchtower
 ```
 
 健康检查返回 `status=ok` 即表示部署正常。

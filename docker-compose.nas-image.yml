@@ -3,6 +3,8 @@ services:
     image: ${NOCTRA_DOCKER_IMAGE:-acyua/noctra:latest}
     pull_policy: ${NOCTRA_DOCKER_PULL_POLICY:-always}
     container_name: noctra
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
     ports:
       - "${NOCTRA_PORT:-8888}:8000"
     volumes:
@@ -20,3 +22,17 @@ services:
         limits:
           cpus: '1.0'
           memory: 512M
+
+  watchtower:
+    image: ${NOCTRA_WATCHTOWER_IMAGE:-containrrr/watchtower:latest}
+    container_name: noctra-watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      TZ: ${NOCTRA_TIMEZONE:-Asia/Shanghai}
+    command:
+      - --interval
+      - ${NOCTRA_WATCHTOWER_INTERVAL:-300}
+      - --cleanup
+      - --label-enable

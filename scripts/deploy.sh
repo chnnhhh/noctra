@@ -53,6 +53,7 @@ source './scripts/lib/noctra.sh'
 export NOCTRA_PROFILE='$NOCTRA_REMOTE_PROFILE'
 export NOCTRA_PROFILE_FILE='$REMOTE_PROFILE_FILE'
 noctra_load_env
+LEGACY_UVICORN_PATTERN="\$NOCTRA_REMOTE_PATH/.venv/bin/uvicorn app.main:app"
 
 if [ "\$NOCTRA_REMOTE_DEPLOY_MODE" = "docker" ]; then
     command -v docker >/dev/null 2>&1 || {
@@ -60,9 +61,9 @@ if [ "\$NOCTRA_REMOTE_DEPLOY_MODE" = "docker" ]; then
         exit 1
     }
 
-    if pgrep -af 'uvicorn app.main:app' >/dev/null 2>&1; then
+    if pgrep -af "\$LEGACY_UVICORN_PATTERN" >/dev/null 2>&1; then
         echo "Stopping legacy uvicorn process before switching to Docker..."
-        pkill -f 'uvicorn app.main:app' || true
+        pkill -f "\$LEGACY_UVICORN_PATTERN" || true
         sleep 2
     fi
 
@@ -73,9 +74,9 @@ elif [ "\$NOCTRA_REMOTE_DEPLOY_MODE" = "docker-image" ]; then
         exit 1
     }
 
-    if pgrep -af 'uvicorn app.main:app' >/dev/null 2>&1; then
+    if pgrep -af "\$LEGACY_UVICORN_PATTERN" >/dev/null 2>&1; then
         echo "Stopping legacy uvicorn process before switching to Docker..."
-        pkill -f 'uvicorn app.main:app' || true
+        pkill -f "\$LEGACY_UVICORN_PATTERN" || true
         sleep 2
     fi
 
