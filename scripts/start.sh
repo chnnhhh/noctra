@@ -1,34 +1,40 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-# 启动 noctra 服务（飞牛 NAS）
+set -euo pipefail
 
-cd ~/noctra
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/lib/noctra.sh"
 
-# 激活虚拟环境
-source venv/bin/activate
+noctra_load_env
 
-# 设置环境变量
-export SOURCE_DIR=/vol2/1000/porn/ChaosJAV
-export DIST_DIR=/vol2/1000/porn/OrderedJAV
-export DB_PATH=~/noctra/noctra.db
+cd "$NOCTRA_REPO_ROOT"
 
-# 启动服务
-nohup uvicorn app.main:app --host 0.0.0.0 --port 8888 > logs/server.log 2>&1 &
-echo $! > logs/server.pid
+if noctra_is_running; then
+    echo "Noctra is already running, restarting it first."
+    noctra_stop_process
+fi
 
 echo "================================"
-echo "Noctra 正在启动..."
-echo "访问地址：http://192.168.7.8:8888"
-echo "日志：tail -f ~/noctra/logs/server.log"
+echo "Starting Noctra"
+echo "================================"
+noctra_print_config
 echo "================================"
 
-# 等待服务启动
-sleep 5
-
-# 检查服务状态
-if curl -s http://127.0.0.1:8888/api/health > /dev/null 2>&1; then
-    echo "✓ Noctra 启动成功！"
+if command -v setsid > /dev/null 2>&1; then
+    setsid "$NOCTRA_PYTHON_BIN" -m uvicorn app.main:app --host "$NOCTRA_BIND_HOST" --port "$NOCTRA_PORT" > "$NOCTRA_LOG_DIR/server.log" 2>&1 < /dev/null &
 else
-    echo "✗ Noctra 启动失败，请查看日志："
-    cat logs/server.log | tail -20
+    nohup "$NOCTRA_PYTHON_BIN" -m uvicorn app.main:app --host "$NOCTRA_BIND_HOST" --port "$NOCTRA_PORT" > "$NOCTRA_LOG_DIR/server.log" 2>&1 < /dev/null &
+fi
+echo $! > "$NOCTRA_PID_FILE"
+
+if noctra_wait_for_health; then
+    echo "✓ Noctra started successfully"
+    echo "Health: $NOCTRA_HEALTHCHECK_URL"
+    echo "Logs: tail -f $NOCTRA_LOG_DIR/server.log"
+else
+    echo "✗ Noctra failed to start"
+    echo "Last logs:"
+    tail -20 "$NOCTRA_LOG_DIR/server.log" || true
+    exit 1
 fi

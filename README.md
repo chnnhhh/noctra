@@ -2,6 +2,19 @@
 
 ## 已完成内容
 
+## 运行与部署
+
+统一的环境配置和脚本工作流见 `docs/runtime-workflow.md`。
+推荐优先使用：
+
+```bash
+./start.sh
+NOCTRA_PROFILE=local ./scripts/start.sh
+NOCTRA_PROFILE=local ./scripts/status.sh
+NOCTRA_PROFILE=local ./scripts/stop.sh
+./scripts/deploy.sh nas
+```
+
 ### 核心功能
 1. ✅ Web 服务（FastAPI + SQLite + 原生 HTML/Alpine.js）
 2. ✅ Docker 部署支持

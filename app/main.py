@@ -337,4 +337,11 @@ async def get_history():
 @app.get("/api/health")
 async def health_check():
     """健康检查"""
-    return {"status": "ok", "source_dir": SOURCE_DIR, "dist_dir": DIST_DIR}
+    return {
+        "status": "ok",
+        "profile": os.getenv('NOCTRA_PROFILE', 'unknown'),
+        "source_dir": SOURCE_DIR,
+        "dist_dir": DIST_DIR,
+        "db_path": DB_PATH,
+        "cwd": str(Path.cwd()),
+    }

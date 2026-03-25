@@ -1,27 +1,19 @@
-version: '3.8'
-
 services:
   noctra:
     build: .
     container_name: noctra
     ports:
-      - "8888:8000"  # 使用 8888 端口访问（避免冲突）
+      - "${NOCTRA_PORT:-8888}:8000"
     volumes:
-      # ====== 请修改为 NAS 上的实际路径 ======
-      # 源目录：存放待整理的视频
-      - ${SOURCE_DIR:-/volume1/videos}:/source
-      
-      # 目标目录：整理后的文件
-      - ${DIST_DIR:-/volume1/jav}:/dist
-      
-      # 数据持久化：SQLite 数据库
-      - ${DATA_DIR:-./data}:/app/data
+      - ${NOCTRA_SOURCE_DIR:?set NOCTRA_SOURCE_DIR}:/source
+      - ${NOCTRA_DIST_DIR:?set NOCTRA_DIST_DIR}:/dist
+      - ${NOCTRA_DATA_DIR:-./data}:/app/data
     environment:
-      - SOURCE_DIR=/source
-      - DIST_DIR=/dist
-      - DB_PATH=/app/data/noctra.db
+      SOURCE_DIR: /source
+      DIST_DIR: /dist
+      DB_PATH: /app/data/noctra.db
+      NOCTRA_PROFILE: ${NOCTRA_PROFILE:-nas-docker}
     restart: unless-stopped
-    # 限制资源（可选）
     deploy:
       resources:
         limits:

@@ -2,6 +2,10 @@
 .venv/
 venv/
 
+# Environment profiles
+config/profiles/*.env
+!config/profiles/*.env.example
+
 # Python cache and tooling
 __pycache__/
 *.py[cod]
@@ -12,15 +16,19 @@ __pycache__/
 
 # macOS / editor noise
 .DS_Store
+.idea/
 *.swp
 *.tmp
 
 # Runtime logs and pid files
 logs/*.log
 logs/*.pid
+nohup.out
 
 # Local SQLite runtime files
 *.sqlite3
+noctra.db
+data/
 test_data/*.db
 test_data/*.db-shm
 test_data/*.db-wal
