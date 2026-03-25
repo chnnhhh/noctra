@@ -34,6 +34,10 @@ def test_scanner():
         ('ABC-123_字幕版.mp4', 'ABC-123'),
         ('ABC-123 [Uncensored].mp4', 'ABC-123'),
         ('SSIS-123字幕版.mp4', 'SSIS-123'),
+        ('MEYD-695 出轨xxx@北野未奈.mp4', 'MEYD-695'),
+        ('HMN-439-C.H265.mp4', 'HMN-439'),
+        ('CEMD-721ch.mp4', 'CEMD-721'),
+        ('HMN-112-C マジxxx痴 北野未奈.mp4', 'HMN-112'),
         ('unknown_file.mp4', None),
         ('123-456.mp4', None),  # 纯数字开头不支持
     ]
@@ -67,7 +71,12 @@ def test_organizer():
         ('MVSD-662', 'MVSD-662-C.mp4', 'MVSD-662-C.mp4'),
         ('MVSD-662', 'MVSD-662-UC.mkv', 'MVSD-662-UC.mkv'),
         ('FPRE-123', 'FPRE-123_字幕版.mp4', 'FPRE-123-C.mp4'),
-        ('SSIS-123', 'SSIS-123.mp4', 'SSIS-123.mp4'),  # 无后缀，不变
+        ('SSIS-123', 'SSIS-123.mp4', 'SSIS-123.mp4'),
+        ('MEYD-695', 'MEYD-695 出轨xxx@北野未奈.mp4', 'MEYD-695.mp4'),
+        ('HMN-439', 'HMN-439-C.H265.mp4', 'HMN-439-C.mp4'),
+        ('CEMD-721', 'CEMD-721ch.mp4', 'CEMD-721-C.mp4'),
+        ('HMN-112', 'HMN-112-C マジxxx痴 北野未奈.mp4', 'HMN-112-C.mp4'),
+        ('ABC-123', 'ABC-123 [Uncensored].mp4', 'ABC-123-UC.mp4'),
     ]
 
     passed = 0

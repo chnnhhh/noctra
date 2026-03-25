@@ -8,7 +8,7 @@ services:
         NOCTRA_PIP_TRUSTED_HOST: ${NOCTRA_PIP_TRUSTED_HOST:-}
     container_name: noctra
     ports:
-      - "${NOCTRA_PORT:-8888}:8000"
+      - "${NOCTRA_PORT:-4020}:8000"
     volumes:
       - ${NOCTRA_SOURCE_DIR:?set NOCTRA_SOURCE_DIR}:/source
       - ${NOCTRA_DIST_DIR:?set NOCTRA_DIST_DIR}:/dist
