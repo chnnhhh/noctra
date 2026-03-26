@@ -28,9 +28,13 @@
             batchJob: null,
             batchItemsIndex: {},
             batchPollTimer: null,
+            batchPollingBusy: false,
             batchExpanded: false,
             batchSubmitting: false,
             batchCancelling: false,
+            batchVisibleSince: 0,
+            batchExpandTimer: null,
+            batchExpanding: false,
             collator: new Intl.Collator('en', {
                 numeric: true,
                 sensitivity: 'base'
@@ -72,6 +76,29 @@
                 return !!this.batchJob && ['queued', 'running'].includes(this.batchJob.status);
             },
 
+            get batchPanelVisible() {
+                return !!this.batchJob;
+            },
+
+            get batchPanelState() {
+                if (!this.batchJob) {
+                    return 'idle';
+                }
+                if (this.batchRunning || this.batchSubmitting) {
+                    return 'running';
+                }
+                if (!this.batchExpanded) {
+                    return 'collapsed';
+                }
+                return 'completed';
+            },
+
+            get batchCancelable() {
+                return this.batchRunning &&
+                       !!this.batchJob &&
+                       !String(this.batchJob.id || '').startsWith('optimistic-');
+            },
+
             get batchTerminal() {
                 return !!this.batchJob && ['completed', 'failed', 'cancelled'].includes(this.batchJob.status);
             },
@@ -91,6 +118,9 @@
                 if (!this.batchJob) {
                     return '';
                 }
+                if (this.batchJob.status === 'queued') {
+                    return `批处理已创建，共 ${this.batchJob.total} 项，即将开始整理`;
+                }
                 if (this.batchRunning) {
                     return `正在处理 ${this.batchJob.processed} / ${this.batchJob.total}，你可以继续翻页、筛选和查看行内状态`;
                 }
@@ -103,6 +133,9 @@
             get batchInfoLine() {
                 if (!this.batchJob) {
                     return '';
+                }
+                if (this.batchJob.status === 'queued') {
+                    return '批处理已加入队列，面板会持续显示当前任务状态，开始执行后会实时同步进度。';
                 }
                 if (this.batchRunning) {
                     return '系统正在按顺序处理选中的文件，表格中的对应行会实时同步到当前进度。';

@@ -65,8 +65,16 @@
                 return this.getStatusText(file.status);
             },
 
+            isBatchItemBlocking(file) {
+                const batchItem = this.getBatchItem(file);
+                if (!batchItem) {
+                    return false;
+                }
+                return this.batchRunning || batchItem.status === 'processing';
+            },
+
             hasStatusAction(file) {
-                if (this.getBatchItem(file)) {
+                if (this.isBatchItemBlocking(file)) {
                     return false;
                 }
                 return this.view === 'scan' && this.getStatusActions(file).length > 0;
@@ -87,11 +95,11 @@
             },
 
             canSelectFile(file) {
-                return this.view === 'scan' && file.status === 'pending' && !this.getBatchItem(file);
+                return this.view === 'scan' && file.status === 'pending' && !this.isBatchItemBlocking(file);
             },
 
             getSelectionDisabledReason(file) {
-                if (this.getBatchItem(file)) {
+                if (this.isBatchItemBlocking(file)) {
                     return '该文件已在当前批处理中';
                 }
                 if (this.canSelectFile(file)) {

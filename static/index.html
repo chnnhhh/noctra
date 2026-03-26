@@ -130,20 +130,23 @@
                 </div>
             </div>
 
-            <div class="batch-rail"
-                 x-show="view === 'scan' && batchJob"
-                 :class="[batchJob ? batchJob.status : '', { 'expanded': batchExpanded }]">
+            <div class="batch-panel"
+                 x-show="view === 'scan' && batchPanelVisible"
+                 :data-state="batchPanelState"
+                 :class="[batchJob ? batchJob.status : '', batchExpanded ? 'expanded' : 'collapsed', batchExpanding ? 'expanding' : '']">
                 <div class="batch-rail-header">
-                    <button class="batch-rail-toggle" @click="toggleBatchExpanded()">
-                        <span class="batch-status-chip"
-                              :class="`status-${batchJob.status}`"
-                              x-text="getBatchJobStatusLabel(batchJob.status)"></span>
-                        <span>批量整理 <span x-text="batchJob.processed">0</span> / <span x-text="batchJob.total">0</span></span>
+                    <button class="batch-rail-toggle" @click="toggleBatchExpanded()" :aria-expanded="batchExpanded">
+                        <span class="batch-summary-line">
+                            <span class="batch-status-chip"
+                                  :class="`status-${batchJob.status}`"
+                                  x-text="getBatchJobStatusLabel(batchJob.status)"></span>
+                            <span>批量整理 <span x-text="batchJob.processed">0</span> / <span x-text="batchJob.total">0</span></span>
+                        </span>
                         <span class="batch-rail-caret" x-html="getUiIcon('chevron_down')"></span>
                     </button>
                     <div class="batch-rail-actions">
                         <button class="rail-button"
-                                x-show="batchRunning"
+                                x-show="batchCancelable"
                                 @click="cancelBatch"
                                 :disabled="batchCancelling">
                             <span x-text="batchCancelling ? '取消中...' : '取消'"></span>
@@ -151,33 +154,35 @@
                     </div>
                 </div>
 
-                <div class="batch-rail-summary" x-show="batchExpanded">
-                    <span class="batch-subline">总数 <strong x-text="batchJob.total">0</strong></span>
-                    <span class="batch-metrics">
-                        <span class="batch-metric success">成功 <strong x-text="batchJob.succeeded">0</strong></span>
-                        <span class="batch-metric skipped">跳过 <strong x-text="batchJob.skipped">0</strong></span>
-                        <span class="batch-metric failed">失败 <strong x-text="batchJob.failed">0</strong></span>
-                    </span>
-                </div>
-
-                <div class="batch-progress" x-show="batchExpanded">
-                    <div class="batch-progress-track">
-                        <div class="batch-progress-fill" :style="`width: ${batchProgressPercent}%`"></div>
+                <div class="batch-panel-body" :class="batchExpanded ? 'expanded' : 'collapsed'">
+                    <div class="batch-rail-summary">
+                        <span class="batch-subline">总数 <strong x-text="batchJob.total">0</strong></span>
+                        <span class="batch-metrics">
+                            <span class="batch-metric success">成功 <strong x-text="batchJob.succeeded">0</strong></span>
+                            <span class="batch-metric skipped">跳过 <strong x-text="batchJob.skipped">0</strong></span>
+                            <span class="batch-metric failed">失败 <strong x-text="batchJob.failed">0</strong></span>
+                        </span>
                     </div>
-                    <div class="batch-subline" x-text="batchProgressText"></div>
-                </div>
 
-                <div class="batch-detail-panel" x-show="batchExpanded">
-                    <div class="batch-note" x-text="batchInfoLine"></div>
-                    <div class="batch-note" x-show="batchJob.failed > 0">
-                        当前批次包含 <strong x-text="batchJob.failed"></strong> 个失败项，表格中的对应行会保留失败状态，方便你继续筛选和处理。
+                    <div class="batch-progress">
+                        <div class="batch-progress-track">
+                            <div class="batch-progress-fill" :style="`width: ${batchProgressPercent}%`"></div>
+                        </div>
+                        <div class="batch-subline" x-text="batchProgressText"></div>
+                    </div>
+
+                    <div class="batch-detail-panel">
+                        <div class="batch-note" x-text="batchInfoLine"></div>
+                        <div class="batch-note" x-show="batchJob.failed > 0">
+                            当前批次包含 <strong x-text="batchJob.failed"></strong> 个失败项，表格中的对应行会保留失败状态，方便你继续筛选和处理。
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <div class="table-meta">
-                <div class="table-meta-primary">
-                    <div x-show="view === 'scan' && !loading && files.length > 0" class="filter filter-subtle">
+            <div class="table-meta toolbar" x-show="!loading && files.length > 0">
+                <div class="toolbar-left">
+                    <div x-show="view === 'scan'" class="filter filter-subtle toolbar-filter">
                         <span class="filter-label">筛选</span>
                         <button class="filter-button" :class="{ 'active': currentFilter === 'all' }" @click="setFilter('all')">全部</button>
                         <button class="filter-button" :class="{ 'active': currentFilter === 'identified' }" @click="setFilter('identified')">已识别</button>
@@ -186,10 +191,9 @@
                         <button class="filter-button" :class="{ 'active': currentFilter === 'target_exists' }" @click="setFilter('target_exists')">已存在</button>
                         <button class="filter-button" :class="{ 'active': currentFilter === 'processed' }" @click="setFilter('processed')">已处理</button>
                     </div>
-
                 </div>
 
-                <div class="control-rails" x-show="!loading && filteredFiles.length > 0">
+                <div class="toolbar-right" x-show="filteredFiles.length > 0">
                     <div class="page-inline-status" x-show="view === 'scan' && hasSelected">
                         <span class="selection-inline-count">已选 <span x-text="selectedCount">0</span> 项</span>
                         <span class="selection-inline-divider">·</span>
@@ -227,6 +231,9 @@
                     </div>
                     <div class="control-rail" x-show="totalPages > 1">
                         <span class="control-label">分页</span>
+                        <span class="toolbar-range">
+                            <span x-text="pageRangeStart">0</span>-<span x-text="pageRangeEnd">0</span> / <span x-text="sortedFiles.length">0</span>
+                        </span>
                         <div class="mini-pager">
                             <button class="rail-button" @click="goToPage(currentPageValue - 1)" :disabled="currentPageValue <= 1">‹ Prev</button>
                             <span class="mini-page-status">Page <span x-text="currentPageValue">1</span> / <span x-text="totalPages">1</span></span>
@@ -368,27 +375,6 @@
                             </template>
                         </tbody>
                     </table>
-                </div>
-
-                <div class="pagination-bar">
-                    <div class="pagination-info">
-                        显示 <span x-text="pageRangeStart">0</span>-<span x-text="pageRangeEnd">0</span> / <span x-text="sortedFiles.length">0</span>
-                    </div>
-                    <div class="pagination-controls">
-                        <button class="page-nav" @click="goToPage(currentPageValue - 1)" :disabled="currentPageValue <= 1">上一页</button>
-                        <template x-for="item in paginationItems" :key="item.key">
-                            <template x-if="item.page === null">
-                                <span class="page-gap">···</span>
-                            </template>
-                            <template x-if="item.page !== null">
-                                <button class="page-chip"
-                                        :class="{ 'active': item.page === currentPageValue }"
-                                        @click="goToPage(item.page)"
-                                        x-text="item.page"></button>
-                            </template>
-                        </template>
-                        <button class="page-nav" @click="goToPage(currentPageValue + 1)" :disabled="currentPageValue >= totalPages">下一页</button>
-                    </div>
                 </div>
             </div>
 

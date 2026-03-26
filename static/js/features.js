@@ -1,4 +1,8 @@
 (function (window) {
+    const MIN_VISIBLE = 800;
+    const BATCH_PANEL_ANIMATION_MS = 280;
+    const OPTIMISTIC_BATCH_PREFIX = 'optimistic-';
+
     function createFeatures() {
         return {
             showStatusMenu(fileId) {
@@ -88,8 +92,56 @@
                 this.closeStatusMenu();
             },
 
+            createOptimisticBatchJob(files) {
+                const now = new Date().toISOString();
+                return {
+                    id: `${OPTIMISTIC_BATCH_PREFIX}${Date.now()}`,
+                    status: 'queued',
+                    total: files.length,
+                    processed: 0,
+                    succeeded: 0,
+                    skipped: 0,
+                    failed: 0,
+                    created_at: now,
+                    started_at: null,
+                    finished_at: null,
+                    items: files.map(file => ({
+                        id: file.id,
+                        code: file.identified_code,
+                        source_path: file.original_path,
+                        target_path: file.target_path,
+                        status: 'pending',
+                        message: null,
+                        started_at: null,
+                        finished_at: null
+                    }))
+                };
+            },
+
+            animateBatchPanelExpand() {
+                if (this.batchExpandTimer) {
+                    clearTimeout(this.batchExpandTimer);
+                }
+
+                this.batchExpanding = true;
+                this.batchExpandTimer = setTimeout(() => {
+                    this.batchExpanding = false;
+                    this.batchExpandTimer = null;
+                }, BATCH_PANEL_ANIMATION_MS);
+            },
+
+            async ensureBatchMinimumVisibility() {
+                if (!this.batchVisibleSince) {
+                    return;
+                }
+
+                const elapsed = Date.now() - this.batchVisibleSince;
+                if (elapsed < MIN_VISIBLE) {
+                    await new Promise(resolve => setTimeout(resolve, MIN_VISIBLE - elapsed));
+                }
+            },
+
             setBatchJob(job) {
-                const previousStatus = this.batchJob?.status;
                 this.batchJob = job;
                 const index = {};
                 (job?.items || []).forEach(item => {
@@ -98,15 +150,13 @@
                 this.batchItemsIndex = index;
                 if (!job) {
                     this.batchExpanded = false;
-                    return;
-                }
-
-                if (['queued', 'running'].includes(job.status)) {
-                    this.batchExpanded = true;
-                } else if (['queued', 'running'].includes(previousStatus) && ['completed', 'failed', 'cancelled'].includes(job.status)) {
-                    this.batchExpanded = false;
-                } else if (!previousStatus && ['completed', 'failed', 'cancelled'].includes(job.status)) {
-                    this.batchExpanded = false;
+                    this.batchVisibleSince = 0;
+                    this.batchPollingBusy = false;
+                    if (this.batchExpandTimer) {
+                        clearTimeout(this.batchExpandTimer);
+                        this.batchExpandTimer = null;
+                    }
+                    this.batchExpanding = false;
                 }
             },
 
@@ -129,6 +179,7 @@
                     clearInterval(this.batchPollTimer);
                     this.batchPollTimer = null;
                 }
+                this.batchPollingBusy = false;
             },
 
             async refreshAfterBatchCompletion() {
@@ -167,6 +218,10 @@
                     throw new Error(batchJob.detail || '获取批处理状态失败');
                 }
 
+                if (['completed', 'failed', 'cancelled'].includes(batchJob.status)) {
+                    await this.ensureBatchMinimumVisibility();
+                }
+
                 this.setBatchJob(batchJob);
 
                 if (['completed', 'failed', 'cancelled'].includes(batchJob.status)) {
@@ -182,6 +237,11 @@
             startBatchPolling(batchId) {
                 this.stopBatchPolling();
                 this.batchPollTimer = setInterval(async () => {
+                    if (this.batchPollingBusy) {
+                        return;
+                    }
+
+                    this.batchPollingBusy = true;
                     try {
                         await this.fetchBatchJob(batchId, { syncAfterDone: true });
                     } catch (error) {
@@ -189,8 +249,10 @@
                         this.batchSubmitting = false;
                         this.batchCancelling = false;
                         this.error = '批处理状态获取失败：' + error.message;
+                    } finally {
+                        this.batchPollingBusy = false;
                     }
-                }, 800);
+                }, 400);
             },
 
             updateStats(data) {
@@ -320,7 +382,13 @@
                 this.error = null;
                 this.success = null;
 
-                const fileIds = this.confirmFiles.map(file => file.id);
+                const selectedFiles = [...this.confirmFiles];
+                const fileIds = selectedFiles.map(file => file.id);
+                this.selectedFiles = {};
+                this.batchVisibleSince = Date.now();
+                this.batchExpanded = true;
+                this.animateBatchPanelExpand();
+                this.setBatchJob(this.createOptimisticBatchJob(selectedFiles));
 
                 try {
                     const response = await fetch('/api/batches', {
@@ -336,12 +404,12 @@
                         throw new Error(batchJob.detail || '创建批处理任务失败');
                     }
 
-                    this.selectedFiles = {};
-                    this.batchExpanded = true;
                     this.setBatchJob(batchJob);
                     this.startBatchPolling(batchJob.id);
-                    this.success = '已启动批量整理任务';
                 } catch (e) {
+                    if (this.batchJob && String(this.batchJob.id || '').startsWith(OPTIMISTIC_BATCH_PREFIX)) {
+                        this.clearBatchJob();
+                    }
                     if (e.message === '所选文件状态已变化，请刷新列表后重试' || e.message === '没有可整理的待处理文件') {
                         await this.scanFiles(true);
                         this.clearSelection();
@@ -358,7 +426,7 @@
             },
 
             async cancelBatch() {
-                if (!this.batchJob || !this.batchRunning) {
+                if (!this.batchCancelable) {
                     return;
                 }
 
@@ -479,6 +547,10 @@
 
             destroy() {
                 this.stopBatchPolling();
+                if (this.batchExpandTimer) {
+                    clearTimeout(this.batchExpandTimer);
+                    this.batchExpandTimer = null;
+                }
             }
         };
     }
