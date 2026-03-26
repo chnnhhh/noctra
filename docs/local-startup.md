@@ -25,7 +25,7 @@ If you do nothing, the local profile uses repo-relative defaults:
 - dist: `test_data/dist`
 - database: `data/noctra.db`
 - host: `127.0.0.1`
-- port: `8888`
+- port: `4020`
 
 That is enough to boot the project on this machine.
 
@@ -58,7 +58,7 @@ NOCTRA_PROFILE=local ./scripts/stop.sh
 Health check:
 
 ```bash
-curl http://127.0.0.1:8888/api/health
+curl http://127.0.0.1:4020/api/health
 ```
 
 `/api/health` returns the current `profile`, `source_dir`, `dist_dir`, and `db_path`. Check that first if behavior looks wrong.
