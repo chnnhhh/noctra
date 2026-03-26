@@ -146,6 +146,29 @@ async def refresh_file_record(
         await db.commit()
 
 
+async def mark_related_files_target_exists(file_id: int, identified_code: Optional[str]):
+    """当同番号已有一条被整理后，将其余同番号候选标记为已存在。"""
+    if not identified_code:
+        return
+
+    now = datetime.now().isoformat()
+    related_statuses = (*SELECTABLE_SCAN_STATUSES, 'target_exists')
+    placeholders = ','.join('?' * len(related_statuses))
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            f'''
+            UPDATE files
+            SET status = 'target_exists', updated_at = ?
+            WHERE id != ?
+              AND identified_code = ?
+              AND status IN ({placeholders})
+            ''',
+            (now, file_id, identified_code, *related_statuses)
+        )
+        await db.commit()
+
+
 async def get_all_files() -> list[dict]:
     """获取所有文件记录"""
     async with aiosqlite.connect(DB_PATH) as db:
@@ -153,6 +176,16 @@ async def get_all_files() -> list[dict]:
         cursor = await db.execute('SELECT * FROM files ORDER BY id DESC')
         rows = await cursor.fetchall()
         return [dict(row) for row in rows]
+
+
+async def get_processed_history_codes() -> set[str]:
+    """获取历史上已处理且源文件已不存在的番号集合。"""
+    all_files = await get_all_files()
+    return {
+        str(file['identified_code']).upper()
+        for file in all_files
+        if file.get('identified_code') and is_history_processed_record(file)
+    }
 
 
 async def get_file_by_path(original_path: str) -> Optional[dict]:
@@ -303,6 +336,7 @@ async def run_batch_job(batch_id: str):
 
         if final_status == 'success':
             await update_file_status(file_id, db_status, target_path)
+            await mark_related_files_target_exists(file_id, code)
         elif final_status == 'skipped':
             await update_file_status(file_id, db_status, target_path)
         else:
@@ -358,7 +392,7 @@ def build_global_stats(files: list[object]) -> dict[str, int]:
 
         if status == 'pending':
             pending += 1
-        elif status == 'processed':
+        elif status == 'processed' and _is_processed_history_like(file):
             processed += 1
 
     return {
@@ -368,6 +402,23 @@ def build_global_stats(files: list[object]) -> dict[str, int]:
         'pending': pending,
         'processed': processed,
     }
+
+
+def is_history_processed_record(file: dict) -> bool:
+    """历史记录只展示真正已移动走源文件的 processed 项。"""
+    if file.get('status') != 'processed':
+        return False
+    original_path = file.get('original_path')
+    return bool(original_path) and not Path(original_path).exists()
+
+
+def _is_processed_history_like(file: object) -> bool:
+    if isinstance(file, dict):
+        return is_history_processed_record(file)
+
+    status = getattr(file, 'status', None)
+    original_path = getattr(file, 'original_path', None)
+    return status == 'processed' and bool(original_path) and not Path(original_path).exists()
 
 
 @app.get("/")
@@ -387,6 +438,7 @@ async def scan_files(force_rescan: bool = False):
     # 扫描文件系统
     scanned_files = scanner.scan()
     scanned_candidates = []
+    processed_history_codes = await get_processed_history_codes()
 
     for file_info in scanned_files:
         code = file_info['identified_code']
@@ -394,11 +446,15 @@ async def scan_files(force_rescan: bool = False):
         if code:
             target_path = organizer.get_target_path(code, file_info['filename'])
 
+        status = resolve_scan_status(code, target_path)
+        if code and str(code).upper() in processed_history_codes:
+            status = 'target_exists'
+
         scanned_candidates.append({
             **file_info,
             'original_path': file_info['path'],
             'target_path': target_path,
-            'status': resolve_scan_status(code, target_path),
+            'status': status,
         })
 
     assign_batch_duplicate_statuses(scanned_candidates)
@@ -430,60 +486,57 @@ async def scan_files(force_rescan: bool = False):
                 )
             continue
 
-        # 检查历史记录
-        if not force_rescan:
-            if existing:
-                # 文件未变化（大小和 mtime 相同）
-                if existing['file_size'] == file_info['size'] and existing['file_mtime'] == file_info['mtime']:
-                    if existing['status'] == 'processed' and status in SELECTABLE_SCAN_STATUSES:
-                        status = existing['status']
-                        target_path = existing['target_path']
-                    else:
-                        metadata_changed = (
-                            existing['identified_code'] != code
-                            or existing['target_path'] != target_path
-                            or existing['status'] != status
-                        )
-                        if metadata_changed:
-                            await refresh_file_record(
-                                file_id=existing['id'],
-                                identified_code=code,
-                                target_path=target_path,
-                                status=status,
-                                file_size=file_info['size'],
-                                file_mtime=file_info['mtime']
-                            )
-                            existing['identified_code'] = code
-                            existing['target_path'] = target_path
-                            existing['status'] = status
-                            existing['file_size'] = file_info['size']
-                            existing['file_mtime'] = file_info['mtime']
-                            existing['updated_at'] = datetime.now().isoformat()
-                else:
-                    # 文件已变化，更新记录
-                    await upsert_file(
-                        original_path=original_path,
+        if existing:
+            if existing['file_size'] == file_info['size'] and existing['file_mtime'] == file_info['mtime']:
+                metadata_changed = (
+                    existing['identified_code'] != code
+                    or existing['target_path'] != target_path
+                    or existing['status'] != status
+                )
+                if metadata_changed:
+                    await refresh_file_record(
+                        file_id=existing['id'],
                         identified_code=code,
                         target_path=target_path,
                         status=status,
                         file_size=file_info['size'],
                         file_mtime=file_info['mtime']
                     )
-                if status == 'processed':
-                    continue
-
-                file_records.append(FileRecord(
-                    id=existing['id'],
-                    original_path=original_path,
+                    existing['identified_code'] = code
+                    existing['target_path'] = target_path
+                    existing['status'] = status
+                    existing['file_size'] = file_info['size']
+                    existing['file_mtime'] = file_info['mtime']
+                    existing['updated_at'] = datetime.now().isoformat()
+            else:
+                # 文件已变化，刷新记录并重新走当前扫描规则。
+                await refresh_file_record(
+                    file_id=existing['id'],
                     identified_code=code,
                     target_path=target_path,
                     status=status,
                     file_size=file_info['size'],
-                    file_mtime=file_info['mtime'],
-                    created_at=existing['created_at'],
-                    updated_at=existing['updated_at']
-                ))
-                continue
+                    file_mtime=file_info['mtime']
+                )
+                existing['identified_code'] = code
+                existing['target_path'] = target_path
+                existing['status'] = status
+                existing['file_size'] = file_info['size']
+                existing['file_mtime'] = file_info['mtime']
+                existing['updated_at'] = datetime.now().isoformat()
+
+            file_records.append(FileRecord(
+                id=existing['id'],
+                original_path=original_path,
+                identified_code=code,
+                target_path=target_path,
+                status=status,
+                file_size=file_info['size'],
+                file_mtime=file_info['mtime'],
+                created_at=existing['created_at'],
+                updated_at=existing['updated_at']
+            ))
+            continue
 
         # 插入新记录
         file_id = await upsert_file(
@@ -496,9 +549,6 @@ async def scan_files(force_rescan: bool = False):
         )
 
         now = datetime.now().isoformat()
-        if status == 'processed':
-            continue
-
         file_records.append(FileRecord(
             id=file_id,
             original_path=original_path,
@@ -574,9 +624,11 @@ async def organize_files(request: OrganizeRequest):
         file_id = result['file_id']
         target_path = result['target_path']
         status = result['status']
+        row_dict = next((item for item in sorted_rows if item['id'] == file_id), None)
 
         if status == 'moved':
             await update_file_status(file_id, 'processed', target_path)
+            await mark_related_files_target_exists(file_id, row_dict['identified_code'] if row_dict else None)
             success_count += 1
         elif status == 'skipped':
             await update_file_status(file_id, 'target_exists', target_path)
@@ -701,7 +753,7 @@ async def get_history():
     stats = build_global_stats(all_files)
 
     skipped = sum(1 for f in all_files if f['status'] == 'skipped')
-    processed_files = [f for f in all_files if f['status'] == 'processed']
+    processed_files = [f for f in all_files if is_history_processed_record(f)]
 
     file_records = [
         FileRecord(
@@ -723,7 +775,7 @@ async def get_history():
         identified=stats['identified'],
         unidentified=stats['unidentified'],
         pending=stats['pending'],
-        processed=stats['processed'],
+        processed=len(processed_files),
         skipped=skipped,
         files=file_records
     )

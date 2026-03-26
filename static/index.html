@@ -190,7 +190,6 @@
                         <button class="filter-button" :class="{ 'active': currentFilter === 'pending' }" @click="setFilter('pending')">待处理</button>
                         <button class="filter-button" :class="{ 'active': currentFilter === 'duplicate' }" @click="setFilter('duplicate')">重复</button>
                         <button class="filter-button" :class="{ 'active': currentFilter === 'target_exists' }" @click="setFilter('target_exists')">已存在</button>
-                        <button class="filter-button" :class="{ 'active': currentFilter === 'processed' }" @click="setFilter('processed')">已处理</button>
                     </div>
                 </div>
 
@@ -250,7 +249,8 @@
                         <thead>
                             <tr>
                                 <th class="col-select" x-show="view === 'scan'">
-                                    <label class="checkbox-hit">
+                                    <label class="checkbox-hit"
+                                           :class="{ 'disabled': currentPageSelectableFiles.length === 0 }">
                                         <input type="checkbox"
                                                class="checkbox"
                                                @change="toggleCurrentPageSelection($event.target.checked)"
@@ -297,7 +297,8 @@
                                     :class="{ 'row-active': activeStatusMenuId === file.id, 'selected': !!selectedFiles[file.id], 'history-row': view === 'history' }"
                                     @mousemove="updateRowGlow($event)">
                                     <td class="cell-select" x-show="view === 'scan'">
-                                        <label class="checkbox-hit">
+                                        <label class="checkbox-hit"
+                                               :class="{ 'disabled': !canSelectFile(file) }">
                                             <input type="checkbox"
                                                    class="checkbox"
                                                    :checked="!!selectedFiles[file.id]"

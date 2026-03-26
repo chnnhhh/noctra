@@ -1746,9 +1746,9 @@
         }
 
         .badge.duplicate {
-            color: #9cc8ff;
-            border: 1px solid rgba(88, 166, 255, 0.45);
-            background: rgba(88, 166, 255, 0.08);
+            color: #ffe082;
+            border: 1px solid rgba(255, 208, 74, 0.72);
+            background: rgba(255, 208, 74, 0.16);
         }
 
         .badge.skipped {
@@ -1812,10 +1812,10 @@
         }
 
         .status-action.status-duplicate {
-            --status-border: rgba(88, 166, 255, 0.4);
-            --status-core-bg: rgba(88, 166, 255, 0.12);
-            --status-text: #9cc8ff;
-            --status-glow: rgba(88, 166, 255, 0.12);
+            --status-border: rgba(255, 208, 74, 0.62);
+            --status-core-bg: rgba(255, 208, 74, 0.18);
+            --status-text: #ffe082;
+            --status-glow: rgba(255, 208, 74, 0.18);
         }
 
         .status-action.status-skipped {
@@ -2007,8 +2007,28 @@
             background: rgba(17, 24, 39, 0.62);
         }
 
+        .checkbox-hit.disabled {
+            cursor: not-allowed;
+        }
+
+        .checkbox-hit.disabled:hover {
+            background: transparent;
+        }
+
         .checkbox:hover {
             border-color: #58a6ff;
+        }
+
+        .checkbox:disabled {
+            cursor: not-allowed;
+            border-color: rgba(71, 85, 105, 0.72);
+            background: rgba(15, 23, 42, 0.72);
+            opacity: 0.46;
+            box-shadow: none;
+        }
+
+        .checkbox:disabled:hover {
+            border-color: rgba(71, 85, 105, 0.72);
         }
 
         .checkbox:focus-visible {

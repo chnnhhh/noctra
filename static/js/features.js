@@ -185,6 +185,7 @@
             async refreshAfterBatchCompletion() {
                 const preservedFilter = this.currentFilter;
                 const preservedPage = this.currentPage;
+                const hiddenAfterProcessed = ['identified', 'pending', 'duplicate', 'target_exists'];
 
                 try {
                     const response = await fetch('/api/scan');
@@ -202,8 +203,8 @@
                     this.closeStatusMenu();
                     this.view = 'scan';
                     this.distDir = '/dist';
-                    this.currentFilter = preservedFilter;
-                    this.currentPage = preservedPage;
+                    this.currentFilter = hiddenAfterProcessed.includes(preservedFilter) ? 'all' : preservedFilter;
+                    this.currentPage = this.currentFilter === preservedFilter ? preservedPage : 1;
                     this.historyLoaded = false;
                 } catch (error) {
                     this.error = '刷新扫描结果失败：' + error.message;

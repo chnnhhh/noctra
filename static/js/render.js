@@ -40,7 +40,7 @@
                 const map = {
                     pending: '待处理',
                     processing: '处理中',
-                    success: '已完成',
+                    success: '已处理',
                     skipped: '已跳过',
                     failed: '失败'
                 };
@@ -97,7 +97,7 @@
 
             canSelectFile(file) {
                 return this.view === 'scan' &&
-                    ['pending', 'duplicate'].includes(file.status) &&
+                    file.status === 'pending' &&
                     !this.isBatchItemBlocking(file);
             },
 
@@ -105,10 +105,13 @@
                 if (this.isBatchItemBlocking(file)) {
                     return '该文件已在当前批处理中';
                 }
+                if (file.status === 'duplicate') {
+                    return '重复项不能批量勾选，请使用右侧按钮单独整理';
+                }
                 if (this.canSelectFile(file)) {
                     return '';
                 }
-                return '仅待处理或重复项可加入整理集合';
+                return '仅待处理项可加入整理集合';
             },
 
             getStatusSortWeight(file) {

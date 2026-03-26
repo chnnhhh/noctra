@@ -1,7 +1,9 @@
+import asyncio
 import pytest
 import tempfile
 from pathlib import Path
 
+import app.main as main_mod
 from app.organizer import JAVOrganizer
 from app.scanner import JAVScanner
 from app.statuses import (
@@ -250,6 +252,164 @@ class TestJAVScanner:
 
         assert compare_candidate_priority(left, right) < 0
         assert compare_candidate_priority(left, same_name_other_path) < 0
+
+    def test_related_candidates_become_target_exists_after_organize(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / 'source'
+            dist_dir = Path(tmpdir) / 'dist'
+            db_path = Path(tmpdir) / 'data' / 'noctra.db'
+            source_dir.mkdir(parents=True)
+            dist_dir.mkdir()
+
+            for relative_path, size in [
+                ('ABW-6007-C.mp4', 80),
+                ('ABW-6007-UC.mkv', 120),
+                ('ABW-6007.mp4', 60),
+                ('ABW-6007_字幕版.mp4', 70),
+                ('ABW-6007xxx.mp4', 50),
+            ]:
+                file_path = source_dir / relative_path
+                file_path.write_bytes(b'0' * size)
+
+            original_db_path = main_mod.DB_PATH
+            original_source_dir = main_mod.SOURCE_DIR
+            original_dist_dir = main_mod.DIST_DIR
+            original_scanner = main_mod.scanner
+            original_organizer = main_mod.organizer
+
+            try:
+                main_mod.DB_PATH = str(db_path)
+                main_mod.SOURCE_DIR = str(source_dir)
+                main_mod.DIST_DIR = str(dist_dir)
+                main_mod.scanner = JAVScanner(str(source_dir), str(dist_dir))
+                main_mod.organizer = JAVOrganizer(str(dist_dir))
+
+                async def scenario():
+                    await main_mod.init_db()
+
+                    first_scan = await main_mod.scan_files()
+                    first_statuses = {
+                        Path(file.original_path).name: file.status
+                        for file in first_scan.files
+                    }
+
+                    assert first_statuses['ABW-6007-UC.mkv'] == 'pending'
+                    assert first_statuses['ABW-6007-C.mp4'] == 'duplicate'
+                    assert first_statuses['ABW-6007.mp4'] == 'duplicate'
+                    assert first_statuses['ABW-6007_字幕版.mp4'] == 'duplicate'
+                    assert first_statuses['ABW-6007xxx.mp4'] == 'duplicate'
+
+                    chosen = next(
+                        file for file in first_scan.files
+                        if Path(file.original_path).name == 'ABW-6007-C.mp4'
+                    )
+                    success, reason = await asyncio.to_thread(
+                        main_mod.organizer.move_file,
+                        chosen.original_path,
+                        chosen.target_path
+                    )
+                    assert success, reason
+
+                    await main_mod.update_file_status(chosen.id, 'processed', chosen.target_path)
+                    await main_mod.mark_related_files_target_exists(chosen.id, chosen.identified_code)
+
+                    second_scan = await main_mod.scan_files()
+                    second_statuses = {
+                        Path(file.original_path).name: file.status
+                        for file in second_scan.files
+                    }
+
+                    assert 'ABW-6007-C.mp4' not in second_statuses
+                    assert second_statuses['ABW-6007-UC.mkv'] == 'target_exists'
+                    assert second_statuses['ABW-6007.mp4'] == 'target_exists'
+                    assert second_statuses['ABW-6007_字幕版.mp4'] == 'target_exists'
+                    assert second_statuses['ABW-6007xxx.mp4'] == 'target_exists'
+
+                    history = await main_mod.get_history()
+                    history_names = [Path(file.original_path).name for file in history.files]
+
+                    assert history_names == ['ABW-6007-C.mp4']
+                    assert history.processed == 1
+
+                asyncio.run(scenario())
+            finally:
+                main_mod.DB_PATH = original_db_path
+                main_mod.SOURCE_DIR = original_source_dir
+                main_mod.DIST_DIR = original_dist_dir
+                main_mod.scanner = original_scanner
+                main_mod.organizer = original_organizer
+
+    def test_same_suffix_different_extension_falls_back_to_target_exists_after_manual_organize(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / 'source'
+            dist_dir = Path(tmpdir) / 'dist'
+            db_path = Path(tmpdir) / 'data' / 'noctra.db'
+            source_dir.mkdir(parents=True)
+            dist_dir.mkdir()
+
+            for relative_path, size in [
+                ('ABP-456-C.mp4', 80),
+                ('ABP-456-C.mkv', 120),
+            ]:
+                file_path = source_dir / relative_path
+                file_path.write_bytes(b'0' * size)
+
+            original_db_path = main_mod.DB_PATH
+            original_source_dir = main_mod.SOURCE_DIR
+            original_dist_dir = main_mod.DIST_DIR
+            original_scanner = main_mod.scanner
+            original_organizer = main_mod.organizer
+
+            try:
+                main_mod.DB_PATH = str(db_path)
+                main_mod.SOURCE_DIR = str(source_dir)
+                main_mod.DIST_DIR = str(dist_dir)
+                main_mod.scanner = JAVScanner(str(source_dir), str(dist_dir))
+                main_mod.organizer = JAVOrganizer(str(dist_dir))
+
+                async def scenario():
+                    await main_mod.init_db()
+
+                    first_scan = await main_mod.scan_files()
+                    first_statuses = {
+                        Path(file.original_path).name: file.status
+                        for file in first_scan.files
+                    }
+
+                    assert first_statuses['ABP-456-C.mkv'] == 'pending'
+                    assert first_statuses['ABP-456-C.mp4'] == 'duplicate'
+
+                    chosen = next(
+                        file for file in first_scan.files
+                        if Path(file.original_path).name == 'ABP-456-C.mp4'
+                    )
+                    success, reason = await asyncio.to_thread(
+                        main_mod.organizer.move_file,
+                        chosen.original_path,
+                        chosen.target_path
+                    )
+                    assert success, reason
+
+                    await main_mod.update_file_status(chosen.id, 'processed', chosen.target_path)
+                    await main_mod.mark_related_files_target_exists(chosen.id, chosen.identified_code)
+
+                    second_scan = await main_mod.scan_files()
+                    second_statuses = {
+                        Path(file.original_path).name: file.status
+                        for file in second_scan.files
+                    }
+
+                    assert 'ABP-456-C.mp4' not in second_statuses
+                    assert second_statuses['ABP-456-C.mkv'] == 'target_exists'
+                    assert all(status != 'processed' for status in second_statuses.values())
+
+                asyncio.run(scenario())
+            finally:
+                main_mod.DB_PATH = original_db_path
+                main_mod.SOURCE_DIR = original_source_dir
+                main_mod.DIST_DIR = original_dist_dir
+                main_mod.scanner = original_scanner
+                main_mod.organizer = original_organizer
 
 
 if __name__ == '__main__':
