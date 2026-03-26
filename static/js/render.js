@@ -179,19 +179,34 @@
             },
 
             compareDefaultSort(a, b) {
-                const statusDiff = this.getStatusSortWeight(a) - this.getStatusSortWeight(b);
-                if (statusDiff !== 0) {
-                    return statusDiff;
-                }
-
                 if (a.identified_code && b.identified_code) {
-                    return this.compareNatural(a.identified_code, b.identified_code);
+                    const codeDiff = this.compareNatural(a.identified_code, b.identified_code);
+                    if (codeDiff !== 0) {
+                        return codeDiff;
+                    }
+
+                    const statusDiff = this.getStatusSortWeight(a) - this.getStatusSortWeight(b);
+                    if (statusDiff !== 0) {
+                        return statusDiff;
+                    }
+
+                    const filenameDiff = this.compareNatural(this.getFilename(a.original_path), this.getFilename(b.original_path));
+                    if (filenameDiff !== 0) {
+                        return filenameDiff;
+                    }
+
+                    return this.compareNatural(a.original_path, b.original_path);
                 }
                 if (a.identified_code && !b.identified_code) {
                     return -1;
                 }
                 if (!a.identified_code && b.identified_code) {
                     return 1;
+                }
+
+                const statusDiff = this.getStatusSortWeight(a) - this.getStatusSortWeight(b);
+                if (statusDiff !== 0) {
+                    return statusDiff;
                 }
 
                 return this.compareNatural(this.getFilename(a.original_path), this.getFilename(b.original_path));

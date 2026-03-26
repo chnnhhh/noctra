@@ -469,6 +469,9 @@ async def scan_files(force_rescan: bool = False):
                         file_size=file_info['size'],
                         file_mtime=file_info['mtime']
                     )
+                if status == 'processed':
+                    continue
+
                 file_records.append(FileRecord(
                     id=existing['id'],
                     original_path=original_path,
@@ -493,6 +496,9 @@ async def scan_files(force_rescan: bool = False):
         )
 
         now = datetime.now().isoformat()
+        if status == 'processed':
+            continue
+
         file_records.append(FileRecord(
             id=file_id,
             original_path=original_path,
