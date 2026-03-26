@@ -750,6 +750,7 @@
             gap: 16px;
             flex-wrap: wrap;
             min-width: 0;
+            flex: 1 1 420px;
         }
 
         .control-rails {
@@ -758,6 +759,8 @@
             gap: 16px;
             flex-wrap: wrap;
             margin-left: auto;
+            justify-content: flex-end;
+            flex: 1 1 420px;
         }
 
         .control-rail {
@@ -786,6 +789,60 @@
             display: inline-flex;
             align-items: center;
             gap: 8px;
+        }
+
+        .sort-composer {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .sort-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 16px;
+            height: 16px;
+            color: #7dd3fc;
+        }
+
+        .sort-select {
+            appearance: none;
+            border: 1px solid rgba(48, 54, 61, 0.92);
+            border-radius: 12px;
+            background: rgba(10, 16, 28, 0.8);
+            color: #c9d1d9;
+            font-size: 12px;
+            font-weight: 700;
+            line-height: 1;
+            padding: 10px 32px 10px 12px;
+            min-width: 108px;
+            cursor: pointer;
+            transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+            background-image:
+                linear-gradient(45deg, transparent 50%, rgba(148, 163, 184, 0.66) 50%),
+                linear-gradient(135deg, rgba(148, 163, 184, 0.66) 50%, transparent 50%);
+            background-position:
+                calc(100% - 16px) calc(50% - 2px),
+                calc(100% - 11px) calc(50% - 2px);
+            background-size: 5px 5px, 5px 5px;
+            background-repeat: no-repeat;
+        }
+
+        .sort-select:hover,
+        .sort-select:focus-visible {
+            border-color: rgba(96, 165, 250, 0.34);
+            color: #e6edf3;
+            outline: none;
+        }
+
+        .sort-direction-button {
+            min-width: 38px;
+            width: 38px;
+            height: 38px;
+            padding: 0;
+            border-radius: 12px;
+            justify-content: center;
         }
 
         .rail-button {
@@ -928,6 +985,29 @@
             color: #c9d1d9;
         }
 
+        .selection-clear {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            margin-left: 2px;
+            padding: 0;
+            border: none;
+            background: transparent;
+            color: rgba(248, 113, 113, 0.6);
+            cursor: pointer;
+            font-size: 14px;
+            line-height: 1;
+        }
+
+        .selection-clear:hover {
+            color: rgba(248, 113, 113, 0.9);
+            transform: none;
+            background: transparent;
+            box-shadow: none;
+        }
+
         .batch-rail {
             display: flex;
             flex-direction: column;
@@ -967,6 +1047,39 @@
 
         .batch-rail-header {
             justify-content: space-between;
+        }
+
+        .batch-rail-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 0;
+            border: none;
+            background: transparent;
+            color: #dbe5ef;
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        .batch-rail-toggle:hover {
+            transform: none;
+            background: transparent;
+            box-shadow: none;
+        }
+
+        .batch-rail-caret {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            color: #8b949e;
+            transition: transform 0.18s ease, color 0.18s ease;
+        }
+
+        .batch-rail.expanded .batch-rail-caret {
+            transform: rotate(180deg);
+            color: #c9d1d9;
         }
 
         .batch-rail-summary {
@@ -1095,41 +1208,14 @@
             padding-top: 2px;
         }
 
-        .batch-detail-list {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            max-height: 220px;
-            overflow-y: auto;
-            padding-right: 2px;
-        }
-
-        .batch-detail-item {
-            display: grid;
-            grid-template-columns: minmax(0, 120px) minmax(0, 1fr) auto;
-            gap: 12px;
-            align-items: center;
-            padding: 10px 12px;
-            border-radius: 14px;
-            background: rgba(10, 16, 28, 0.72);
-            border: 1px solid rgba(48, 54, 61, 0.78);
-        }
-
-        .batch-detail-code {
-            color: #dbe5ef;
-            font-size: 13px;
-            font-weight: 700;
-        }
-
-        .batch-detail-message {
+        .batch-note {
             color: #8b949e;
             font-size: 12px;
-            line-height: 1.5;
-            word-break: break-word;
+            line-height: 1.6;
         }
 
-        .batch-detail-status {
-            justify-self: end;
+        .batch-note strong {
+            color: #dbe5ef;
         }
 
         .mini-pager {
@@ -1227,6 +1313,10 @@
             border-spacing: 0;
             table-layout: fixed;
             min-width: 1360px;
+        }
+
+        .table-container.history-mode table {
+            min-width: 1180px;
         }
 
         thead tr {
@@ -1382,6 +1472,12 @@
             text-align: center;
         }
 
+        th.col-time,
+        td.cell-time {
+            width: 190px;
+            text-align: left;
+        }
+
         td.cell-status {
             position: relative;
             overflow: visible;
@@ -1396,11 +1492,68 @@
             text-align: center;
         }
 
+        .table-container.history-mode th,
+        .table-container.history-mode td {
+            padding: 16px 24px;
+        }
+
+        .table-container.history-mode th.col-code,
+        .table-container.history-mode td.cell-code {
+            width: 176px;
+            text-align: left;
+        }
+
+        .table-container.history-mode th.col-code {
+            padding-left: 34px;
+        }
+
+        .table-container.history-mode th.col-code .th-flow {
+            align-items: flex-start;
+        }
+
+        .table-container.history-mode td.cell-code {
+            padding-left: 34px;
+        }
+
+        .table-container.history-mode td.cell-code .code {
+            justify-content: flex-start;
+            text-align: left;
+            margin: 0;
+        }
+
+        .table-container.history-mode th.col-name,
+        .table-container.history-mode td.cell-name {
+            width: 260px;
+        }
+
+        .table-container.history-mode th.col-target,
+        .table-container.history-mode td.cell-target {
+            width: 420px;
+        }
+
+        .table-container.history-mode th.col-status,
+        .table-container.history-mode td.cell-status {
+            width: 120px;
+        }
+
+        .table-container.history-mode th.col-time,
+        .table-container.history-mode td.cell-time {
+            width: 160px;
+        }
+
+        .table-container.history-mode td.cell-status {
+            padding-right: 20px;
+        }
+
         tbody tr.row {
             position: relative;
             isolation: isolate;
             overflow: hidden;
             border-radius: 16px;
+        }
+
+        tbody tr.row.history-row {
+            min-height: 84px;
         }
 
         tbody tr.row::before {
@@ -1907,6 +2060,24 @@
             color: #58a6ff;
         }
 
+        .table-container.history-mode .filename-copy {
+            gap: 0;
+            max-width: 100%;
+        }
+
+        .table-container.history-mode .copy-hint {
+            display: none;
+        }
+
+        .table-container.history-mode .filename {
+            display: block;
+            width: 100%;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            font-size: 15px;
+        }
+
         /* ========== Path Cell ========== */
         .path-cell {
             font-family: 'JetBrains Mono', 'Fira Code', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
@@ -1924,11 +2095,51 @@
             transition: opacity 0.15s ease, color 0.15s ease, text-shadow 0.15s ease;
         }
 
+        .table-container.history-mode .path-cell {
+            max-width: 420px;
+            -webkit-line-clamp: 2;
+            line-height: 1.38;
+            opacity: 0.76;
+        }
+
+        .history-time {
+            display: inline-flex;
+            flex-direction: column;
+            gap: 4px;
+            align-items: flex-start;
+            color: #c9d1d9;
+            line-height: 1.15;
+        }
+
+        .history-time-main {
+            color: rgba(226, 232, 240, 0.88);
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .history-time-sub {
+            color: rgba(148, 163, 184, 0.64);
+            font-size: 12px;
+        }
+
         .cell-target:hover .path-cell,
         tbody tr.row:hover .path-cell {
             opacity: 1;
             color: #a5f3fc;
             text-shadow: 0 0 6px rgba(125, 211, 252, 0.25);
+        }
+
+        .table-container.history-mode .badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: auto;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            line-height: 1;
+            background: rgba(35, 134, 54, 0.1);
+            border-color: rgba(63, 185, 80, 0.3);
         }
 
         /* ========== Empty ========== */
@@ -2383,38 +2594,26 @@
 
             <div class="batch-rail"
                  x-show="view === 'scan' && batchJob"
-                 :class="batchJob ? batchJob.status : ''">
+                 :class="[batchJob ? batchJob.status : '', { 'expanded': batchExpanded }]">
                 <div class="batch-rail-header">
-                    <div class="batch-summary-line">
+                    <button class="batch-rail-toggle" @click="toggleBatchExpanded()">
                         <span class="batch-status-chip"
                               :class="`status-${batchJob.status}`"
                               x-text="getBatchJobStatusLabel(batchJob.status)"></span>
                         <span>批量整理 <span x-text="batchJob.processed">0</span> / <span x-text="batchJob.total">0</span></span>
-                    </div>
+                        <span class="batch-rail-caret" x-html="getUiIcon('chevron_down')"></span>
+                    </button>
                     <div class="batch-rail-actions">
-                        <button class="rail-button" @click="toggleBatchDetails()">
-                            <span x-text="batchDetailOpen ? '收起详情' : '查看详情'"></span>
-                        </button>
-                        <button class="rail-button"
-                                x-show="batchTerminal && batchFailedCount > 0"
-                                @click="showBatchFailures()">
-                            仅看失败
-                        </button>
                         <button class="rail-button"
                                 x-show="batchRunning"
                                 @click="cancelBatch"
                                 :disabled="batchCancelling">
                             <span x-text="batchCancelling ? '取消中...' : '取消'"></span>
                         </button>
-                        <button class="rail-button"
-                                x-show="batchTerminal"
-                                @click="clearBatchJob">
-                            清空
-                        </button>
                     </div>
                 </div>
 
-                <div class="batch-rail-summary">
+                <div class="batch-rail-summary" x-show="batchExpanded">
                     <span class="batch-subline">总数 <strong x-text="batchJob.total">0</strong></span>
                     <span class="batch-metrics">
                         <span class="batch-metric success">成功 <strong x-text="batchJob.succeeded">0</strong></span>
@@ -2423,27 +2622,17 @@
                     </span>
                 </div>
 
-                <div class="batch-progress">
+                <div class="batch-progress" x-show="batchExpanded">
                     <div class="batch-progress-track">
                         <div class="batch-progress-fill" :style="`width: ${batchProgressPercent}%`"></div>
                     </div>
                     <div class="batch-subline" x-text="batchProgressText"></div>
                 </div>
 
-                <div class="batch-detail-panel" x-show="batchDetailOpen">
-                    <div class="batch-subline" x-text="batchDetailHeading"></div>
-                    <div class="batch-detail-list">
-                        <template x-for="item in visibleBatchDetailItems" :key="`${batchJob.id}-${item.id}-${item.status}`">
-                            <div class="batch-detail-item">
-                                <div class="batch-detail-code" x-text="item.code || getFilename(item.source_path)"></div>
-                                <div class="batch-detail-message" x-text="item.message || item.target_path || item.source_path"></div>
-                                <div class="batch-detail-status">
-                                    <span class="badge"
-                                          :class="getBatchBadgeClass(item.status)"
-                                          x-text="getBatchItemStatusText(item.status)"></span>
-                                </div>
-                            </div>
-                        </template>
+                <div class="batch-detail-panel" x-show="batchExpanded">
+                    <div class="batch-note" x-text="batchInfoLine"></div>
+                    <div class="batch-note" x-show="batchJob.failed > 0">
+                        当前批次包含 <strong x-text="batchJob.failed"></strong> 个失败项，表格中的对应行会保留失败状态，方便你继续筛选和处理。
                     </div>
                 </div>
             </div>
@@ -2460,41 +2649,32 @@
                         <button class="filter-button" :class="{ 'active': currentFilter === 'processed' }" @click="setFilter('processed')">已处理</button>
                     </div>
 
+                </div>
+
+                <div class="control-rails" x-show="!loading && filteredFiles.length > 0">
                     <div class="page-inline-status" x-show="view === 'scan' && hasSelected">
                         <span class="selection-inline-count">已选 <span x-text="selectedCount">0</span> 项</span>
                         <span class="selection-inline-divider">·</span>
                         <div class="selection-inline-actions">
                             <button class="selection-inline-action" @click="confirmOrganize" :disabled="!hasSelected">整理选中</button>
                             <span class="selection-inline-divider">·</span>
-                            <button class="selection-inline-action ghost" @click="clearSelection" :disabled="!hasSelected">清空</button>
+                            <button class="selection-clear" @click="clearSelection" :disabled="!hasSelected" aria-label="清空选择" title="清空选择">×</button>
                         </div>
                     </div>
-                </div>
-
-                <div class="control-rails" x-show="!loading && filteredFiles.length > 0">
                     <div class="control-rail">
                         <span class="control-label">排序</span>
-                        <div class="sort-segmented">
-                            <button class="rail-icon-button"
-                                    :class="{ 'active': sortMode === 'default' }"
-                                    @click="setSortMode('default')"
-                                    data-tooltip="默认排序"
-                                    aria-label="默认排序">
-                                <span class="icon-glyph" x-html="getUiIcon('sort_default')"></span>
-                            </button>
-                            <button class="rail-icon-button"
-                                    :class="{ 'active': sortMode === 'code_asc' }"
-                                    @click="setSortMode('code_asc')"
-                                    data-tooltip="番号升序"
-                                    aria-label="番号升序">
-                                <span class="icon-glyph" x-html="getUiIcon('sort_code_asc')"></span>
-                            </button>
-                            <button class="rail-icon-button"
-                                    :class="{ 'active': sortMode === 'code_desc' }"
-                                    @click="setSortMode('code_desc')"
-                                    data-tooltip="番号降序"
-                                    aria-label="番号降序">
-                                <span class="icon-glyph" x-html="getUiIcon('sort_code_desc')"></span>
+                        <div class="sort-composer">
+                            <span class="sort-icon" x-html="getSortFieldIcon(sortField)"></span>
+                            <select class="sort-select" :value="sortField" @change="setSortField($event.target.value)">
+                                <template x-for="option in sortFieldOptions" :key="option.value">
+                                    <option :value="option.value" x-text="option.label"></option>
+                                </template>
+                            </select>
+                            <button class="rail-button sort-direction-button"
+                                    @click="toggleSortDirection()"
+                                    :disabled="view === 'scan' && sortField === 'default'"
+                                    :title="sortDirection === 'desc' ? '降序' : '升序'">
+                                <span class="icon-glyph" x-html="sortDirection === 'desc' ? getUiIcon('sort_desc') : getUiIcon('sort_asc')"></span>
                             </button>
                         </div>
                     </div>
@@ -2519,7 +2699,7 @@
             </div>
 
             <div x-show="!loading && filteredFiles.length > 0">
-                <div class="table-container">
+                <div class="table-container" :class="{ 'history-mode': view === 'history' }">
                     <table>
                         <thead>
                             <tr>
@@ -2557,12 +2737,18 @@
                                         <span class="th-sub">Status</span>
                                     </span>
                                 </th>
+                                <th class="col-time" x-show="view === 'history'">
+                                    <span class="th-flow">
+                                        <span class="th-main">整理时间</span>
+                                        <span class="th-sub">Processed</span>
+                                    </span>
+                                </th>
                             </tr>
                         </thead>
                         <tbody>
                             <template x-for="file in paginatedFiles" :key="file.id">
                                 <tr class="row"
-                                    :class="{ 'row-active': activeStatusMenuId === file.id, 'selected': !!selectedFiles[file.id] }"
+                                    :class="{ 'row-active': activeStatusMenuId === file.id, 'selected': !!selectedFiles[file.id], 'history-row': view === 'history' }"
                                     @mousemove="updateRowGlow($event)">
                                     <td class="cell-select" x-show="view === 'scan'">
                                         <label class="checkbox-hit">
@@ -2633,6 +2819,12 @@
                                         <template x-if="!hasStatusAction(file)">
                                             <span class="badge" :class="getBadgeClass(file)" x-text="getDisplayStatusText(file)"></span>
                                         </template>
+                                    </td>
+                                    <td class="cell-time" x-show="view === 'history'">
+                                        <div class="history-time">
+                                            <span class="history-time-main" x-text="formatProcessedDate(file.updated_at)"></span>
+                                            <span class="history-time-sub" x-text="formatProcessedTime(file.updated_at)"></span>
+                                        </div>
                                     </td>
                                 </tr>
                             </template>
@@ -2751,15 +2943,15 @@
                 historyLoaded: false,
                 view: 'scan', // 'scan' or 'history'
                 currentFilter: 'all',
-                sortMode: 'default',
+                sortField: 'default',
+                sortDirection: 'asc',
                 pageSize: 50,
                 pageSizeOptions: [20, 50, 100],
                 currentPage: 1,
                 batchJob: null,
                 batchItemsIndex: {},
                 batchPollTimer: null,
-                batchDetailOpen: false,
-                batchDetailFilter: 'all',
+                batchExpanded: false,
                 batchSubmitting: false,
                 batchCancelling: false,
                 collator: new Intl.Collator('en', {
@@ -2823,7 +3015,7 @@
                         return '';
                     }
                     if (this.batchRunning) {
-                        return `正在处理 ${this.batchJob.processed} / ${this.batchJob.total}，可继续翻页、筛选和查看详情`;
+                        return `正在处理 ${this.batchJob.processed} / ${this.batchJob.total}，你可以继续翻页、筛选和查看行内状态`;
                     }
                     if (this.batchJob.status === 'cancelled') {
                         return `任务已取消，已完成 ${this.batchJob.processed} / ${this.batchJob.total}`;
@@ -2831,25 +3023,20 @@
                     return `处理完成：成功 ${this.batchJob.succeeded}，跳过 ${this.batchJob.skipped}，失败 ${this.batchJob.failed}`;
                 },
 
-                get batchDetailHeading() {
+                get batchInfoLine() {
                     if (!this.batchJob) {
                         return '';
                     }
-                    if (this.batchDetailFilter === 'failed') {
-                        return '当前只显示失败项';
+                    if (this.batchRunning) {
+                        return '系统正在按顺序处理选中的文件，表格中的对应行会实时同步到当前进度。';
                     }
-                    return '批处理详情';
-                },
-
-                get visibleBatchDetailItems() {
-                    if (!this.batchJob) {
-                        return [];
+                    if (this.batchJob.status === 'cancelled') {
+                        return '批处理已取消，已完成的项目会保留结果，未完成的项目保持原有状态。';
                     }
-                    const items = this.batchJob.items || [];
-                    if (this.batchDetailFilter === 'failed') {
-                        return items.filter(item => item.status === 'failed');
+                    if (this.batchJob.failed > 0) {
+                        return '批量整理已结束，失败项仍保留在列表中，方便你继续筛选和处理。';
                     }
-                    return items;
+                    return '本批次已结束，整理结果已同步到列表和历史记录中。';
                 },
 
                 get confirmCodes() {
@@ -2889,18 +3076,25 @@
                     });
                 },
 
+                get sortFieldOptions() {
+                    if (this.view === 'history') {
+                        return [
+                            { value: 'time', label: '时间' },
+                            { value: 'code', label: '番号' },
+                            { value: 'status', label: '状态' }
+                        ];
+                    }
+
+                    return [
+                        { value: 'default', label: '默认排序' },
+                        { value: 'code', label: '番号' },
+                        { value: 'status', label: '状态' }
+                    ];
+                },
+
                 get sortedFiles() {
                     const files = [...this.filteredFiles];
-
-                    if (this.sortMode === 'code_asc') {
-                        return files.sort((a, b) => this.compareCodeSort(a, b, 1));
-                    }
-
-                    if (this.sortMode === 'code_desc') {
-                        return files.sort((a, b) => this.compareCodeSort(a, b, -1));
-                    }
-
-                    return files.sort((a, b) => this.compareDefaultSort(a, b));
+                    return files.sort((a, b) => this.compareSort(a, b));
                 },
 
                 get totalPages() {
@@ -3091,11 +3285,21 @@
                     return order[status] ?? 9;
                 },
 
+                getSortFieldIcon(field) {
+                    const iconMap = {
+                        default: 'sort_default',
+                        time: 'clock',
+                        code: 'hashtag',
+                        status: 'circle_status'
+                    };
+                    return this.getUiIcon(iconMap[field] || 'sort_default');
+                },
+
                 compareNatural(left, right) {
                     return this.collator.compare(left || '', right || '');
                 },
 
-                compareCodeSort(a, b, direction) {
+                compareCodeSort(a, b, direction = 1) {
                     const aCode = a.identified_code;
                     const bCode = b.identified_code;
 
@@ -3110,6 +3314,29 @@
                     }
 
                     return this.compareNatural(this.getFilename(a.original_path), this.getFilename(b.original_path)) * direction;
+                },
+
+                compareTimeSort(a, b, direction = this.sortDirection) {
+                    const multiplier = direction === 'asc' ? 1 : -1;
+                    const aTime = Date.parse(a.updated_at || '') || 0;
+                    const bTime = Date.parse(b.updated_at || '') || 0;
+                    const diff = (aTime - bTime) * multiplier;
+                    if (diff !== 0) {
+                        return diff;
+                    }
+                    return this.compareCodeSort(a, b, 1);
+                },
+
+                compareStatusSort(a, b, direction = this.sortDirection) {
+                    const multiplier = direction === 'asc' ? 1 : -1;
+                    const diff = (this.getStatusSortWeight(a) - this.getStatusSortWeight(b)) * multiplier;
+                    if (diff !== 0) {
+                        return diff;
+                    }
+                    if (this.view === 'history') {
+                        return this.compareTimeSort(a, b, 'desc');
+                    }
+                    return this.compareCodeSort(a, b, 1);
                 },
 
                 compareDefaultSort(a, b) {
@@ -3129,6 +3356,26 @@
                     }
 
                     return this.compareNatural(this.getFilename(a.original_path), this.getFilename(b.original_path));
+                },
+
+                compareSort(a, b) {
+                    if (this.view === 'scan' && this.sortField === 'default') {
+                        return this.compareDefaultSort(a, b);
+                    }
+
+                    if (this.sortField === 'time') {
+                        return this.compareTimeSort(a, b);
+                    }
+
+                    if (this.sortField === 'code') {
+                        return this.compareCodeSort(a, b, this.sortDirection === 'asc' ? 1 : -1);
+                    }
+
+                    if (this.sortField === 'status') {
+                        return this.compareStatusSort(a, b);
+                    }
+
+                    return this.compareDefaultSort(a, b);
                 },
 
                 updateRowGlow(event) {
@@ -3206,6 +3453,49 @@
                                 <path d="M13 8h4"/>
                                 <path d="M13 12.5l1.8 2.5h2.2"/>
                                 <path d="M13 17h4"/>
+                            </svg>
+                        `,
+                        clock: `
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <circle cx="12" cy="12" r="8"/>
+                                <path d="M12 7.5v4.8l3 1.7"/>
+                            </svg>
+                        `,
+                        hashtag: `
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M9 4L7 20"/>
+                                <path d="M17 4l-2 16"/>
+                                <path d="M4 9h16"/>
+                                <path d="M3 15h16"/>
+                            </svg>
+                        `,
+                        circle_status: `
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <circle cx="12" cy="12" r="8"/>
+                                <circle cx="12" cy="12" r="2.2"/>
+                            </svg>
+                        `,
+                        sort_asc: `
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M7 18V6"/>
+                                <path d="M4.5 8.5L7 6l2.5 2.5"/>
+                                <path d="M13 16h6"/>
+                                <path d="M13 12h4.5"/>
+                                <path d="M13 8h3"/>
+                            </svg>
+                        `,
+                        sort_desc: `
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M7 6v12"/>
+                                <path d="M4.5 15.5L7 18l2.5-2.5"/>
+                                <path d="M13 8h6"/>
+                                <path d="M13 12h4.5"/>
+                                <path d="M13 16h3"/>
+                            </svg>
+                        `,
+                        chevron_down: `
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M6.5 9.5L12 15l5.5-5.5"/>
                             </svg>
                         `,
                         delete: `
@@ -3371,10 +3661,30 @@
                     this.closeStatusMenu();
                 },
 
-                setSortMode(mode) {
-                    this.sortMode = mode;
+                setSortField(field) {
+                    this.sortField = field;
                     this.currentPage = 1;
                     this.closeStatusMenu();
+                },
+
+                toggleSortDirection() {
+                    if (this.view === 'scan' && this.sortField === 'default') {
+                        return;
+                    }
+                    this.sortDirection = this.sortDirection === 'desc' ? 'asc' : 'desc';
+                    this.currentPage = 1;
+                    this.closeStatusMenu();
+                },
+
+                resetSortForView(viewName = this.view) {
+                    if (viewName === 'history') {
+                        this.sortField = 'time';
+                        this.sortDirection = 'desc';
+                        return;
+                    }
+
+                    this.sortField = 'default';
+                    this.sortDirection = 'asc';
                 },
 
                 setPageSize(size) {
@@ -3407,6 +3717,37 @@
                     return match?.identified_code || this.getFilename(result.original_path);
                 },
 
+                formatProcessedDate(value) {
+                    if (!value) {
+                        return '--';
+                    }
+
+                    const date = new Date(value);
+                    if (Number.isNaN(date.getTime())) {
+                        return '--';
+                    }
+
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                },
+
+                formatProcessedTime(value) {
+                    if (!value) {
+                        return '--';
+                    }
+
+                    const date = new Date(value);
+                    if (Number.isNaN(date.getTime())) {
+                        return '--';
+                    }
+
+                    const hours = String(date.getHours()).padStart(2, '0');
+                    const minutes = String(date.getMinutes()).padStart(2, '0');
+                    return `${hours}:${minutes}`;
+                },
+
                 formatOrganizeFailures(results) {
                     const failedResults = results.filter(result => result.status === 'failed');
                     if (failedResults.length === 0) {
@@ -3423,35 +3764,37 @@
                 },
 
                 setBatchJob(job) {
+                    const previousStatus = this.batchJob?.status;
                     this.batchJob = job;
                     const index = {};
                     (job?.items || []).forEach(item => {
                         index[item.id] = item;
                     });
                     this.batchItemsIndex = index;
+                    if (!job) {
+                        this.batchExpanded = false;
+                        return;
+                    }
+
+                    if (['queued', 'running'].includes(job.status)) {
+                        this.batchExpanded = true;
+                    } else if (['queued', 'running'].includes(previousStatus) && ['completed', 'failed', 'cancelled'].includes(job.status)) {
+                        this.batchExpanded = false;
+                    } else if (!previousStatus && ['completed', 'failed', 'cancelled'].includes(job.status)) {
+                        this.batchExpanded = false;
+                    }
                 },
 
-                toggleBatchDetails() {
+                toggleBatchExpanded() {
                     if (!this.batchJob) {
                         return;
                     }
-                    this.batchDetailFilter = 'all';
-                    this.batchDetailOpen = !this.batchDetailOpen;
-                },
-
-                showBatchFailures() {
-                    if (!this.batchJob) {
-                        return;
-                    }
-                    this.batchDetailFilter = 'failed';
-                    this.batchDetailOpen = true;
+                    this.batchExpanded = !this.batchExpanded;
                 },
 
                 clearBatchJob() {
                     this.stopBatchPolling();
                     this.setBatchJob(null);
-                    this.batchDetailOpen = false;
-                    this.batchDetailFilter = 'all';
                     this.batchSubmitting = false;
                     this.batchCancelling = false;
                 },
@@ -3544,6 +3887,7 @@
 
                 async switchView(viewName) {
                     this.view = viewName;
+                    this.resetSortForView(viewName);
 
                     this.currentFilter = 'all';
                     this.error = null;
@@ -3562,7 +3906,7 @@
                     this.switchVisibleFiles();
                 },
 
-                async scanFiles() {
+                async scanFiles(forceRescan = false) {
                     this.loading = true;
                     this.loadingText = '正在扫描目录...';
                     this.error = null;
@@ -3572,7 +3916,8 @@
                     this.currentFilter = 'all';
 
                     try {
-                        const response = await fetch('/api/scan');
+                        const scanUrl = forceRescan ? '/api/scan?force_rescan=true' : '/api/scan';
+                        const response = await fetch(scanUrl);
                         const data = await response.json();
 
                         this.updateStats(data);
@@ -3667,13 +4012,18 @@
                         }
 
                         this.selectedFiles = {};
-                        this.batchDetailOpen = false;
-                        this.batchDetailFilter = 'all';
+                        this.batchExpanded = true;
                         this.setBatchJob(batchJob);
                         this.startBatchPolling(batchJob.id);
                         this.success = '已启动批量整理任务';
                     } catch (e) {
-                        this.error = '整理失败: ' + e.message;
+                        if (e.message === '所选文件状态已变化，请刷新列表后重试' || e.message === '没有可整理的待处理文件') {
+                            await this.scanFiles(true);
+                            this.clearSelection();
+                            this.error = '所选文件状态已变化，列表已自动刷新，请重新选择待处理项';
+                        } else {
+                            this.error = '整理失败: ' + e.message;
+                        }
                     } finally {
                         this.confirmFiles = [];
                         if (!this.batchJob || ['completed', 'failed', 'cancelled'].includes(this.batchJob.status)) {

@@ -576,11 +576,22 @@ async def create_batch(request: BatchCreateRequest):
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         placeholders = ','.join('?' * len(request.file_ids))
+        normalized_ids = [int(file_id) for file_id in request.file_ids]
         cursor = await db.execute(
             f'SELECT * FROM files WHERE id IN ({placeholders}) AND status = ?',
-            (*request.file_ids, 'pending')
+            (*normalized_ids, 'pending')
         )
         rows = await cursor.fetchall()
+
+        if not rows:
+            cursor = await db.execute(
+                f'SELECT id FROM files WHERE id IN ({placeholders})',
+                tuple(normalized_ids)
+            )
+            existing_rows = await cursor.fetchall()
+
+            if existing_rows:
+                raise HTTPException(status_code=409, detail='所选文件状态已变化，请刷新列表后重试')
 
     if not rows:
         raise HTTPException(status_code=400, detail='没有可整理的待处理文件')
