@@ -39,6 +39,6 @@ services:
       no_proxy: ${NOCTRA_WATCHTOWER_NO_PROXY:-}
     command:
       - --interval
-      - ${NOCTRA_WATCHTOWER_INTERVAL:-300}
+      - ${NOCTRA_WATCHTOWER_INTERVAL:-86400}
       - --cleanup
       - --label-enable
