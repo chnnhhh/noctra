@@ -410,10 +410,10 @@
                     if (this.batchJob && String(this.batchJob.id || '').startsWith(OPTIMISTIC_BATCH_PREFIX)) {
                         this.clearBatchJob();
                     }
-                    if (e.message === '所选文件状态已变化，请刷新列表后重试' || e.message === '没有可整理的待处理文件') {
+                    if (e.message === '所选文件状态已变化，请刷新列表后重试' || e.message === '没有可整理的文件') {
                         await this.scanFiles(true);
                         this.clearSelection();
-                        this.error = '所选文件状态已变化，列表已自动刷新，请重新选择待处理项';
+                        this.error = '所选文件状态已变化，列表已自动刷新，请重新选择可整理项';
                     } else {
                         this.error = '整理失败: ' + e.message;
                     }

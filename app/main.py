@@ -1,6 +1,7 @@
 import asyncio
 import os
 import uuid
+from functools import cmp_to_key
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -25,7 +26,12 @@ from app.models import (
 )
 from app.scanner import JAVScanner
 from app.organizer import JAVOrganizer
-from app.statuses import resolve_scan_status
+from app.statuses import (
+    SELECTABLE_SCAN_STATUSES,
+    assign_batch_duplicate_statuses,
+    compare_candidate_priority,
+    resolve_scan_status,
+)
 
 app = FastAPI(title="Noctra JAV Organizer", version="1.0.0")
 
@@ -209,6 +215,7 @@ async def get_batch_job(job_id: str) -> Optional[dict]:
 async def create_batch_job(rows: list[aiosqlite.Row]) -> dict:
     now = utcnow_iso()
     batch_id = uuid.uuid4().hex[:12]
+    sorted_rows = sorted((dict(row) for row in rows), key=cmp_to_key(compare_candidate_priority))
     items = [
         {
             'id': row['id'],
@@ -220,7 +227,7 @@ async def create_batch_job(rows: list[aiosqlite.Row]) -> dict:
             'started_at': None,
             'finished_at': None,
         }
-        for row in rows
+        for row in sorted_rows
     ]
     job = {
         'id': batch_id,
@@ -379,23 +386,31 @@ async def scan_files(force_rescan: bool = False):
     """
     # 扫描文件系统
     scanned_files = scanner.scan()
+    scanned_candidates = []
+
+    for file_info in scanned_files:
+        code = file_info['identified_code']
+        target_path = None
+        if code:
+            target_path = organizer.get_target_path(code, file_info['filename'])
+
+        scanned_candidates.append({
+            **file_info,
+            'original_path': file_info['path'],
+            'target_path': target_path,
+            'status': resolve_scan_status(code, target_path),
+        })
+
+    assign_batch_duplicate_statuses(scanned_candidates)
 
     file_records = []
 
-    for file_info in scanned_files:
-        original_path = file_info['path']
+    for file_info in scanned_candidates:
+        original_path = file_info['original_path']
         code = file_info['identified_code']
+        target_path = file_info['target_path']
+        status = file_info['status']
         existing = await get_file_by_path(original_path)
-
-        # 判断是否已识别
-        if code:
-            # 计算目标路径
-            filename = file_info['filename']
-            target_path = organizer.get_target_path(code, filename)
-            status = resolve_scan_status(code, target_path)
-        else:
-            target_path = None
-            status = resolve_scan_status(code, target_path)
 
         if existing and existing['status'] == 'ignored':
             metadata_changed = (
@@ -420,7 +435,7 @@ async def scan_files(force_rescan: bool = False):
             if existing:
                 # 文件未变化（大小和 mtime 相同）
                 if existing['file_size'] == file_info['size'] and existing['file_mtime'] == file_info['mtime']:
-                    if existing['status'] == 'processed' and status == 'pending':
+                    if existing['status'] == 'processed' and status in SELECTABLE_SCAN_STATUSES:
                         status = existing['status']
                         target_path = existing['target_path']
                     else:
@@ -517,9 +532,10 @@ async def organize_files(request: OrganizeRequest):
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         placeholders = ','.join('?' * len(request.file_ids))
+        status_placeholders = ','.join('?' * len(SELECTABLE_SCAN_STATUSES))
         cursor = await db.execute(
-            f'SELECT * FROM files WHERE id IN ({placeholders}) AND status = ?',
-            (*request.file_ids, 'pending')
+            f'SELECT * FROM files WHERE id IN ({placeholders}) AND status IN ({status_placeholders})',
+            (*request.file_ids, *SELECTABLE_SCAN_STATUSES)
         )
         rows = await cursor.fetchall()
 
@@ -532,8 +548,8 @@ async def organize_files(request: OrganizeRequest):
 
     # 准备整理任务
     organize_tasks = []
-    for row in rows:
-        row_dict = dict(row)
+    sorted_rows = sorted((dict(row) for row in rows), key=cmp_to_key(compare_candidate_priority))
+    for row_dict in sorted_rows:
         organize_tasks.append({
             'file_id': row_dict['id'],
             'original_path': row_dict['original_path'],
@@ -556,6 +572,8 @@ async def organize_files(request: OrganizeRequest):
         if status == 'moved':
             await update_file_status(file_id, 'processed', target_path)
             success_count += 1
+        elif status == 'skipped':
+            await update_file_status(file_id, 'target_exists', target_path)
         else:
             await update_file_status(file_id, 'failed')
             failed_count += 1
@@ -571,15 +589,16 @@ async def organize_files(request: OrganizeRequest):
 async def create_batch(request: BatchCreateRequest):
     """创建整理批任务并在后台串行执行。"""
     if not request.file_ids:
-        raise HTTPException(status_code=400, detail='请选择至少一个待处理文件')
+        raise HTTPException(status_code=400, detail='请选择至少一个可整理文件')
 
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         placeholders = ','.join('?' * len(request.file_ids))
+        status_placeholders = ','.join('?' * len(SELECTABLE_SCAN_STATUSES))
         normalized_ids = [int(file_id) for file_id in request.file_ids]
         cursor = await db.execute(
-            f'SELECT * FROM files WHERE id IN ({placeholders}) AND status = ?',
-            (*normalized_ids, 'pending')
+            f'SELECT * FROM files WHERE id IN ({placeholders}) AND status IN ({status_placeholders})',
+            (*normalized_ids, *SELECTABLE_SCAN_STATUSES)
         )
         rows = await cursor.fetchall()
 
@@ -594,7 +613,7 @@ async def create_batch(request: BatchCreateRequest):
                 raise HTTPException(status_code=409, detail='所选文件状态已变化，请刷新列表后重试')
 
     if not rows:
-        raise HTTPException(status_code=400, detail='没有可整理的待处理文件')
+        raise HTTPException(status_code=400, detail='没有可整理的文件')
 
     batch_job = await create_batch_job(rows)
     asyncio.create_task(run_batch_job(batch_job['id']))

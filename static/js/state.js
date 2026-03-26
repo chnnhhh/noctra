@@ -171,6 +171,7 @@
                     'identified': 'identified',
                     'unidentified': 'unidentified',
                     'pending': 'pending',
+                    'duplicate': 'duplicate',
                     'target_exists': 'target_exists',
                     'processed': 'processed'
                 };

@@ -1745,6 +1745,12 @@
             background: rgba(210, 153, 34, 0.1);
         }
 
+        .badge.duplicate {
+            color: #9cc8ff;
+            border: 1px solid rgba(88, 166, 255, 0.45);
+            background: rgba(88, 166, 255, 0.08);
+        }
+
         .badge.skipped {
             color: #ffb3ad;
             border: 1px solid rgba(255, 123, 114, 0.7);
@@ -1803,6 +1809,13 @@
             --status-core-bg: rgba(210, 153, 34, 0.18);
             --status-text: #f2cc60;
             --status-glow: rgba(242, 204, 96, 0.14);
+        }
+
+        .status-action.status-duplicate {
+            --status-border: rgba(88, 166, 255, 0.4);
+            --status-core-bg: rgba(88, 166, 255, 0.12);
+            --status-text: #9cc8ff;
+            --status-glow: rgba(88, 166, 255, 0.12);
         }
 
         .status-action.status-skipped {

@@ -16,6 +16,7 @@
             getStatusText(status) {
                 const map = {
                     'pending': '待处理',
+                    'duplicate': '重复',
                     'target_exists': '已存在',
                     'processed': '已处理',
                     'skipped': '未识别',
@@ -95,7 +96,9 @@
             },
 
             canSelectFile(file) {
-                return this.view === 'scan' && file.status === 'pending' && !this.isBatchItemBlocking(file);
+                return this.view === 'scan' &&
+                    ['pending', 'duplicate'].includes(file.status) &&
+                    !this.isBatchItemBlocking(file);
             },
 
             getSelectionDisabledReason(file) {
@@ -105,17 +108,18 @@
                 if (this.canSelectFile(file)) {
                     return '';
                 }
-                return '仅待处理项可加入整理集合';
+                return '仅待处理或重复项可加入整理集合';
             },
 
             getStatusSortWeight(file) {
                 const status = file.identified_code ? (file.status || 'pending') : 'skipped';
                 const order = {
                     pending: 0,
-                    target_exists: 1,
-                    skipped: 2,
-                    processed: 3,
-                    failed: 4
+                    duplicate: 1,
+                    target_exists: 2,
+                    skipped: 3,
+                    processed: 4,
+                    failed: 5
                 };
                 return order[status] ?? 9;
             },
@@ -228,7 +232,7 @@
             },
 
             getStatusActions(file) {
-                if (file.status === 'pending') {
+                if (['pending', 'duplicate'].includes(file.status)) {
                     return [
                         { key: 'organize', label: '整理文件', icon: 'organize' },
                         { key: 'delete', label: '删除文件', icon: 'delete' }
@@ -358,6 +362,7 @@
                     identified: '已识别',
                     unidentified: '未识别',
                     pending: '待处理',
+                    duplicate: '重复',
                     target_exists: '已存在',
                     processed: '已处理'
                 };

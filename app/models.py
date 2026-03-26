@@ -8,7 +8,7 @@ class FileRecord(BaseModel):
     original_path: str
     identified_code: Optional[str]
     target_path: Optional[str]
-    status: str  # pending, processed, skipped, target_exists, failed, ignored
+    status: str  # pending, duplicate, processed, skipped, target_exists, failed, ignored
     file_size: int
     file_mtime: float
     created_at: str
