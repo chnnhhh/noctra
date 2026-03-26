@@ -1,15 +1,27 @@
+import asyncio
+import os
+import uuid
+from datetime import datetime
+from pathlib import Path
+from typing import Optional
+
+import aiosqlite
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-import aiosqlite
-import os
-from pathlib import Path
-from typing import Optional
-from datetime import datetime
 
 from app.models import (
-    ScanResult, OrganizeRequest, OrganizeResult,
-    HistoryResult, FileRecord, DeleteFileRequest, DeleteFileResult
+    BatchCancelResult,
+    BatchCreateRequest,
+    BatchJob,
+    BatchItemResult,
+    DeleteFileRequest,
+    DeleteFileResult,
+    FileRecord,
+    HistoryResult,
+    OrganizeRequest,
+    OrganizeResult,
+    ScanResult,
 )
 from app.scanner import JAVScanner
 from app.organizer import JAVOrganizer
@@ -25,6 +37,8 @@ DB_PATH = os.getenv('DB_PATH', '/app/data/noctra.db')
 # 初始化组件
 scanner = JAVScanner(SOURCE_DIR, DIST_DIR)
 organizer = JAVOrganizer(DIST_DIR)
+batch_jobs: dict[str, dict] = {}
+batch_jobs_lock = asyncio.Lock()
 
 # 挂载静态文件
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -164,6 +178,149 @@ async def delete_file_record(file_id: int):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute('DELETE FROM files WHERE id = ?', (file_id,))
         await db.commit()
+
+
+def utcnow_iso() -> str:
+    return datetime.now().isoformat()
+
+
+def clone_batch_job(job: dict) -> dict:
+    return {
+        **job,
+        'items': [dict(item) for item in job['items']],
+    }
+
+
+async def set_batch_job(job_id: str, updater):
+    async with batch_jobs_lock:
+        job = batch_jobs.get(job_id)
+        if not job:
+            return None
+        updater(job)
+        return clone_batch_job(job)
+
+
+async def get_batch_job(job_id: str) -> Optional[dict]:
+    async with batch_jobs_lock:
+        job = batch_jobs.get(job_id)
+        return clone_batch_job(job) if job else None
+
+
+async def create_batch_job(rows: list[aiosqlite.Row]) -> dict:
+    now = utcnow_iso()
+    batch_id = uuid.uuid4().hex[:12]
+    items = [
+        {
+            'id': row['id'],
+            'code': row['identified_code'],
+            'source_path': row['original_path'],
+            'target_path': row['target_path'],
+            'status': 'pending',
+            'message': None,
+            'started_at': None,
+            'finished_at': None,
+        }
+        for row in rows
+    ]
+    job = {
+        'id': batch_id,
+        'status': 'queued',
+        'total': len(items),
+        'processed': 0,
+        'succeeded': 0,
+        'skipped': 0,
+        'failed': 0,
+        'created_at': now,
+        'started_at': None,
+        'finished_at': None,
+        'cancel_requested': False,
+        'items': items,
+    }
+    async with batch_jobs_lock:
+        batch_jobs[batch_id] = job
+    return clone_batch_job(job)
+
+
+async def run_batch_job(batch_id: str):
+    started_at = utcnow_iso()
+
+    async with batch_jobs_lock:
+        job = batch_jobs.get(batch_id)
+        if not job:
+            return
+        job['status'] = 'running'
+        job['started_at'] = started_at
+
+    while True:
+        async with batch_jobs_lock:
+            job = batch_jobs.get(batch_id)
+            if not job:
+                return
+            if job['cancel_requested']:
+                job['status'] = 'cancelled'
+                job['finished_at'] = utcnow_iso()
+                return
+
+            pending_item = next((item for item in job['items'] if item['status'] == 'pending'), None)
+            if pending_item is None:
+                if job['failed'] == job['total'] and job['total'] > 0:
+                    job['status'] = 'failed'
+                else:
+                    job['status'] = 'completed'
+                job['finished_at'] = utcnow_iso()
+                return
+
+            pending_item['status'] = 'processing'
+            pending_item['started_at'] = utcnow_iso()
+            file_id = pending_item['id']
+            source_path = pending_item['source_path']
+            code = pending_item['code']
+            target_path = organizer.get_target_path(code, Path(source_path).name)
+            pending_item['target_path'] = target_path
+
+        success, reason = await asyncio.to_thread(organizer.move_file, source_path, target_path)
+        finished_at = utcnow_iso()
+
+        if success:
+            final_status = 'success'
+            final_message = '整理完成'
+            db_status = 'processed'
+        elif reason == '目标文件已存在':
+            final_status = 'skipped'
+            final_message = reason
+            db_status = 'target_exists'
+        else:
+            final_status = 'failed'
+            final_message = reason or '整理失败'
+            db_status = 'failed'
+
+        if final_status == 'success':
+            await update_file_status(file_id, db_status, target_path)
+        elif final_status == 'skipped':
+            await update_file_status(file_id, db_status, target_path)
+        else:
+            await update_file_status(file_id, db_status)
+
+        async with batch_jobs_lock:
+            job = batch_jobs.get(batch_id)
+            if not job:
+                return
+
+            item = next((candidate for candidate in job['items'] if candidate['id'] == file_id), None)
+            if not item:
+                continue
+
+            item['status'] = final_status
+            item['message'] = final_message
+            item['finished_at'] = finished_at
+            job['processed'] += 1
+
+            if final_status == 'success':
+                job['succeeded'] += 1
+            elif final_status == 'skipped':
+                job['skipped'] += 1
+            else:
+                job['failed'] += 1
 
 
 def build_global_stats(files: list[object]) -> dict[str, int]:
@@ -407,6 +564,62 @@ async def organize_files(request: OrganizeRequest):
         success_count=success_count,
         failed_count=failed_count,
         results=results
+    )
+
+
+@app.post("/api/batches", response_model=BatchJob)
+async def create_batch(request: BatchCreateRequest):
+    """创建整理批任务并在后台串行执行。"""
+    if not request.file_ids:
+        raise HTTPException(status_code=400, detail='请选择至少一个待处理文件')
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        placeholders = ','.join('?' * len(request.file_ids))
+        cursor = await db.execute(
+            f'SELECT * FROM files WHERE id IN ({placeholders}) AND status = ?',
+            (*request.file_ids, 'pending')
+        )
+        rows = await cursor.fetchall()
+
+    if not rows:
+        raise HTTPException(status_code=400, detail='没有可整理的待处理文件')
+
+    batch_job = await create_batch_job(rows)
+    asyncio.create_task(run_batch_job(batch_job['id']))
+    return batch_job
+
+
+@app.get("/api/batches/{batch_id}", response_model=BatchJob)
+async def get_batch(batch_id: str):
+    """获取批任务当前状态。"""
+    batch_job = await get_batch_job(batch_id)
+    if not batch_job:
+        raise HTTPException(status_code=404, detail='批任务不存在')
+    return batch_job
+
+
+@app.post("/api/batches/{batch_id}/cancel", response_model=BatchCancelResult)
+async def cancel_batch(batch_id: str):
+    """请求取消正在执行的批任务。"""
+    batch_job = await set_batch_job(
+        batch_id,
+        lambda job: job.update({'cancel_requested': True})
+    )
+    if not batch_job:
+        raise HTTPException(status_code=404, detail='批任务不存在')
+
+    if batch_job['status'] not in {'queued', 'running'}:
+        return BatchCancelResult(
+            id=batch_id,
+            status=batch_job['status'],
+            message='批任务当前不可取消'
+        )
+
+    return BatchCancelResult(
+        id=batch_id,
+        status='cancelling',
+        message='已请求取消批任务'
     )
 
 
