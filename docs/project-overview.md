@@ -20,7 +20,8 @@ Noctra 是一个面向本地机器和 NAS 场景的 JAV 文件整理工具，核
 - JAV 番号识别
 - 目标路径预览
 - 扫描页分页、排序、跨页勾选
-- 批量整理任务与进度反馈
+- 扫描页统一 toolbar（筛选、已选状态、排序、每页、分页）
+- 批量整理任务与稳定进度反馈
 - 历史记录页
 - 本地运行、Docker 运行、NAS 镜像部署
 
@@ -42,9 +43,11 @@ Noctra 是一个面向本地机器和 NAS 场景的 JAV 文件整理工具，核
 
 ### 前端
 
-- 单文件页面：`/Users/liujiejian/git/noctra/static/index.html`
+- 页面壳：`/Users/liujiejian/git/noctra/static/index.html`
+- 交互逻辑：`/Users/liujiejian/git/noctra/static/js/*.js`
+- 样式：`/Users/liujiejian/git/noctra/static/css/index.css`
 - Alpine.js 风格的数据驱动交互
-- 无构建流程，直接服务静态页面
+- 无构建流程，直接服务静态资源
 
 ### 部署
 
@@ -150,6 +153,7 @@ HMN-112-C マジxxx痴 北野未奈.mp4 -> HMN-112-C.mp4
 
 - 项目强调“先预览，再整理”，不是后台静默自动整理
 - 批量整理已经改成批任务模型，不再是简单 loading
+- 扫描页工具栏已经统一为单一布局系统，不再把分页拆成上下两套入口
 - 历史页是记录页，不应继续沿用扫描页的大表格节奏
 - 当前品牌命名在仓库和代码中使用 `Noctra`
 

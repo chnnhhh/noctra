@@ -1,6 +1,6 @@
 # Noctra
 
-Noctra 是一个用于本地/NAS 场景的 JAV 文件整理工具。它会扫描源目录、识别番号、预览目标路径，并在你确认后把文件整理到标准目录结构中。项目后端使用 FastAPI + SQLite，前端是单文件 HTML/Alpine.js，适合直接部署在个人机器或家用 NAS 上。
+Noctra 是一个用于本地/NAS 场景的 JAV 文件整理工具。它会扫描源目录、识别番号、预览目标路径，并在你确认后把文件整理到标准目录结构中。项目后端使用 FastAPI + SQLite，前端是无构建流程的静态页面壳 + Alpine.js/原生 JavaScript 资源，适合直接部署在个人机器或家用 NAS 上。
 
 ## 功能概览
 
@@ -8,7 +8,9 @@ Noctra 是一个用于本地/NAS 场景的 JAV 文件整理工具。它会扫描
 - 识别常见 JAV 番号，并清洗文件名中的冗余文本
 - 预览整理后的目标路径，避免直接盲搬
 - 区分 `待处理`、`未识别`、`已存在`、`已处理`
+- 扫描页工具栏统一承载筛选、已选状态、排序、每页和分页
 - 支持单条或批量执行整理
+- 批量整理面板会在任务创建后立即显示，完成后保留结果直到手动收起
 - 记录历史状态，避免重复处理
 - 支持本地运行、Docker 运行和 NAS 镜像部署
 - 支持 Watchtower 自动拉取 Docker Hub 新镜像更新
@@ -143,7 +145,10 @@ app/                    FastAPI 后端代码
   models.py             Pydantic 模型
   statuses.py           状态判定与展示语义
 
-static/index.html       单文件前端页面（无构建流程）
+static/                 无构建流程的前端静态资源
+  index.html            页面骨架与 Alpine 挂载点
+  css/index.css         页面样式
+  js/*.js               状态、渲染与交互逻辑
 tests/                  本地 smoke test 与解析测试
 test_data/              示例 source/dist 数据
 scripts/                启动、停止、部署脚本

@@ -10,15 +10,12 @@
 - 扫描目录按钮
 - 执行整理按钮
 - 当前页选择控制
-- 筛选条
-- 排序组合器
-- 每页数量切换
-- 顶部轻量分页 + 底部分页
+- 统一 toolbar：筛选 / 已选状态 / 排序 / 每页 / 分页
 - 扫描结果表格
 - 行 hover 光晕
 - 复制完整路径的局部 toast
 - 状态 badge / integrated expanding badge
-- 批处理 batch rail
+- 批处理 batch panel / batch rail
 
 ### 历史页
 
@@ -51,7 +48,7 @@
 
 - job 状态：`queued / running / completed / failed / cancelled`
 - item 状态：`pending / processing / success / skipped / failed`
-- 前端轮询频率：`800ms`
+- 前端轮询频率：`400ms`
 
 ### 状态映射
 
@@ -65,6 +62,7 @@
 
 - 默认每页 `50`
 - 可切换 `20 / 50 / 100`
+- 扫描页分页入口统一位于顶部 `toolbar-right`
 - 分页只影响展示，不影响全局勾选集合
 
 ### 排序
@@ -105,7 +103,11 @@
 - 进度条
 - 成功 / 跳过 / 失败计数
 - 行内状态实时更新
-- 运行中自动展开，终态默认可折叠
+- 点击“执行整理”后立即创建 batch 并显示 panel
+- 最小展示时间：`800ms`
+- 运行中自动展开
+- 完成后保持展开，不自动隐藏
+- 用户可通过右上角箭头手动收起
 - 取消按钮
 
 已经替换掉旧的：
@@ -138,7 +140,7 @@
 
 - 历史页布局仍在微调，对齐和留白还未完全定稿
 - 复制 toast 已从全局消息改为局部提示，但未来有刮削功能后可能还要再复查位置与层级
-- 批处理状态条的折叠态已经可用，但仍有继续精修空间
+- 批处理状态条已经升级为稳定系统状态组件，后续重点转向失败筛选 / 重试路径
 
 ### 工程 / 测试
 
@@ -163,6 +165,7 @@
 7. 扫描页增加分页、排序、跨页勾选
 8. 批量整理升级为 batch job + 进度反馈
 9. 历史页开始从“大表格”重构为“整理记录页”
+10. 前端静态资源从单文件页面拆分为 `index.html + js/css` 模块
 
 ## 8. 当前开发现场提示
 
@@ -173,5 +176,9 @@
    - `/Users/liujiejian/git/noctra/app/organizer.py`
    - `/Users/liujiejian/git/noctra/app/scanner.py`
    - `/Users/liujiejian/git/noctra/static/index.html`
+   - `/Users/liujiejian/git/noctra/static/js/features.js`
+   - `/Users/liujiejian/git/noctra/static/js/state.js`
+   - `/Users/liujiejian/git/noctra/static/js/render.js`
+   - `/Users/liujiejian/git/noctra/static/css/index.css`
 
 2. 如果后续继续接手 UI，优先在当前风格上“收敛和精修”，不要再回到大改结构、推翻式重写。

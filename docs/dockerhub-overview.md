@@ -76,7 +76,7 @@ Noctra 是一个适合本地电脑和 NAS 使用的 JAV 文件整理工具。它
 | 路径 | 含义 |
 | --- | --- |
 | `app/` | FastAPI 后端代码，包含扫描、整理、接口和模型 |
-| `static/` | 无构建流程的前端页面（`index.html`） |
+| `static/` | 无构建流程的前端静态资源（`index.html` + `css/js`） |
 | `scripts/` | 本地启动、状态查看、停止、NAS 部署脚本 |
 | `config/profiles/` | 本地和 NAS 的环境变量示例 |
 | `tests/` | smoke test 和识别/整理逻辑测试 |

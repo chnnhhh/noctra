@@ -38,6 +38,7 @@
 - 复制反馈使用局部 toast，不用顶部全局 success
 - stats cards 是状态模块，不是按钮
 - 批处理反馈使用 batch rail，不使用全屏 loading
+- batch rail 在任务创建后立即出现，终态保留直到手动收起
 - 历史页应明显区别于扫描页，更像 archive / log list
 
 ### 页面定位
@@ -59,7 +60,7 @@
   - NAS 拉 `acyua/noctra:latest`
   - Watchtower 轮询更新
 - Watchtower 当前是每日轮询，不是 5 分钟高频轮询。
-- 当前前端是单文件 `static/index.html`，不要轻易引入新的构建链。
+- 当前前端是 `static/index.html + static/js/* + static/css/index.css` 的无构建静态资源，不要轻易引入新的构建链。
 - 当前批量整理已经使用 batch job 模型，后续相关功能优先在这套模型上扩展。
 
 ### 文件规则
@@ -82,7 +83,7 @@
 
 ## do
 
-- 先检查 `README`、`docs/`、`app/main.py`、`app/scanner.py`、`app/organizer.py`、`static/index.html`
+- 先检查 `README`、`docs/`、`app/main.py`、`app/scanner.py`、`app/organizer.py`、`static/index.html`、`static/js/`、`static/css/index.css`
 - 在改 UI 前先理解页面定位：扫描页 != 历史页
 - 保持中文主语义，英文只做弱辅助
 - 保持状态 badge、hover glow、control rail、batch rail 的同一套视觉语言
