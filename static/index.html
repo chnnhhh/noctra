@@ -6,24 +6,32 @@
     <title>Noctra JAV 整理工具</title>
     <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js" defer></script>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap');
+
         * {
             box-sizing: border-box;
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            font-family: 'JetBrains Mono', 'Fira Code', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
             margin: 0;
-            padding: 20px;
-            background: #f5f7fa;
+            padding: 28px;
+            background:
+                radial-gradient(circle at top left, rgba(88, 166, 255, 0.09), transparent 26%),
+                radial-gradient(circle at top right, rgba(167, 139, 250, 0.08), transparent 24%),
+                linear-gradient(180deg, #0f1117 0%, #0b0f14 100%);
+            color: #c9d1d9;
         }
 
         .container {
-            max-width: 1400px;
+            max-width: 1520px;
             margin: 0 auto;
-            background: white;
-            padding: 24px;
-            border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            background: linear-gradient(180deg, rgba(15, 17, 23, 0.98) 0%, rgba(11, 15, 20, 0.98) 100%);
+            backdrop-filter: blur(14px);
+            padding: 28px;
+            border-radius: 28px;
+            border: 1px solid #30363d;
+            box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
         }
 
         /* ========== Header ========== */
@@ -31,127 +39,471 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 24px;
-            padding-bottom: 20px;
-            border-bottom: 2px solid #e8ecf1;
+            margin-bottom: 20px;
+        }
+
+        .header-copy {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
         }
 
         .header h1 {
             margin: 0;
-            font-size: 24px;
-            color: #1a202c;
-            display: flex;
-            align-items: center;
-            gap: 10px;
+            font-size: 28px;
+            color: #eaf2ff;
+            letter-spacing: -0.03em;
         }
 
         .header-nav {
             display: flex;
-            gap: 20px;
+            gap: 10px;
+            padding: 6px;
+            border-radius: 999px;
+            background: rgba(17, 24, 39, 0.86);
+            border: 1px solid rgba(71, 85, 105, 0.55);
         }
 
         .header-nav a {
             text-decoration: none;
-            color: #4a5568;
+            color: #8b949e;
             font-size: 14px;
-            padding: 8px 16px;
-            border-radius: 6px;
+            padding: 10px 18px;
+            border-radius: 999px;
             transition: all 0.2s;
         }
 
         .header-nav a:hover {
-            background: #f7fafc;
-            color: #2b6cb0;
+            background: rgba(29, 78, 216, 0.14);
+            color: #a78bfa;
         }
 
         .header-nav a.active {
-            background: #ebf8ff;
-            color: #2b6cb0;
+            background: linear-gradient(135deg, rgba(29, 78, 216, 0.34) 0%, rgba(14, 165, 233, 0.18) 100%);
+            color: #e6edf3;
             font-weight: 600;
+            border: 1px solid rgba(96, 165, 250, 0.38);
+            box-shadow: inset 0 0 0 1px rgba(125, 211, 252, 0.08);
+        }
+
+        .overview-card {
+            margin-bottom: 24px;
+            padding: 24px 26px;
+            border-radius: 24px;
+            background: #161b22;
+            border: 1px solid #30363d;
+            box-shadow: 0 18px 36px rgba(0, 0, 0, 0.24);
+        }
+
+        .overview-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 24px;
+            align-items: flex-start;
+            margin-bottom: 18px;
+        }
+
+        .eyebrow {
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: #6e7681;
+            margin-bottom: 10px;
+        }
+
+        .overview-header h2 {
+            margin: 0;
+            color: #14213d;
+            font-size: 28px;
+            letter-spacing: -0.03em;
+        }
+
+        .overview-header p {
+            margin: 8px 0 0;
+            color: #6b7a90;
+            font-size: 14px;
+        }
+
+        .view-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px 16px;
+            min-width: 96px;
+            border-radius: 999px;
+            background: rgba(31, 111, 235, 0.1);
+            color: #58a6ff;
+            border: 1px solid #1f6feb;
+            font-size: 13px;
+            font-weight: 700;
         }
 
         /* ========== Stats Cards ========== */
         .stats {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 16px;
-            margin-bottom: 24px;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 14px;
+            margin-bottom: 18px;
         }
 
         .stat-card {
-            padding: 20px;
-            border-radius: 10px;
-            text-align: center;
-            transition: transform 0.2s, box-shadow 0.2s;
-            border: 2px solid transparent;
+            --card-border: rgba(96, 165, 250, 0.24);
+            --card-accent: rgba(129, 140, 248, 0.86);
+            --card-glow-strong: rgba(129, 140, 248, 0.16);
+            --card-glow-soft: rgba(129, 140, 248, 0.08);
+            --card-shadow: rgba(129, 140, 248, 0.08);
+            position: relative;
+            isolation: isolate;
+            overflow: hidden;
+            padding: 18px 22px 20px;
+            border-radius: 22px;
+            text-align: left;
+            cursor: default;
+            transition: border-color 0.2s ease, box-shadow 0.25s ease;
+            border: 1px solid var(--card-border);
+            background: linear-gradient(
+                135deg,
+                rgba(18, 28, 42, 0.92) 0%,
+                rgba(11, 18, 30, 0.96) 58%,
+                rgba(8, 14, 24, 0.98) 100%
+            );
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            z-index: 0;
+            border-radius: inherit;
+            pointer-events: none;
+            opacity: 0.84;
+            background: radial-gradient(
+                280px circle at var(--x, 18%) var(--y, 22%),
+                var(--card-glow-strong) 0%,
+                var(--card-glow-soft) 32%,
+                transparent 72%
+            );
+            transition: opacity 0.22s ease, filter 0.22s ease;
+        }
+
+        .stat-card::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            z-index: 0;
+            border-radius: inherit;
+            pointer-events: none;
+            background:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 28%),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.016), transparent 46%);
+            opacity: 0.65;
         }
 
         .stat-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(0,0,0,0.1);
+            border-color: var(--card-accent);
+            box-shadow:
+                inset 0 0 0 1px var(--card-glow-soft),
+                0 0 24px var(--card-shadow);
+        }
+
+        .stat-card:hover::before {
+            opacity: 1;
+            filter: saturate(1.08);
         }
 
         .stat-card.total {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-color: #667eea;
+            --card-border: rgba(96, 165, 250, 0.28);
+            --card-accent: rgba(129, 140, 248, 0.88);
+            --card-glow-strong: rgba(129, 140, 248, 0.18);
+            --card-glow-soft: rgba(129, 140, 248, 0.09);
+            --card-shadow: rgba(129, 140, 248, 0.10);
         }
 
         .stat-card.identified {
-            background: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
-            color: white;
-            border-color: #f6d365;
+            --card-border: rgba(20, 184, 166, 0.30);
+            --card-accent: rgba(45, 212, 191, 0.82);
+            --card-glow-strong: rgba(45, 212, 191, 0.16);
+            --card-glow-soft: rgba(45, 212, 191, 0.08);
+            --card-shadow: rgba(45, 212, 191, 0.10);
         }
 
         .stat-card.unidentified {
-            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
-            color: white;
-            border-color: #ff6b6b;
+            --card-border: rgba(239, 68, 68, 0.24);
+            --card-accent: rgba(248, 113, 113, 0.78);
+            --card-glow-strong: rgba(248, 113, 113, 0.14);
+            --card-glow-soft: rgba(248, 113, 113, 0.07);
+            --card-shadow: rgba(248, 113, 113, 0.09);
         }
 
         .stat-card.pending {
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-            color: white;
-            border-color: #4facfe;
-            box-shadow: 0 4px 12px rgba(79, 172, 254, 0.4);
-            position: relative;
-        }
-
-        .stat-card.pending::after {
-            content: '⭐';
-            position: absolute;
-            top: -10px;
-            right: -10px;
-            font-size: 20px;
-            background: white;
-            border-radius: 50%;
-            width: 30px;
-            height: 30px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            --card-border: rgba(37, 99, 235, 0.30);
+            --card-accent: rgba(59, 130, 246, 0.84);
+            --card-glow-strong: rgba(59, 130, 246, 0.17);
+            --card-glow-soft: rgba(59, 130, 246, 0.08);
+            --card-shadow: rgba(59, 130, 246, 0.10);
         }
 
         .stat-card.processed {
-            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-            color: white;
-            border-color: #11998e;
+            --card-border: rgba(34, 197, 94, 0.26);
+            --card-accent: rgba(74, 222, 128, 0.78);
+            --card-glow-strong: rgba(74, 222, 128, 0.15);
+            --card-glow-soft: rgba(74, 222, 128, 0.07);
+            --card-shadow: rgba(74, 222, 128, 0.09);
+        }
+
+        .stat-card__meta,
+        .stat-card__id,
+        .stat-value,
+        .stat-label,
+        .stat-subtext {
+            position: relative;
+            z-index: 1;
+        }
+
+        .stat-card__meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 11px;
+            line-height: 1;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            color: rgba(148, 163, 184, 0.56);
+        }
+
+        .stat-card__meta-dot {
+            width: 6px;
+            height: 6px;
+            flex: 0 0 auto;
+            border-radius: 999px;
+            background: var(--card-accent);
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.04), 0 0 12px var(--card-glow-soft);
+        }
+
+        .stat-card__id {
+            position: absolute;
+            top: 16px;
+            right: 18px;
+            font-size: 11px;
+            line-height: 1;
+            letter-spacing: 0.14em;
+            color: rgba(100, 116, 139, 0.38);
         }
 
         .stat-value {
-            font-size: 36px;
-            font-weight: 800;
-            margin-bottom: 8px;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-top: 18px;
+            font-size: 56px;
+            line-height: 0.95;
+            font-weight: 750;
+            margin-bottom: 0;
+            letter-spacing: -0.045em;
+            background: linear-gradient(
+                180deg,
+                rgba(248, 250, 252, 0.98) 0%,
+                rgba(226, 232, 240, 0.90) 100%
+            );
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 18px rgba(226, 232, 240, 0.06);
         }
 
         .stat-label {
+            margin-top: 10px;
+            font-size: 15px;
+            color: rgba(203, 213, 225, 0.72);
+            font-weight: 600;
+            letter-spacing: 0.01em;
+            text-transform: none;
+        }
+
+        .stat-subtext {
+            margin-top: 8px;
+            font-size: 12px;
+            line-height: 1.45;
+            color: rgba(100, 116, 139, 0.62);
+        }
+
+        .workspace {
+            display: grid;
+            grid-template-columns: 300px minmax(0, 1fr);
+            gap: 22px;
+            align-items: start;
+        }
+
+        .workspace.history-mode {
+            grid-template-columns: minmax(0, 1fr);
+        }
+
+        .control-panel {
+            padding: 22px 20px;
+            border-radius: 24px;
+            background: #161b22;
+            border: 1px solid #30363d;
+            box-shadow: 0 18px 36px rgba(0, 0, 0, 0.24);
+            position: sticky;
+            top: 24px;
+        }
+
+        .data-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+            min-width: 0;
+        }
+
+        .message-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 18px;
+        }
+
+        .panel-surface {
+            padding: 22px;
+            border-radius: 24px;
+            background: #161b22;
+            border: 1px solid #30363d;
+            box-shadow: 0 22px 44px rgba(0, 0, 0, 0.28);
+            transition: all 0.15s ease;
+        }
+
+        .panel-surface:hover {
+            border-color: rgba(88, 166, 255, 0.35);
+            box-shadow: 0 0 20px rgba(88, 166, 255, 0.05), 0 22px 44px rgba(0, 0, 0, 0.28);
+        }
+
+        .panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 18px;
+        }
+
+        .panel-header-title {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .panel-title {
+            margin: 0;
+            color: #1c2b4a;
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+
+        .panel-subtitle {
             font-size: 13px;
-            opacity: 0.95;
-            font-weight: 500;
+            color: #7b8ba8;
+        }
+
+        .panel-section {
+            padding: 16px 0;
+            border-top: 1px solid #edf2f7;
+        }
+
+        .panel-section:first-of-type {
+            border-top: none;
+            padding-top: 0;
+        }
+
+        .section-label {
+            display: block;
+            margin-bottom: 12px;
+            color: #475569;
+            font-size: 12px;
+            font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.08em;
+        }
+
+        .control-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .control-stack button {
+            width: 100%;
+            justify-content: center;
+        }
+
+        .chip-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 18px;
+            margin-bottom: 14px;
+        }
+
+        .table-title {
+            margin: 0;
+            color: #e6edf3;
+            font-size: 22px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+
+        .table-subtitle {
+            margin-top: 6px;
+            color: #8b949e;
+            font-size: 13px;
+            line-height: 1.5;
+            opacity: 0.8;
+        }
+
+        .table-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: flex-end;
+            align-items: center;
+        }
+
+        .toolbar-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 14px;
+            border-radius: 999px;
+            background: rgba(17, 24, 39, 0.88);
+            border: 1px solid #30363d;
+            color: #6e7681;
+            font-size: 13px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .toolbar-pill.strong {
+            background: rgba(29, 78, 216, 0.14);
+            border-color: rgba(96, 165, 250, 0.38);
+            color: #58a6ff;
+        }
+
+        .panel-note {
+            padding: 14px 16px;
+            border-radius: 18px;
+            background: #161b22;
+            border: 1px solid #30363d;
+            color: #8b949e;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .panel-note strong {
+            display: block;
+            margin-bottom: 6px;
+            color: #c9d1d9;
+            font-size: 13px;
         }
 
         /* ========== Actions ========== */
@@ -159,8 +511,9 @@
             display: flex;
             flex-wrap: wrap;
             gap: 12px;
-            margin-bottom: 24px;
+            margin-bottom: 16px;
             align-items: center;
+            justify-content: space-between;
         }
 
         .actions-group {
@@ -171,12 +524,12 @@
         }
 
         .actions-group.primary {
-            margin-right: 20px;
+            margin-right: 0;
         }
 
         .actions-group-label {
             font-size: 12px;
-            color: #718096;
+            color: #6e7681;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -196,6 +549,39 @@
             gap: 8px;
         }
 
+        .button-inline {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .button-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+        }
+
+        .button-icon svg,
+        .icon-glyph svg {
+            width: 100%;
+            height: 100%;
+            stroke: currentColor;
+            fill: none;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            stroke-width: 1.85;
+        }
+
+        button:focus-visible,
+        .header-nav a:focus-visible,
+        .filter-button:focus-visible {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.18);
+        }
+
         button:hover {
             transform: translateY(-1px);
         }
@@ -211,47 +597,49 @@
         }
 
         button.primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+            background: linear-gradient(135deg, #1f6feb 0%, #58a6ff 100%);
+            color: #e6edf3;
+            border: 1px solid rgba(59, 130, 246, 0.4);
+            box-shadow: inset 0 0 0 1px rgba(125, 211, 252, 0.06);
             font-size: 15px;
             padding: 14px 28px;
         }
 
-        button.primary:hover {
-            box-shadow: 0 6px 16px rgba(102, 126, 234, 0.6);
+        button.primary:not(.danger):hover {
+            filter: brightness(1.08);
+            box-shadow: 0 0 12px rgba(88, 166, 255, 0.4), 0 0 0 1px rgba(96, 165, 250, 0.3), 0 10px 26px rgba(14, 165, 233, 0.18);
         }
 
         button.secondary {
-            background: #e2e8f0;
-            color: #4a5568;
-            border: 2px solid #cbd5e0;
+            background: rgba(17, 24, 39, 0.9);
+            color: #c9d1d9;
+            border: 1px solid #30363d;
         }
 
         button.secondary:hover {
-            background: #cbd5e0;
-            border-color: #a0aec0;
+            background: #161b22;
+            border-color: rgba(96, 165, 250, 0.28);
         }
 
         button.ghost {
-            background: #fff7ed;
-            color: #9a3412;
-            border: 2px solid #fdba74;
+            background: rgba(51, 23, 7, 0.35);
+            color: #f2cc60;
+            border: 1px solid rgba(251, 146, 60, 0.45);
         }
 
         button.ghost:hover {
-            background: #ffedd5;
-            border-color: #fb923c;
+            background: rgba(74, 31, 10, 0.45);
+            border-color: rgba(251, 146, 60, 0.65);
         }
 
         button.danger {
-            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
-            color: white;
-            border: none;
+            background: linear-gradient(135deg, rgba(69, 10, 10, 0.96) 0%, rgba(127, 29, 29, 0.96) 100%);
+            color: #e6edf3;
+            border: 1px solid rgba(239, 68, 68, 0.32);
         }
 
         button.danger:hover {
-            box-shadow: 0 4px 12px rgba(238, 90, 36, 0.4);
+            box-shadow: 0 10px 24px rgba(127, 29, 29, 0.24);
         }
 
         /* ========== Filter ========== */
@@ -267,213 +655,627 @@
 
         .filter-label {
             font-size: 13px;
-            color: #718096;
+            color: #6e7681;
             font-weight: 600;
             margin-right: 12px;
         }
 
         .filter-button {
-            padding: 8px 16px;
-            border: 2px solid #e2e8f0;
-            background: white;
-            border-radius: 20px;
+            padding: 10px 14px;
+            border: 1px solid #30363d;
+            background: #161b22;
+            border-radius: 14px;
             cursor: pointer;
             font-size: 13px;
-            font-weight: 500;
-            color: #4a5568;
+            font-weight: 600;
+            color: #6e7681;
             transition: all 0.2s;
         }
 
         .filter-button:hover {
-            border-color: #cbd5e0;
-            background: #f7fafc;
+            border-color: #58a6ff;
+            background: #1a2028;
+            color: #c9d1d9;
         }
 
         .filter-button.active {
-            background: #667eea;
-            color: white;
-            border-color: #667eea;
+            background: rgba(31, 111, 235, 0.1);
+            color: #58a6ff;
+            border-color: #1f6feb;
+            box-shadow: none;
+        }
+
+        .filter.filter-subtle {
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 16px;
+            padding: 0;
+            background: transparent;
+            border-radius: 0;
+            align-items: center;
+        }
+
+        .filter.filter-subtle .filter-label {
+            margin-right: 6px;
+            font-size: 12px;
+            color: #6e7681;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        .filter.filter-subtle .filter-button {
+            padding: 7px 12px;
+            border-radius: 999px;
+            background: transparent;
+            border-color: #30363d;
+            color: #6e7681;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .filter.filter-subtle .filter-button:hover {
+            background: rgba(22, 27, 34, 0.85);
+            border-color: #a78bfa;
+            color: #c9d1d9;
+        }
+
+        .filter.filter-subtle .filter-button.active {
+            background: rgba(31, 111, 235, 0.1);
+            color: #58a6ff;
+            border-color: #1f6feb;
+            box-shadow: none;
         }
 
         /* ========== Table ========== */
         .table-container {
-            background: white;
-            border-radius: 8px;
+            background: linear-gradient(180deg, #161b22 0%, #11161d 100%);
+            border-radius: 20px;
             overflow-x: auto;
             overflow-y: visible;
-            border: 1px solid #e2e8f0;
-            margin-bottom: 24px;
+            border: 1px solid #30363d;
+            box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.05);
+            transition: all 0.15s ease;
+        }
+
+        .table-container:hover {
+            border-color: rgba(88, 166, 255, 0.25);
+            box-shadow: 0 0 20px rgba(88, 166, 255, 0.05), inset 0 1px 0 rgba(148, 163, 184, 0.05);
         }
 
         table {
             width: 100%;
-            border-collapse: collapse;
+            border-collapse: separate;
+            border-spacing: 0;
             table-layout: fixed;
+            min-width: 1360px;
+        }
+
+        thead tr {
+            position: relative;
+            isolation: isolate;
+        }
+
+        thead tr::before {
+            content: '';
+            position: absolute;
+            left: 10px;
+            right: 10px;
+            top: 0;
+            bottom: 0;
+            border-radius: 18px 18px 0 0;
+            background: linear-gradient(180deg, #0f1722 0%, #0b111a 100%);
+            border: 1px solid rgba(88, 166, 255, 0.12);
+            border-bottom-color: rgba(88, 166, 255, 0.08);
+            box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.04);
+            z-index: 0;
+            pointer-events: none;
         }
 
         th {
-            background: #f7fafc;
-            padding: 16px;
+            position: relative;
+            z-index: 1;
+            background: transparent;
+            padding: 20px 28px;
             text-align: left;
             font-weight: 600;
-            color: #2d3748;
-            font-size: 13px;
+            color: #9fb3c8;
+            font-size: 15px;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
-            border-bottom: 2px solid #e2e8f0;
+            letter-spacing: 0.08em;
+            text-shadow: 0 0 6px rgba(88, 166, 255, 0.15);
+            border-bottom: 1px solid transparent;
+            vertical-align: middle;
+            transition: color 0.15s ease, text-shadow 0.15s ease;
+        }
+
+        th:hover {
+            color: #58a6ff;
+            text-shadow: 0 0 8px rgba(88, 166, 255, 0.4);
         }
 
         td {
-            padding: 16px;
-            border-bottom: 1px solid #e2e8f0;
+            position: relative;
+            z-index: 1;
+            padding: 22px 28px;
+            border-bottom: 1px solid transparent;
+            background: transparent;
             vertical-align: middle;
+            text-align: left;
+            color: #c9d1d9;
+            transition: color 0.15s ease;
         }
 
-        tr:hover {
-            background: #f7fafc;
+        th.col-select,
+        td.cell-select {
+            width: 64px;
+            text-align: center;
+            padding-left: 16px;
+            padding-right: 16px;
+            background: transparent !important;
+            border: none;
+            box-shadow: none !important;
+        }
+
+        th.col-code,
+        td.cell-code {
+            width: 186px;
+            text-align: center;
+        }
+
+        th.col-name,
+        td.cell-name {
+            width: 396px;
+            text-align: left;
+        }
+
+        th.col-target,
+        td.cell-target {
+            width: 470px;
+            text-align: left;
+        }
+
+        th.col-status,
+        td.cell-status {
+            width: 300px;
+            text-align: center;
+        }
+
+        td.cell-status {
+            position: relative;
+            overflow: visible;
+            padding-right: 30px;
+        }
+
+        th.col-select {
+            text-align: center;
+        }
+
+        th.col-status {
+            text-align: center;
+        }
+
+        tbody tr.row {
+            position: relative;
+            isolation: isolate;
+            overflow: hidden;
+            border-radius: 14px;
+        }
+
+        tbody tr.row::before {
+            content: '';
+            position: absolute;
+            left: 14px;
+            right: 14px;
+            top: 4px;
+            bottom: 4px;
+            border-radius: 14px;
+            background: radial-gradient(
+                240px circle at var(--x, 50%) var(--y, 50%),
+                rgba(56, 189, 248, 0.18),
+                rgba(59, 130, 246, 0.10) 40%,
+                rgba(56, 189, 248, 0.04) 65%,
+                transparent 80%
+            );
+            box-shadow:
+                inset 0 0 0 1px rgba(88, 166, 255, 0.08),
+                0 0 16px rgba(59, 130, 246, 0.06);
+            opacity: 0;
+            transform: scale(0.992);
+            transition: opacity 0.15s ease, transform 0.18s ease, box-shadow 0.18s ease;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        tbody tr.row::after {
+            content: '';
+            position: absolute;
+            left: 24px;
+            right: 24px;
+            bottom: 0;
+            border-bottom: 1px solid rgba(30, 41, 59, 0.5);
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        tbody tr.row:last-child::after {
+            border-bottom-color: transparent;
+        }
+
+        tbody tr.row:hover::before,
+        tbody tr.row.row-active::before {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        tbody tr.row:hover::after,
+        tbody tr.row.row-active::after {
+            border-bottom-color: transparent;
         }
 
         /* ========== Badge ========== */
         .badge {
             padding: 6px 12px;
-            border-radius: 20px;
+            border-radius: 999px;
             font-size: 12px;
             font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+            text-transform: none;
+            letter-spacing: 0.02em;
             display: inline-block;
+            background: transparent;
         }
 
         .badge.unidentified {
-            background: #fee2e2;
-            color: #991b1b;
-            border: 2px solid #fecaca;
+            color: #ffb3ad;
+            border: 1px solid rgba(255, 123, 114, 0.7);
+            background: rgba(255, 123, 114, 0.12);
         }
 
         .badge.identified {
-            background: #fef3c7;
-            color: #92400e;
-            border: 2px solid #fde68a;
+            color: #cbd5e1;
+            border: 1px solid #30363d;
+            background: rgba(110, 118, 129, 0.08);
         }
 
         .badge.pending {
-            background: #dbeafe;
-            color: #1e40af;
-            border: 2px solid #93c5fd;
+            color: #58a6ff;
+            border: 1px solid #1f6feb;
+            background: rgba(31, 111, 235, 0.1);
         }
 
         .badge.processed {
-            background: #d1fae5;
-            color: #065f46;
-            border: 2px solid #6ee7b7;
+            color: #3fb950;
+            border: 1px solid #238636;
+            background: rgba(35, 134, 54, 0.1);
         }
 
         .badge.target_exists {
-            background: #fff7ed;
-            color: #9a3412;
-            border: 2px solid #fdba74;
+            color: #f2cc60;
+            border: 1px solid #d29922;
+            background: rgba(210, 153, 34, 0.1);
         }
 
         .badge.skipped {
-            background: #f1f5f9;
-            color: #475569;
-            border: 2px solid #cbd5e0;
+            color: #ffb3ad;
+            border: 1px solid rgba(255, 123, 114, 0.7);
+            background: rgba(255, 123, 114, 0.12);
         }
 
         .status-action {
+            --status-width-collapsed: 100px;
+            --status-width-expanded: 176px;
+            --status-border: rgba(125, 211, 252, 0.22);
+            --status-core-bg: rgba(88, 166, 255, 0.16);
+            --status-text: #c9d1d9;
+            --status-glow: rgba(88, 166, 255, 0.14);
             position: relative;
             display: inline-flex;
             align-items: center;
+            justify-content: flex-start;
+            width: var(--status-width-collapsed);
+            max-width: 100%;
+            min-height: 40px;
+            height: 40px;
+            margin: 0 auto;
+            overflow: visible;
             white-space: nowrap;
+            border-radius: 999px;
+            border: 1px solid var(--status-border);
+            background: linear-gradient(
+                90deg,
+                var(--status-core-bg) 0%,
+                var(--status-core-bg) calc(var(--status-width-collapsed) - 18px),
+                rgba(10, 16, 32, 0.8) calc(var(--status-width-collapsed) + 10px),
+                rgba(8, 17, 31, 0.88) 100%
+            );
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+            transition: width 0.2s ease, border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+        }
+
+        .status-action::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(110deg, rgba(255, 255, 255, 0.05) 0%, transparent 32%, transparent 100%);
+            pointer-events: none;
+            opacity: 0.6;
+        }
+
+        .status-action.status-pending {
+            --status-border: rgba(31, 111, 235, 0.55);
+            --status-core-bg: rgba(31, 111, 235, 0.18);
+            --status-text: #58a6ff;
+            --status-glow: rgba(88, 166, 255, 0.16);
+        }
+
+        .status-action.status-target_exists {
+            --status-border: rgba(210, 153, 34, 0.55);
+            --status-core-bg: rgba(210, 153, 34, 0.18);
+            --status-text: #f2cc60;
+            --status-glow: rgba(242, 204, 96, 0.14);
+        }
+
+        .status-action.status-skipped {
+            --status-border: rgba(255, 123, 114, 0.62);
+            --status-core-bg: rgba(255, 123, 114, 0.18);
+            --status-text: #ffb3ad;
+            --status-glow: rgba(255, 123, 114, 0.16);
+        }
+
+        .status-action.status-failed {
+            --status-border: rgba(255, 123, 114, 0.62);
+            --status-core-bg: rgba(255, 123, 114, 0.18);
+            --status-text: #ffb3ad;
+            --status-glow: rgba(255, 123, 114, 0.16);
         }
 
         .status-trigger {
-            padding: 0;
-            border: none;
-            background: transparent;
-            box-shadow: none;
-            cursor: default;
-        }
-
-        .status-trigger:hover,
-        .status-trigger:active,
-        .status-trigger:focus {
-            transform: none;
-            box-shadow: none;
-        }
-
-        .status-popover {
-            position: absolute;
-            top: 50%;
-            left: calc(100% + 6px);
-            z-index: 1200;
             display: inline-flex;
             align-items: center;
-            padding: 4px;
-            border-radius: 9px;
-            background: white;
-            border: 1px solid #e2e8f0;
-            box-shadow: 0 12px 24px rgba(15, 23, 42, 0.16);
+            justify-content: center;
+            flex: 0 0 var(--status-width-collapsed);
+            min-width: var(--status-width-collapsed);
+            height: 100%;
+            position: relative;
+            z-index: 1;
+            cursor: default;
+            overflow: hidden;
+            border-radius: 999px;
+        }
+
+        .status-label {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            padding: 0 12px;
+            color: var(--status-text);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            text-shadow: 0 0 6px var(--status-glow);
+        }
+
+        .status-actions {
+            position: relative;
+            z-index: 1;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            height: 100%;
+            padding: 0 8px 0 4px;
+            overflow: visible;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateX(6px) scale(0.92);
+            pointer-events: none;
+            transition: opacity 0.18s ease, transform 0.2s ease, visibility 0.18s ease;
+        }
+
+        .icon-action {
+            position: relative;
+            width: 34px;
+            height: 34px;
+            min-width: 34px;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 7px;
+            border: 1px solid transparent;
+            background: transparent;
+            color: #8b949e;
+            box-shadow: none;
+        }
+
+        .icon-action:hover,
+        .icon-action:active {
+            transform: none;
+        }
+
+        .icon-action:hover,
+        .icon-action:focus-visible {
+            background: rgba(88, 166, 255, 0.1);
+        }
+
+        .icon-action:active {
+            color: #a5f3fc;
+        }
+
+        .icon-action.action-organize {
+            color: #7dd3fc;
+        }
+
+        .icon-action.action-organize:hover,
+        .icon-action.action-organize:focus-visible {
+            color: #a5f3fc;
+            box-shadow: 0 0 8px rgba(125, 211, 252, 0.35);
+        }
+
+        .icon-action.action-delete {
+            color: #ff7b72;
+        }
+
+        .icon-action.action-delete:hover,
+        .icon-action.action-delete:focus-visible {
+            color: #ffb4ae;
+            background: rgba(255, 123, 114, 0.1);
+            box-shadow: 0 0 8px rgba(255, 123, 114, 0.28);
+        }
+
+        .icon-glyph {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+        }
+
+        .icon-action[data-tooltip]::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            left: 50%;
+            bottom: calc(100% + 10px);
+            z-index: 12;
+            transform: translateX(-50%) translateY(4px);
+            padding: 6px 10px;
+            border-radius: 8px;
+            background: #161b22;
+            border: 1px solid #30363d;
+            color: #c9d1d9;
+            font-size: 11px;
+            line-height: 1;
+            white-space: nowrap;
             opacity: 0;
             visibility: hidden;
             pointer-events: none;
-            transform: translate(4px, -50%);
-            transition: opacity 0.16s ease, transform 0.16s ease, visibility 0.16s ease;
+            transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s ease;
         }
 
-        .status-popover button {
-            min-width: 60px;
-            justify-content: center;
-            padding: 5px 10px;
-            font-size: 12px;
-            line-height: 1.2;
-            border-radius: 7px;
-        }
-
-        .status-popover button:hover,
-        .status-popover button:active {
-            transform: none;
-        }
-
-        .status-action.visible .status-popover,
-        .status-action:hover .status-popover,
-        .status-action:focus-within .status-popover {
+        .icon-action:hover::after,
+        .icon-action:focus-visible::after {
             opacity: 1;
             visibility: visible;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        .status-action.visible,
+        .status-action:hover {
+            width: min(var(--status-width-expanded), 100%);
+            box-shadow: 0 0 0 1px var(--status-border), 0 0 14px var(--status-glow);
+        }
+
+        .status-action.visible .status-actions,
+        .status-action:hover .status-actions {
+            opacity: 1;
+            visibility: visible;
+            transform: translateX(0) scale(1);
             pointer-events: auto;
-            transform: translate(0, -50%);
         }
 
         /* ========== Checkbox ========== */
         .checkbox {
+            -webkit-appearance: none;
+            appearance: none;
             width: 18px;
             height: 18px;
             cursor: pointer;
-            accent-color: #667eea;
+            border-radius: 4px;
+            border: 1px solid #2d3748;
+            background: #0b1220;
+            display: inline-block;
+            position: relative;
+            transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .checkbox:hover {
+            border-color: #58a6ff;
+        }
+
+        .checkbox:focus-visible {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.16);
+        }
+
+        .checkbox:checked {
+            background: linear-gradient(135deg, #1f6feb, #58a6ff);
+            border-color: #58a6ff;
+            box-shadow: 0 0 6px rgba(88, 166, 255, 0.5);
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23e6edf3' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: center;
+            background-size: 12px 12px;
         }
 
         /* ========== Code Highlight ========== */
         .code {
             font-weight: 700;
-            font-size: 15px;
-            color: #667eea;
-            background: #ebf8ff;
-            padding: 6px 12px;
-            border-radius: 6px;
-            display: inline-block;
-            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 14px;
+            color: #58a6ff;
+            background: #0b1220;
+            padding: 8px 12px;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 116px;
+            max-width: 116px;
+            border: 1px solid #1f6feb;
+            box-shadow: none;
             white-space: nowrap;
+            text-align: center;
+            letter-spacing: 0.5px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .cell-code .code {
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .cell-code .code:hover {
+            border-color: #58a6ff;
+            box-shadow: 0 0 6px rgba(88, 166, 255, 0.4), 0 0 12px rgba(88, 166, 255, 0.2);
+        }
+
+        .code.empty {
+            min-width: 0;
+            width: auto;
+            max-width: none;
+            padding: 0;
+            background: transparent;
+            border: none;
+            box-shadow: none;
+            border-radius: 0;
+            justify-content: center;
+            text-align: center;
+            color: #6e7681;
         }
 
         /* ========== Filename ========== */
         .filename-copy {
             cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 8px;
+            min-width: 0;
         }
 
         .filename {
             font-size: 14px;
-            color: #2d3748;
-            font-weight: 500;
+            color: #eaf2ff;
+            font-weight: 600;
+            line-height: 1.45;
+            word-break: break-word;
+            text-align: left;
+            letter-spacing: 0.2px;
+            transition: color 0.15s ease;
+        }
+
+        .filename-copy:hover .filename {
+            color: #f0f6fc;
         }
 
         .copy-hint {
@@ -482,35 +1284,52 @@
             gap: 6px;
             margin-top: 6px;
             font-size: 11px;
-            color: #718096;
-            padding: 4px 8px;
-            border-radius: 999px;
-            background: #edf2f7;
-            border: 1px solid #e2e8f0;
+            color: #6e7681;
+            padding: 0;
+            border-radius: 0;
+            background: transparent;
+            border: none;
             transition: all 0.2s;
         }
 
+        .copy-hint::before {
+            content: '⧉';
+            font-size: 11px;
+            line-height: 1;
+        }
+
         .filename-copy:hover .copy-hint {
-            color: #2b6cb0;
-            background: #ebf8ff;
-            border-color: #bee3f8;
+            color: #58a6ff;
         }
 
         /* ========== Path Cell ========== */
         .path-cell {
-            font-family: 'Monaco', 'Consolas', monospace;
+            font-family: 'JetBrains Mono', 'Fira Code', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
             font-size: 12px;
-            color: #718096;
-            word-break: break-word;
-            overflow-wrap: anywhere;
-            line-height: 1.5;
+            color: #7dd3fc;
+            line-height: 1.4;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            max-height: calc(1.4em * 2);
+            opacity: 0.85;
+            text-shadow: 0 0 4px rgba(125, 211, 252, 0.2);
+            transition: opacity 0.15s ease, color 0.15s ease;
+        }
+
+        .cell-target:hover .path-cell,
+        tbody tr.row:hover .path-cell {
+            opacity: 1;
+            color: #a5f3fc;
+            text-shadow: 0 0 6px rgba(125, 211, 252, 0.25);
         }
 
         /* ========== Empty ========== */
         .empty {
             text-align: center;
             padding: 60px 20px;
-            color: #a0aec0;
+            color: #6e7681;
         }
 
         .empty-icon {
@@ -522,15 +1341,15 @@
         .loading {
             text-align: center;
             padding: 40px;
-            color: #718096;
+            color: #8b949e;
         }
 
         .loading-spinner {
             display: inline-block;
             width: 40px;
             height: 40px;
-            border: 4px solid #e2e8f0;
-            border-top-color: #667eea;
+            border: 4px solid rgba(51, 65, 85, 0.8);
+            border-top-color: #60a5fa;
             border-radius: 50%;
             animation: spin 1s linear infinite;
         }
@@ -541,12 +1360,11 @@
 
         /* ========== Error ========== */
         .error {
-            background: #fee2e2;
-            color: #991b1b;
+            background: rgba(69, 10, 10, 0.4);
+            color: #ff7b72;
             padding: 16px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            border-left: 4px solid #ef4444;
+            border-radius: 12px;
+            border: 1px solid rgba(239, 68, 68, 0.28);
             display: flex;
             align-items: center;
             gap: 12px;
@@ -558,12 +1376,11 @@
 
         /* ========== Success ========== */
         .success {
-            background: #d1fae5;
-            color: #065f46;
+            background: rgba(6, 78, 59, 0.32);
+            color: #3fb950;
             padding: 16px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            border-left: 4px solid #10b981;
+            border-radius: 12px;
+            border: 1px solid rgba(34, 197, 94, 0.24);
             display: flex;
             align-items: center;
             gap: 12px;
@@ -582,11 +1399,11 @@
 
         .tooltip-text {
             visibility: hidden;
-            background-color: #1a202c;
-            color: white;
+            background-color: rgba(10, 14, 22, 0.98);
+            color: #c9d1d9;
             text-align: left;
             padding: 16px;
-            border-radius: 8px;
+            border-radius: 12px;
             position: absolute;
             z-index: 1000;
             bottom: calc(100% + 10px);
@@ -597,11 +1414,12 @@
             max-width: min(720px, calc(100vw - 120px));
             min-width: min(420px, calc(100vw - 120px));
             font-size: 13px;
-            font-family: 'Monaco', 'Consolas', monospace;
+            font-family: 'JetBrains Mono', 'Fira Code', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
             word-break: break-word;
             overflow-wrap: anywhere;
             line-height: 1.6;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            border: 1px solid rgba(59, 130, 246, 0.24);
+            box-shadow: 0 18px 36px rgba(0, 0, 0, 0.42);
         }
 
         .tooltip:hover .tooltip-text {
@@ -616,11 +1434,13 @@
             left: 0;
             right: 0;
             bottom: 0;
+            padding: 24px;
             background: rgba(0,0,0,0.5);
             display: flex;
             align-items: center;
             justify-content: center;
             z-index: 9999;
+            overflow-y: auto;
             animation: fadeIn 0.2s;
         }
 
@@ -630,12 +1450,13 @@
         }
 
         .modal {
-            background: white;
-            border-radius: 12px;
+            background: linear-gradient(180deg, rgba(18, 21, 31, 0.98) 0%, rgba(12, 15, 22, 0.98) 100%);
+            border-radius: 18px;
             padding: 32px;
             max-width: 500px;
             width: 90%;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+            border: 1px solid rgba(51, 65, 85, 0.76);
+            box-shadow: 0 28px 52px rgba(0, 0, 0, 0.44);
             animation: slideUp 0.3s;
         }
 
@@ -653,7 +1474,7 @@
         .modal-title {
             font-size: 20px;
             font-weight: 700;
-            color: #1a202c;
+            color: #e6edf3;
             margin-bottom: 16px;
             display: flex;
             align-items: center;
@@ -661,28 +1482,29 @@
         }
 
         .modal-content {
-            color: #4a5568;
+            color: #8b949e;
             margin-bottom: 24px;
             line-height: 1.6;
         }
 
         .modal-info {
-            background: #f7fafc;
+            background: rgba(17, 24, 39, 0.9);
             padding: 16px;
-            border-radius: 8px;
+            border-radius: 12px;
+            border: 1px solid rgba(51, 65, 85, 0.72);
             margin-bottom: 24px;
             font-size: 14px;
         }
 
         .modal-info-label {
             font-weight: 600;
-            color: #2d3748;
+            color: #c9d1d9;
             margin-bottom: 4px;
         }
 
         .modal-info-value {
-            font-family: 'Monaco', 'Consolas', monospace;
-            color: #4a5568;
+            font-family: 'JetBrains Mono', 'Fira Code', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+            color: #8b949e;
             word-break: break-all;
         }
 
@@ -716,6 +1538,28 @@
                 grid-template-columns: repeat(2, 1fr);
             }
 
+            .overview-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .workspace {
+                grid-template-columns: 1fr;
+            }
+
+            .control-panel {
+                position: static;
+            }
+
+            .table-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .table-toolbar {
+                justify-content: flex-start;
+            }
+
             .actions {
                 flex-direction: column;
                 align-items: stretch;
@@ -745,86 +1589,135 @@
         }
     </style>
 </head>
-<body>
-    <div class="container" x-data="app()">
+<body x-data="app()">
+    <div class="container">
         <!-- Header -->
         <div class="header">
-            <h1>🎬 Noctra JAV 整理工具</h1>
+            <div class="header-copy">
+                <div class="eyebrow">Noctra Console</div>
+                <h1>JAV 整理工作台</h1>
+            </div>
             <div class="header-nav">
                 <a href="#" @click.prevent="switchView('scan')" :class="{ 'active': view === 'scan' }">📂 扫描</a>
                 <a href="#" @click.prevent="switchView('history')" :class="{ 'active': view === 'history' }">📋 历史</a>
             </div>
         </div>
 
-        <!-- Stats -->
         <div class="stats">
-            <div class="stat-card total">
+            <div class="stat-card total" @mousemove="updateStatGlow($event)">
+                <div class="stat-card__meta">
+                    <span class="stat-card__meta-dot"></span>
+                    <span>SCAN / TOTAL</span>
+                </div>
+                <div class="stat-card__id">M-01</div>
                 <div class="stat-value" x-text="stats.total_files">0</div>
                 <div class="stat-label">总文件数</div>
+                <div class="stat-subtext">当前扫描结果</div>
             </div>
-            <div class="stat-card identified">
+            <div class="stat-card identified" @mousemove="updateStatGlow($event)">
+                <div class="stat-card__meta">
+                    <span class="stat-card__meta-dot"></span>
+                    <span>RECOGNITION</span>
+                </div>
+                <div class="stat-card__id">M-02</div>
                 <div class="stat-value" x-text="stats.identified">0</div>
                 <div class="stat-label">已识别</div>
+                <div class="stat-subtext">已完成番号解析</div>
             </div>
-            <div class="stat-card unidentified">
+            <div class="stat-card unidentified" @mousemove="updateStatGlow($event)">
+                <div class="stat-card__meta">
+                    <span class="stat-card__meta-dot"></span>
+                    <span>UNRESOLVED</span>
+                </div>
+                <div class="stat-card__id">M-03</div>
                 <div class="stat-value" x-text="stats.unidentified">0</div>
                 <div class="stat-label">未识别</div>
+                <div class="stat-subtext">需要人工确认</div>
             </div>
-            <div class="stat-card pending">
+            <div class="stat-card pending" @mousemove="updateStatGlow($event)">
+                <div class="stat-card__meta">
+                    <span class="stat-card__meta-dot"></span>
+                    <span>QUEUE / PENDING</span>
+                </div>
+                <div class="stat-card__id">M-04</div>
                 <div class="stat-value" x-text="stats.pending">0</div>
                 <div class="stat-label">待处理</div>
+                <div class="stat-subtext">等待整理执行</div>
             </div>
-            <div class="stat-card processed">
+            <div class="stat-card processed" @mousemove="updateStatGlow($event)">
+                <div class="stat-card__meta">
+                    <span class="stat-card__meta-dot"></span>
+                    <span>ARCHIVE / DONE</span>
+                </div>
+                <div class="stat-card__id">M-05</div>
                 <div class="stat-value" x-text="stats.processed">0</div>
                 <div class="stat-label">已处理</div>
+                <div class="stat-subtext">已完成落盘</div>
             </div>
         </div>
 
-        <!-- Messages -->
-        <div x-show="success" class="success">
-            <span class="success-icon">✓</span>
-            <span x-text="success"></span>
-        </div>
-        <div x-show="error" class="error">
-            <span class="error-icon">✕</span>
-            <span x-text="error"></span>
-        </div>
-
-        <!-- Actions (Scan View Only) -->
-        <div x-show="view === 'scan'">
-            <div class="actions">
-                <div class="actions-group primary">
-                    <span class="actions-group-label">主操作</span>
-                    <button class="primary" @click="scanFiles" :disabled="loading">
-                        <span x-show="!loading">📂 扫描目录</span>
-                        <span x-show="loading">
-                            <span class="loading-spinner" style="width: 16px; height: 16px; border-width: 2px;"></span>
-                            扫描中...
-                        </span>
-                    </button>
-                    <button class="primary danger" @click="confirmOrganize" :disabled="loading || !hasSelected" x-show="hasSelected">
-                        🚀 执行整理 (<span x-text="selectedCount"></span>)
-                    </button>
-                </div>
-                <div class="actions-group secondary" x-show="!loading && files.length > 0">
-                    <span class="actions-group-label">选择操作</span>
-                    <button class="secondary" @click="selectIdentified">
-                        选择已识别
-                    </button>
-                    <button class="secondary" @click="selectAll">
-                        全选
-                    </button>
-                    <button class="secondary" @click="deselectAll">
-                        取消全选
-                    </button>
-                </div>
+        <div class="message-stack">
+            <div x-show="success" class="success">
+                <span class="success-icon">✓</span>
+                <span x-text="success"></span>
+            </div>
+            <div x-show="error" class="error">
+                <span class="error-icon">✕</span>
+                <span x-text="error"></span>
             </div>
         </div>
 
-        <!-- Filter (Scan View Only) -->
-        <div x-show="view === 'scan' && !loading && files.length > 0">
-            <div class="filter">
-                <span class="filter-label">筛选：</span>
+        <div x-show="view === 'scan'" class="actions">
+            <div class="actions-group primary">
+                <button class="primary" @click="scanFiles" :disabled="loading">
+                    <span x-show="!loading" class="button-inline">
+                        <span class="button-icon" x-html="getUiIcon('scan')"></span>
+                        <span>扫描目录</span>
+                    </span>
+                    <span x-show="loading">
+                        <span class="loading-spinner" style="width: 16px; height: 16px; border-width: 2px;"></span>
+                        扫描中...
+                    </span>
+                </button>
+                <button class="primary organize-trigger" @click="confirmOrganize" :disabled="loading || !hasSelected">
+                    <span class="button-inline">
+                        <span class="button-icon" x-html="getUiIcon('organize')"></span>
+                        <span>执行整理 (<span x-text="selectedCount"></span>)</span>
+                    </span>
+                </button>
+            </div>
+            <div class="actions-group secondary" x-show="!loading && files.length > 0">
+                <button class="secondary" @click="selectIdentified">选择已识别</button>
+                <button class="secondary" @click="selectAll">全选待处理</button>
+                <button class="secondary" @click="deselectAll">取消全选</button>
+            </div>
+        </div>
+
+        <div class="panel-surface">
+            <div class="table-header">
+                <div>
+                    <div class="table-title" x-text="view === 'scan' ? '扫描结果' : '整理历史'"></div>
+                    <div class="table-subtitle" x-text="view === 'scan'
+                        ? '扫描后会按番号整理到目标目录，未识别文件保留原样，已存在文件不会重复处理。'
+                        : '这里只展示已处理的记录，方便快速回看最近整理结果。'"></div>
+                </div>
+                <div class="table-toolbar">
+                    <div class="toolbar-pill" x-show="view === 'scan' && !loading && files.length > 0">
+                        当前筛选
+                        <span x-text="getFilterLabel(currentFilter)"></span>
+                    </div>
+                    <div class="toolbar-pill strong" x-show="view === 'scan' && hasSelected">
+                        已勾选
+                        <span x-text="selectedCount"></span>
+                    </div>
+                    <div class="toolbar-pill" x-show="view === 'history'">
+                        仅显示已处理记录
+                    </div>
+                </div>
+            </div>
+
+            <div x-show="view === 'scan' && !loading && files.length > 0" class="filter filter-subtle">
+                <span class="filter-label">筛选</span>
                 <button class="filter-button" :class="{ 'active': currentFilter === 'all' }" @click="setFilter('all')">全部</button>
                 <button class="filter-button" :class="{ 'active': currentFilter === 'identified' }" @click="setFilter('identified')">已识别</button>
                 <button class="filter-button" :class="{ 'active': currentFilter === 'unidentified' }" @click="setFilter('unidentified')">未识别</button>
@@ -832,142 +1725,148 @@
                 <button class="filter-button" :class="{ 'active': currentFilter === 'target_exists' }" @click="setFilter('target_exists')">已存在</button>
                 <button class="filter-button" :class="{ 'active': currentFilter === 'processed' }" @click="setFilter('processed')">已处理</button>
             </div>
-        </div>
 
-        <!-- Table -->
-        <div x-show="!loading && filteredFiles.length > 0">
-            <div class="table-container">
-                <table>
-                    <thead>
-                        <tr>
-                            <th style="width: 50px" x-show="view === 'scan'">
-                                <input type="checkbox" class="checkbox" @change="toggleAll" :checked="allSelected">
-                            </th>
-                            <th style="width: 220px">番号</th>
-                            <th style="width: 240px">文件名</th>
-                            <th style="width: 38%">目标路径</th>
-                            <th style="width: 170px">状态</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <template x-for="file in filteredFiles" :key="file.id">
+            <div x-show="!loading && filteredFiles.length > 0">
+                <div class="table-container">
+                    <table>
+                        <thead>
                             <tr>
-                                <td x-show="view === 'scan'">
-                                    <input type="checkbox" class="checkbox"
-                                           x-model="selectedFiles[file.id]"
-                                           :disabled="file.status !== 'pending'">
-                                </td>
-                                <td>
-                                    <template x-if="file.identified_code">
-                                        <span class="code" x-text="file.identified_code"></span>
-                                    </template>
-                                    <template x-if="!file.identified_code">
-                                        <span class="code" style="background: #f1f5f9; color: #94a3b8;">-</span>
-                                    </template>
-                                </td>
-                                <td>
-                                    <div class="filename-copy" @click="copyToClipboard(file.original_path)">
-                                        <span class="filename" x-text="getFilename(file.original_path)"></span>
-                                        <template x-if="file.original_path">
-                                            <div class="tooltip">
-                                                <span class="copy-hint">点击复制完整路径</span>
-                                                <span class="tooltip-text" x-text="file.original_path"></span>
+                                <th class="col-select" x-show="view === 'scan'">
+                                    <input type="checkbox" class="checkbox" @change="toggleAll" :checked="allSelected">
+                                </th>
+                                <th class="col-code">番号</th>
+                                <th class="col-name">文件名</th>
+                                <th class="col-target">目标路径</th>
+                                <th class="col-status">状态</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="file in filteredFiles" :key="file.id">
+                                <tr class="row"
+                                    :class="{ 'row-active': activeStatusMenuId === file.id }"
+                                    @mousemove="updateRowGlow($event)">
+                                    <td class="cell-select" x-show="view === 'scan'">
+                                        <input type="checkbox" class="checkbox"
+                                               x-model="selectedFiles[file.id]"
+                                               :disabled="file.status !== 'pending'">
+                                    </td>
+                                    <td class="cell-code">
+                                        <template x-if="file.identified_code">
+                                            <span class="code" x-text="file.identified_code"></span>
+                                        </template>
+                                        <template x-if="!file.identified_code">
+                                            <span class="code empty">-</span>
+                                        </template>
+                                    </td>
+                                    <td class="cell-name">
+                                        <div class="filename-copy" @click="copyToClipboard(file.original_path)">
+                                            <span class="filename" x-text="getFilename(file.original_path)"></span>
+                                            <template x-if="file.original_path">
+                                                <div class="tooltip">
+                                                    <span class="copy-hint">点击复制完整路径</span>
+                                                    <span class="tooltip-text" x-text="file.original_path"></span>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </td>
+                                    <td class="cell-target">
+                                        <template x-if="file.target_path">
+                                            <div class="path-cell" x-text="file.target_path"></div>
+                                        </template>
+                                        <template x-if="!file.target_path">
+                                            <span style="color: #cbd5e0;">-</span>
+                                        </template>
+                                    </td>
+                                    <td class="cell-status">
+                                        <template x-if="hasStatusAction(file)">
+                                            <div class="status-action"
+                                                 :class="[`${getStatusActionClass(file)}`, { 'visible': activeStatusMenuId === file.id }]"
+                                                 :style="getStatusRailStyle(file)"
+                                                 @mouseenter="showStatusMenu(file.id)"
+                                                 @mouseleave="scheduleStatusMenuHide(file.id)">
+                                                <span class="status-trigger" :aria-label="getStatusText(file.status)">
+                                                    <span class="status-label" x-text="getStatusText(file.status)"></span>
+                                                </span>
+                                                <div class="status-actions">
+                                                    <template x-for="action in getStatusActions(file)" :key="action.key">
+                                                        <button :class="['icon-action', `action-${action.key}`]"
+                                                                type="button"
+                                                                :data-tooltip="action.label"
+                                                                :aria-label="action.label"
+                                                                @click="handleStatusAction(file, action.key)">
+                                                            <span class="icon-glyph" x-html="getUiIcon(action.icon)"></span>
+                                                        </button>
+                                                    </template>
+                                                </div>
                                             </div>
                                         </template>
-                                    </div>
-                                </td>
-                                <td>
-                                    <template x-if="file.target_path">
-                                        <div class="path-cell" x-text="file.target_path"></div>
-                                    </template>
-                                    <template x-if="!file.target_path">
-                                        <span style="color: #cbd5e0;">-</span>
-                                    </template>
-                                </td>
-                                <td>
-                                    <template x-if="hasStatusAction(file)">
-                                        <div class="status-action"
-                                             :class="{ 'visible': activeStatusMenuId === file.id }"
-                                             @mouseenter="showStatusMenu(file.id)"
-                                             @mouseleave="scheduleStatusMenuHide(file.id)">
-                                            <button type="button" class="status-trigger">
-                                                <span class="badge" :class="getBadgeClass(file)" x-text="getStatusText(file.status)"></span>
-                                            </button>
-                                            <div class="status-popover">
-                                                <button :class="getStatusActionButtonClass(file)"
-                                                        @click="handleStatusAction(file)">
-                                                    <span x-text="getStatusActionText(file)"></span>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </template>
-                                    <template x-if="!hasStatusAction(file)">
-                                        <span class="badge" :class="getBadgeClass(file)" x-text="getStatusText(file.status)"></span>
-                                    </template>
-                                </td>
-                            </tr>
-                        </template>
-                    </tbody>
-                </table>
+                                        <template x-if="!hasStatusAction(file)">
+                                            <span class="badge" :class="getBadgeClass(file)" x-text="getStatusText(file.status)"></span>
+                                        </template>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div x-show="!loading && filteredFiles.length === 0" class="empty">
+                <div class="empty-icon" x-text="view === 'scan' ? '📂' : '📋'"></div>
+                <div x-show="view === 'scan'" style="margin-bottom: 8px;">暂无文件数据</div>
+                <div x-show="view === 'scan'" style="color: #718096; font-size: 14px;">点击上方“扫描目录”开始整理</div>
+                <div x-show="view === 'history'" style="margin-bottom: 8px;">暂无历史记录</div>
+            </div>
+
+            <div x-show="loading" class="loading">
+                <div class="loading-spinner"></div>
+                <div style="margin-top: 16px;" x-text="loadingText">正在加载...</div>
             </div>
         </div>
 
-        <!-- Empty State -->
-        <div x-show="!loading && filteredFiles.length === 0" class="empty">
-            <div class="empty-icon" x-text="view === 'scan' ? '📂' : '📋'"></div>
-            <div x-show="view === 'scan'" style="margin-bottom: 8px;">暂无文件数据</div>
-            <div x-show="view === 'scan'" style="color: #718096; font-size: 14px;">点击上方"扫描目录"开始整理</div>
-            <div x-show="view === 'history'" style="margin-bottom: 8px;">暂无历史记录</div>
-        </div>
+    </div>
 
-        <!-- Loading State -->
-        <div x-show="loading" class="loading">
-            <div class="loading-spinner"></div>
-            <div style="margin-top: 16px;" x-text="loadingText">正在加载...</div>
-        </div>
-
-        <!-- Confirmation Modal -->
-        <div x-show="showConfirmModal" class="modal-overlay">
-            <div class="modal">
-                <div class="modal-title">
-                    🚀 确认执行整理
-                </div>
-                <div class="modal-content">
-                    本次将整理以下 <strong x-text="confirmCodes.length"></strong> 个番号：
-                </div>
-                <div class="modal-info" x-show="confirmCodes.length > 0">
-                    <div class="modal-code-list">
-                        <template x-for="code in confirmCodes" :key="code">
-                            <div class="modal-info-value" x-text="code"></div>
-                        </template>
-                    </div>
-                </div>
-                <div class="modal-actions">
-                    <button class="secondary" @click="showConfirmModal = false; confirmFiles = []">取消</button>
-                    <button class="primary danger" @click="executeOrganize">确认执行</button>
+    <!-- Confirmation Modal -->
+    <div x-show="showConfirmModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-title">
+                🚀 确认执行整理
+            </div>
+            <div class="modal-content">
+                本次将整理以下 <strong x-text="confirmCodes.length"></strong> 个番号：
+            </div>
+            <div class="modal-info" x-show="confirmCodes.length > 0">
+                <div class="modal-code-list">
+                    <template x-for="code in confirmCodes" :key="code">
+                        <div class="modal-info-value" x-text="code"></div>
+                    </template>
                 </div>
             </div>
+            <div class="modal-actions">
+                <button class="secondary" @click="showConfirmModal = false; confirmFiles = []">取消</button>
+                <button class="primary danger" @click="executeOrganize">确认执行</button>
+            </div>
         </div>
+    </div>
 
-        <!-- Delete Modal -->
-        <div x-show="showDeleteModal" class="modal-overlay">
-            <div class="modal">
-                <div class="modal-title">
-                    🗑️ 处理扫描文件
-                </div>
-                <div class="modal-content">
-                    <span x-text="deleteTargetFile?.identified_code || getFilename(deleteTargetFile?.original_path || '')"></span>
-                    <span x-text="getDeleteModalDescription()"></span>
-                </div>
-                <div class="modal-info" x-show="deleteTargetFile">
-                    <div class="modal-info-label">原始文件：</div>
-                    <div class="modal-info-value" x-text="deleteTargetFile?.original_path"></div>
-                </div>
-                <div class="modal-actions split">
-                    <button class="danger" @click="executeDelete('delete_source')">删除原始文件</button>
-                    <button class="secondary" @click="executeDelete('ignore_scan')">仅删除扫描记录</button>
-                    <button class="secondary" @click="closeDeleteModal">取消</button>
-                </div>
+    <!-- Delete Modal -->
+    <div x-show="showDeleteModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-title">
+                🗑️ 处理扫描文件
+            </div>
+            <div class="modal-content">
+                <span x-text="deleteTargetFile?.identified_code || getFilename(deleteTargetFile?.original_path || '')"></span>
+                <span x-text="getDeleteModalDescription()"></span>
+            </div>
+            <div class="modal-info" x-show="deleteTargetFile">
+                <div class="modal-info-label">原始文件：</div>
+                <div class="modal-info-value" x-text="deleteTargetFile?.original_path"></div>
+            </div>
+            <div class="modal-actions split">
+                <button class="danger" @click="executeDelete('delete_source')">删除原始文件</button>
+                <button class="secondary" @click="executeDelete('ignore_scan')">仅删除扫描记录</button>
+                <button class="secondary" @click="closeDeleteModal">取消</button>
             </div>
         </div>
     </div>
@@ -1068,22 +1967,87 @@
                         'pending': '待处理',
                         'target_exists': '已存在',
                         'processed': '已处理',
-                        'skipped': '跳过',
+                        'skipped': '未识别',
                         'failed': '失败'
                     };
                     return map[status] || status;
                 },
 
                 hasStatusAction(file) {
-                    return this.view === 'scan' && ['pending', 'skipped', 'target_exists'].includes(file.status);
+                    return this.view === 'scan' && this.getStatusActions(file).length > 0;
                 },
 
-                getStatusActionText(file) {
-                    return file.status === 'pending' ? '整理' : '删除';
+                getStatusActionClass(file) {
+                    return `status-${this.getBadgeClass(file)}`;
                 },
 
-                getStatusActionButtonClass(file) {
-                    return file.status === 'pending' ? 'primary' : 'ghost';
+                getStatusRailStyle(file) {
+                    const actionCount = this.getStatusActions(file).length;
+                    const collapsedWidth = 100;
+                    const slotWidth = 34;
+                    const gap = 6;
+                    const actionsPadding = actionCount > 0 ? 12 : 0;
+                    const expandedWidth = collapsedWidth + actionsPadding + (actionCount * slotWidth) + (Math.max(actionCount - 1, 0) * gap);
+                    return `--status-width-collapsed: ${collapsedWidth}px; --status-width-expanded: ${expandedWidth}px;`;
+                },
+
+                updateRowGlow(event) {
+                    const row = event.currentTarget;
+                    const rect = row.getBoundingClientRect();
+                    row.style.setProperty('--x', `${event.clientX - rect.left}px`);
+                    row.style.setProperty('--y', `${event.clientY - rect.top}px`);
+                },
+
+                updateStatGlow(event) {
+                    const card = event.currentTarget;
+                    const rect = card.getBoundingClientRect();
+                    card.style.setProperty('--x', `${event.clientX - rect.left}px`);
+                    card.style.setProperty('--y', `${event.clientY - rect.top}px`);
+                },
+
+                getStatusActions(file) {
+                    if (file.status === 'pending') {
+                        return [
+                            { key: 'organize', label: '整理文件', icon: 'organize' },
+                            { key: 'delete', label: '删除文件', icon: 'delete' }
+                        ];
+                    }
+
+                    if (['skipped', 'target_exists'].includes(file.status)) {
+                        return [
+                            { key: 'delete', label: '删除文件', icon: 'delete' }
+                        ];
+                    }
+
+                    return [];
+                },
+
+                getUiIcon(name) {
+                    const icons = {
+                        scan: `
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l1.6 1.8H19.5A1.5 1.5 0 0 1 21 9.3v7.2A1.5 1.5 0 0 1 19.5 18h-15A1.5 1.5 0 0 1 3 16.5z"/>
+                                <path d="M8.5 12h7"/>
+                            </svg>
+                        `,
+                        organize: `
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M12 3.5l1.4 3.6L17 8.5l-3.6 1.4L12 13.5l-1.4-3.6L7 8.5l3.6-1.4z"/>
+                                <path d="M18.5 13.5l.8 2 .2.5.5.2 2 .8-2 .8-.5.2-.2.5-.8 2-.8-2-.2-.5-.5-.2-2-.8 2-.8.5-.2.2-.5z"/>
+                                <path d="M6 15.5l.9 2.2.2.4.4.2 2.2.9-2.2.9-.4.2-.2.4L6 23l-.9-2.2-.2-.4-.4-.2-2.2-.9 2.2-.9.4-.2.2-.4z"/>
+                            </svg>
+                        `,
+                        delete: `
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M4 7h16"/>
+                                <path d="M9 7V4.5h6V7"/>
+                                <path d="M7.5 7l.7 11a1.5 1.5 0 0 0 1.5 1.4h4.6a1.5 1.5 0 0 0 1.5-1.4l.7-11"/>
+                                <path d="M10 10.5v5.5"/>
+                                <path d="M14 10.5v5.5"/>
+                            </svg>
+                        `
+                    };
+                    return icons[name] || '';
                 },
 
                 showStatusMenu(fileId) {
@@ -1115,14 +2079,18 @@
                     this.activeStatusMenuId = null;
                 },
 
-                handleStatusAction(file) {
+                handleStatusAction(file, actionKey) {
                     this.closeStatusMenu();
-                    if (file.status === 'pending') {
+
+                    if (actionKey === 'organize') {
                         this.confirmFiles = [file];
                         this.showConfirmModal = true;
                         return;
                     }
-                    this.openDeleteModal(file);
+
+                    if (actionKey === 'delete') {
+                        this.openDeleteModal(file);
+                    }
                 },
 
                 getFilename(path) {
@@ -1166,6 +2134,18 @@
 
                 setFilter(filter) {
                     this.currentFilter = filter;
+                },
+
+                getFilterLabel(filter) {
+                    const map = {
+                        all: '全部',
+                        identified: '已识别',
+                        unidentified: '未识别',
+                        pending: '待处理',
+                        target_exists: '已存在',
+                        processed: '已处理'
+                    };
+                    return map[filter] || filter;
                 },
 
                 getResultLabel(result) {
@@ -1381,7 +2361,7 @@
                     }
 
                     if (this.deleteTargetFile.status === 'skipped') {
-                        return '当前处于跳过状态。请选择处理方式：';
+                        return '当前文件未识别到番号。请选择处理方式：';
                     }
 
                     return '请选择处理方式：';

@@ -3,19 +3,41 @@ import re
 import shutil
 from pathlib import Path
 from typing import Optional
-from datetime import datetime
 
 
 class JAVOrganizer:
-    CODE_WITH_SUFFIX_PATTERN = re.compile(
-        r'^(?P<code>[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*-\d+)(?P<suffix>[-_]?UC|[-_]?C)?$',
-        re.IGNORECASE,
-    )
     CODE_PATTERN = re.compile(r'([A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*-\d+)', re.IGNORECASE)
     SUBTITLE_MARKER_PATTERN = re.compile(r'字幕版|字幕')
+    UNCENSORED_MARKER_PATTERN = re.compile(r'uncensored', re.IGNORECASE)
+    SUFFIX_PREFIX_PATTERN = re.compile(r'^[\s._@-]*(?P<marker>UC|CH|C)(?=$|[^A-Za-z0-9])', re.IGNORECASE)
 
     def __init__(self, dist_dir: str):
         self.dist_dir = Path(dist_dir).resolve()
+
+    def detect_suffix(self, name_without_ext: str) -> Optional[str]:
+        """从番号后的前缀标记中提取标准后缀。"""
+        code_match = self.CODE_PATTERN.search(name_without_ext)
+        if not code_match:
+            return None
+
+        tail = name_without_ext[code_match.end():]
+        suffix_match = self.SUFFIX_PREFIX_PATTERN.match(tail)
+        if suffix_match:
+            marker = suffix_match.group('marker').upper()
+            return '-UC' if marker == 'UC' else '-C'
+
+        stripped_tail = tail.lstrip(' ._@-')
+        if stripped_tail.startswith('字幕版') or stripped_tail.startswith('字幕'):
+            return '-C'
+        if self.UNCENSORED_MARKER_PATTERN.search(stripped_tail):
+            return '-UC'
+
+        if self.SUBTITLE_MARKER_PATTERN.search(name_without_ext):
+            return '-C'
+        if self.UNCENSORED_MARKER_PATTERN.search(name_without_ext):
+            return '-UC'
+
+        return None
 
     def get_filename_parts(self, filename: str) -> tuple[str, str, Optional[str]]:
         """
@@ -29,20 +51,14 @@ class JAVOrganizer:
         - MVSD-662-UC.mkv -> (MVSD-662, .mkv, -UC)
         - SSIS-123.mp4 -> (SSIS-123, .mp4, None)
         - FPRE-123_字幕版.mp4 -> (FPRE-123, .mp4, -C)
+        - HMN-439-C.H265.mp4 -> (HMN-439, .mp4, -C)
         """
         name_without_ext = os.path.splitext(filename)[0]
-        match = self.CODE_WITH_SUFFIX_PATTERN.match(name_without_ext)
 
-        if match:
-            base_code = match.group('code').upper()
-            raw_suffix = match.group('suffix')
-            suffix = f"-{raw_suffix.lstrip('-_').upper()}" if raw_suffix else None
-        else:
-            code_match = self.CODE_PATTERN.search(name_without_ext)
-            base_code = code_match.group(1).upper() if code_match else name_without_ext
-            suffix = '-C' if code_match and self.SUBTITLE_MARKER_PATTERN.search(name_without_ext) else None
-
+        code_match = self.CODE_PATTERN.search(name_without_ext)
+        base_code = code_match.group(1).upper() if code_match else name_without_ext
         ext = os.path.splitext(filename)[1]
+        suffix = self.detect_suffix(name_without_ext)
         return (base_code, ext, suffix)
 
     def generate_filename(self, code: str, original_filename: str) -> str:
@@ -50,25 +66,20 @@ class JAVOrganizer:
         生成目标文件名
 
         规则：
-        - 检测原文件名是否有 -C、-UC 或 字幕版/字幕 标记
-        - 如果有，生成格式：{番号}{后缀}{扩展名}
-        - 如果没有，使用原文件名
+        - 统一清洗成 {番号}{后缀}{扩展名}
+        - 保留 -C、-UC、字幕、Uncensored 等语义后缀
+        - 去掉番号后的中文、日文、编码标记等冗余文本
 
         例：
         - FPRE-123C.mp4, FPRE-123 -> FPRE-123-C.mp4
         - ABP-456-C.mp4, ABP-456 -> ABP-456-C.mp4
         - MVSD-662-UC.mkv, MVSD-662 -> MVSD-662-UC.mkv
         - FPRE-123_字幕版.mp4, FPRE-123 -> FPRE-123-C.mp4
-        - SSIS-123.mp4, SSIS-123 -> SSIS-123.mp4（不变）
+        - MEYD-695 出轨xxx@北野未奈.mp4, MEYD-695 -> MEYD-695.mp4
         """
-        # 解析原文件名
-        (clean_name, ext, suffix) = self.get_filename_parts(original_filename)
-
-        if suffix and clean_name == code:
-            return f"{code}{suffix}{ext}"
-
-        # 其他情况，使用原文件名
-        return original_filename
+        (_, ext, suffix) = self.get_filename_parts(original_filename)
+        normalized_code = code.upper()
+        return f"{normalized_code}{suffix or ''}{ext}"
 
     def get_target_path(self, code: str, original_filename: str) -> str:
         """
@@ -173,6 +184,11 @@ def test_get_filename_parts():
         ('SSIS-123.mp4', ('SSIS-123', '.mp4', None)),
         ('FPRE-123_字幕版.mp4', ('FPRE-123', '.mp4', '-C')),
         ('SSIS-123字幕版.mp4', ('SSIS-123', '.mp4', '-C')),
+        ('MEYD-695 出轨xxx@北野未奈.mp4', ('MEYD-695', '.mp4', None)),
+        ('HMN-439-C.H265.mp4', ('HMN-439', '.mp4', '-C')),
+        ('CEMD-721ch.mp4', ('CEMD-721', '.mp4', '-C')),
+        ('HMN-112-C マジxxx痴 北野未奈.mp4', ('HMN-112', '.mp4', '-C')),
+        ('ABC-123 [Uncensored].mp4', ('ABC-123', '.mp4', '-UC')),
     ]
 
     print('=== 测试文件名解析 ===')
@@ -195,7 +211,12 @@ def test_generate_filename():
         ('MVSD-662', 'MVSD-662-C.mp4', 'MVSD-662-C.mp4'),
         ('MVSD-662', 'MVSD-662-UC.mkv', 'MVSD-662-UC.mkv'),
         ('FPRE-123', 'FPRE-123_字幕版.mp4', 'FPRE-123-C.mp4'),
-        ('SSIS-123', 'SSIS-123.mp4', 'SSIS-123.mp4'),  # 无后缀，不变
+        ('SSIS-123', 'SSIS-123.mp4', 'SSIS-123.mp4'),
+        ('MEYD-695', 'MEYD-695 出轨xxx@北野未奈.mp4', 'MEYD-695.mp4'),
+        ('HMN-439', 'HMN-439-C.H265.mp4', 'HMN-439-C.mp4'),
+        ('CEMD-721', 'CEMD-721ch.mp4', 'CEMD-721-C.mp4'),
+        ('HMN-112', 'HMN-112-C マジxxx痴 北野未奈.mp4', 'HMN-112-C.mp4'),
+        ('ABC-123', 'ABC-123 [Uncensored].mp4', 'ABC-123-UC.mp4'),
     ]
 
     print('\n=== 测试文件名生成 ===')
@@ -220,6 +241,10 @@ def test_get_target_path():
         ('MVSD-662', 'MVSD-662-UC.mkv', str(dist_root / 'MVSD-662' / 'MVSD-662-UC.mkv')),
         ('FPRE-123', 'FPRE-123_字幕版.mp4', str(dist_root / 'FPRE-123' / 'FPRE-123-C.mp4')),
         ('SSIS-123', 'SSIS-123.mp4', str(dist_root / 'SSIS-123' / 'SSIS-123.mp4')),
+        ('MEYD-695', 'MEYD-695 出轨xxx@北野未奈.mp4', str(dist_root / 'MEYD-695' / 'MEYD-695.mp4')),
+        ('HMN-439', 'HMN-439-C.H265.mp4', str(dist_root / 'HMN-439' / 'HMN-439-C.mp4')),
+        ('CEMD-721', 'CEMD-721ch.mp4', str(dist_root / 'CEMD-721' / 'CEMD-721-C.mp4')),
+        ('HMN-112', 'HMN-112-C マジxxx痴 北野未奈.mp4', str(dist_root / 'HMN-112' / 'HMN-112-C.mp4')),
     ]
 
     print('\n=== 测试目标路径生成 ===')

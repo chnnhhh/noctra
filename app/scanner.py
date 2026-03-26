@@ -139,6 +139,10 @@ def test_identify():
         ('ABC-123_字幕版.mp4', 'ABC-123'),
         ('ABC-123 [Uncensored].mp4', 'ABC-123'),
         ('SSIS-123字幕版.mp4', 'SSIS-123'),
+        ('MEYD-695 出轨xxx@北野未奈.mp4', 'MEYD-695'),
+        ('HMN-439-C.H265.mp4', 'HMN-439'),
+        ('CEMD-721ch.mp4', 'CEMD-721'),
+        ('HMN-112-C マジxxx痴 北野未奈.mp4', 'HMN-112'),
         ('unknown_file.mp4', None),
         ('123-456.mp4', None),  # 纯数字开头不支持
     ]
