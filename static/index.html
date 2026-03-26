@@ -605,7 +605,7 @@
         /* ========== Table ========== */
         .table-container {
             background: linear-gradient(180deg, #161b22 0%, #11161d 100%);
-            border-radius: 18px;
+            border-radius: 20px;
             overflow-x: auto;
             overflow-y: visible;
             border: 1px solid #30363d;
@@ -620,14 +620,38 @@
 
         table {
             width: 100%;
-            border-collapse: collapse;
+            border-collapse: separate;
+            border-spacing: 0;
             table-layout: fixed;
-            min-width: 1240px;
+            min-width: 1360px;
+        }
+
+        thead tr {
+            position: relative;
+            isolation: isolate;
+        }
+
+        thead tr::before {
+            content: '';
+            position: absolute;
+            left: 10px;
+            right: 10px;
+            top: 0;
+            bottom: 0;
+            border-radius: 18px 18px 0 0;
+            background: linear-gradient(180deg, #0f1722 0%, #0b111a 100%);
+            border: 1px solid rgba(88, 166, 255, 0.12);
+            border-bottom-color: rgba(88, 166, 255, 0.08);
+            box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.04);
+            z-index: 0;
+            pointer-events: none;
         }
 
         th {
-            background: linear-gradient(180deg, #0f1722 0%, #0b111a 100%);
-            padding: 18px 20px;
+            position: relative;
+            z-index: 1;
+            background: transparent;
+            padding: 20px 28px;
             text-align: left;
             font-weight: 600;
             color: #9fb3c8;
@@ -635,7 +659,7 @@
             text-transform: uppercase;
             letter-spacing: 0.08em;
             text-shadow: 0 0 6px rgba(88, 166, 255, 0.15);
-            border-bottom: 1px solid rgba(88, 166, 255, 0.15);
+            border-bottom: 1px solid transparent;
             vertical-align: middle;
             transition: color 0.15s ease, text-shadow 0.15s ease;
         }
@@ -646,48 +670,56 @@
         }
 
         td {
-            padding: 18px 20px;
-            border-bottom: 1px solid rgba(30, 41, 59, 0.7);
+            position: relative;
+            z-index: 1;
+            padding: 22px 28px;
+            border-bottom: 1px solid transparent;
+            background: transparent;
             vertical-align: middle;
             text-align: left;
             color: #c9d1d9;
-            transition: background-color 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+            transition: color 0.15s ease;
         }
 
         th.col-select,
         td.cell-select {
             width: 64px;
             text-align: center;
-            padding-left: 12px;
-            padding-right: 12px;
+            padding-left: 16px;
+            padding-right: 16px;
+            background: transparent !important;
+            border: none;
+            box-shadow: none !important;
         }
 
         th.col-code,
         td.cell-code {
-            width: 170px;
+            width: 186px;
             text-align: center;
         }
 
         th.col-name,
         td.cell-name {
-            width: 320px;
+            width: 396px;
             text-align: left;
         }
 
+        th.col-target,
         td.cell-target {
+            width: 470px;
             text-align: left;
         }
 
         th.col-status,
         td.cell-status {
-            width: 270px;
+            width: 300px;
             text-align: center;
         }
 
         td.cell-status {
             position: relative;
             overflow: visible;
-            padding-right: 24px;
+            padding-right: 30px;
         }
 
         th.col-select {
@@ -698,13 +730,62 @@
             text-align: center;
         }
 
-        tbody tr:hover td {
-            background: linear-gradient(90deg, rgba(88, 166, 255, 0.12) 0%, rgba(88, 166, 255, 0.05) 40%, transparent 100%);
-            box-shadow: inset 0 0 12px rgba(88, 166, 255, 0.1);
+        tbody tr.row {
+            position: relative;
+            isolation: isolate;
+            overflow: hidden;
+            border-radius: 14px;
         }
 
-        tbody tr:hover td:first-child {
-            box-shadow: inset 2px 0 0 #58a6ff;
+        tbody tr.row::before {
+            content: '';
+            position: absolute;
+            left: 14px;
+            right: 14px;
+            top: 4px;
+            bottom: 4px;
+            border-radius: 14px;
+            background: radial-gradient(
+                240px circle at var(--x, 50%) var(--y, 50%),
+                rgba(56, 189, 248, 0.18),
+                rgba(59, 130, 246, 0.10) 40%,
+                rgba(56, 189, 248, 0.04) 65%,
+                transparent 80%
+            );
+            box-shadow:
+                inset 0 0 0 1px rgba(88, 166, 255, 0.08),
+                0 0 16px rgba(59, 130, 246, 0.06);
+            opacity: 0;
+            transform: scale(0.992);
+            transition: opacity 0.15s ease, transform 0.18s ease, box-shadow 0.18s ease;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        tbody tr.row::after {
+            content: '';
+            position: absolute;
+            left: 24px;
+            right: 24px;
+            bottom: 0;
+            border-bottom: 1px solid rgba(30, 41, 59, 0.5);
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        tbody tr.row:last-child::after {
+            border-bottom-color: transparent;
+        }
+
+        tbody tr.row:hover::before,
+        tbody tr.row.row-active::before {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        tbody tr.row:hover::after,
+        tbody tr.row.row-active::after {
+            border-bottom-color: transparent;
         }
 
         /* ========== Badge ========== */
@@ -720,9 +801,9 @@
         }
 
         .badge.unidentified {
-            color: #ff7b72;
-            border: 1px solid #da3633;
-            background: rgba(218, 54, 51, 0.1);
+            color: #ffb3ad;
+            border: 1px solid rgba(255, 123, 114, 0.7);
+            background: rgba(255, 123, 114, 0.12);
         }
 
         .badge.identified {
@@ -750,9 +831,9 @@
         }
 
         .badge.skipped {
-            color: #ff7b72;
-            border: 1px solid #da3633;
-            background: rgba(218, 54, 51, 0.1);
+            color: #ffb3ad;
+            border: 1px solid rgba(255, 123, 114, 0.7);
+            background: rgba(255, 123, 114, 0.12);
         }
 
         .status-action {
@@ -810,17 +891,17 @@
         }
 
         .status-action.status-skipped {
-            --status-border: rgba(218, 54, 51, 0.55);
-            --status-core-bg: rgba(218, 54, 51, 0.18);
-            --status-text: #ff7b72;
-            --status-glow: rgba(255, 123, 114, 0.14);
+            --status-border: rgba(255, 123, 114, 0.62);
+            --status-core-bg: rgba(255, 123, 114, 0.18);
+            --status-text: #ffb3ad;
+            --status-glow: rgba(255, 123, 114, 0.16);
         }
 
         .status-action.status-failed {
-            --status-border: rgba(218, 54, 51, 0.55);
-            --status-core-bg: rgba(218, 54, 51, 0.18);
-            --status-text: #ff7b72;
-            --status-glow: rgba(255, 123, 114, 0.14);
+            --status-border: rgba(255, 123, 114, 0.62);
+            --status-core-bg: rgba(255, 123, 114, 0.18);
+            --status-text: #ffb3ad;
+            --status-glow: rgba(255, 123, 114, 0.16);
         }
 
         .status-trigger {
@@ -1102,18 +1183,19 @@
             font-family: 'JetBrains Mono', 'Fira Code', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
             font-size: 12px;
             color: #7dd3fc;
-            line-height: 1.5;
-            display: block;
+            line-height: 1.4;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
             overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
+            max-height: calc(1.4em * 2);
             opacity: 0.85;
             text-shadow: 0 0 4px rgba(125, 211, 252, 0.2);
             transition: opacity 0.15s ease, color 0.15s ease;
         }
 
         .cell-target:hover .path-cell,
-        tbody tr:hover .path-cell {
+        tbody tr.row:hover .path-cell {
             opacity: 1;
             color: #a5f3fc;
             text-shadow: 0 0 6px rgba(125, 211, 252, 0.25);
@@ -1462,7 +1544,7 @@
                 <div>
                     <div class="table-title" x-text="view === 'scan' ? '扫描结果' : '整理历史'"></div>
                     <div class="table-subtitle" x-text="view === 'scan'
-                        ? '参考管理台的干净表格风格，只强化结果展示，把筛选降为低频辅助操作。'
+                        ? '扫描后会按番号整理到目标目录，未识别文件保留原样，已存在文件不会重复处理。'
                         : '这里只展示已处理的记录，方便快速回看最近整理结果。'"></div>
                 </div>
                 <div class="table-toolbar">
@@ -1506,7 +1588,9 @@
                         </thead>
                         <tbody>
                             <template x-for="file in filteredFiles" :key="file.id">
-                                <tr>
+                                <tr class="row"
+                                    :class="{ 'row-active': activeStatusMenuId === file.id }"
+                                    @mousemove="updateRowGlow($event)">
                                     <td class="cell-select" x-show="view === 'scan'">
                                         <input type="checkbox" class="checkbox"
                                                x-model="selectedFiles[file.id]"
@@ -1729,7 +1813,7 @@
                         'pending': '待处理',
                         'target_exists': '已存在',
                         'processed': '已处理',
-                        'skipped': '跳过',
+                        'skipped': '未识别',
                         'failed': '失败'
                     };
                     return map[status] || status;
@@ -1751,6 +1835,13 @@
                     const actionsPadding = actionCount > 0 ? 12 : 0;
                     const expandedWidth = collapsedWidth + actionsPadding + (actionCount * slotWidth) + (Math.max(actionCount - 1, 0) * gap);
                     return `--status-width-collapsed: ${collapsedWidth}px; --status-width-expanded: ${expandedWidth}px;`;
+                },
+
+                updateRowGlow(event) {
+                    const row = event.currentTarget;
+                    const rect = row.getBoundingClientRect();
+                    row.style.setProperty('--x', `${event.clientX - rect.left}px`);
+                    row.style.setProperty('--y', `${event.clientY - rect.top}px`);
                 },
 
                 getStatusActions(file) {
@@ -2109,7 +2200,7 @@
                     }
 
                     if (this.deleteTargetFile.status === 'skipped') {
-                        return '当前处于跳过状态。请选择处理方式：';
+                        return '当前文件未识别到番号。请选择处理方式：';
                     }
 
                     return '请选择处理方式：';
