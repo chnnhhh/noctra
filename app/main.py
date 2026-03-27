@@ -26,12 +26,22 @@ from app.models import (
     OrganizeResult,
     ScanResult,
     ScrapeLogEntry,
+    ScrapeJobCancelResult,
+    ScrapeJobCreateRequest,
+    ScrapeJobSnapshot,
     ScrapeListItem,
-    ScrapeResponse,
     ScrapeBatchResult,
+    ScrapeResponse,
 )
 from app.scanner import JAVScanner
 from app.organizer import JAVOrganizer
+from app.scrape_jobs import (
+    cancel_scrape_job,
+    create_scrape_job,
+    get_active_scrape_job,
+    get_scrape_job,
+    run_scrape_job,
+)
 from app.scraper import ScraperScheduler
 from app.statuses import (
     SELECTABLE_SCAN_STATUSES,
@@ -265,6 +275,33 @@ async def get_file_by_id(file_id: int) -> Optional[dict]:
         )
         row = await cursor.fetchone()
         return dict(row) if row else None
+
+
+async def get_scrape_candidates_for_job(file_ids: list[int]) -> list[dict]:
+    """Return organized files that are eligible for a scrape job."""
+    if not file_ids:
+        return []
+
+    allowed_scrape_statuses = ("pending", "failed") if len(file_ids) == 1 else ("pending",)
+    placeholders = ",".join("?" * len(file_ids))
+    status_placeholders = ",".join("?" * len(PROCESSED_LIKE_STATUSES))
+    scrape_placeholders = ",".join("?" * len(allowed_scrape_statuses))
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            f"""
+            SELECT *
+            FROM files
+            WHERE id IN ({placeholders})
+              AND status IN ({status_placeholders})
+              AND COALESCE(scrape_status, 'pending') IN ({scrape_placeholders})
+            ORDER BY id ASC
+            """,
+            (*file_ids, *PROCESSED_LIKE_STATUSES, *allowed_scrape_statuses),
+        )
+        rows = await cursor.fetchall()
+    return [dict(row) for row in rows]
 
 
 async def delete_file_record(file_id: int):
@@ -959,7 +996,43 @@ async def get_scrape_list(
         'failed': int(stats_row['failed'] or 0) if stats_row else 0,
     }
 
-    return {"total": total, "items": items, "stats": stats}
+    active_job = await get_active_scrape_job()
+    return {"total": total, "items": items, "stats": stats, "active_job": active_job}
+
+
+@app.post("/api/scrape/jobs", response_model=ScrapeJobSnapshot)
+async def create_scrape_job_route(request: ScrapeJobCreateRequest):
+    active_job = await get_active_scrape_job()
+    if active_job:
+        raise HTTPException(status_code=409, detail="已有刮削任务正在运行，请等待当前任务完成")
+
+    rows = await get_scrape_candidates_for_job(request.file_ids)
+    if not rows:
+        raise HTTPException(status_code=400, detail="没有可刮削的文件")
+
+    job = await create_scrape_job(rows)
+    asyncio.create_task(run_scrape_job(job["id"]))
+    return job
+
+
+@app.get("/api/scrape/jobs/{job_id}", response_model=ScrapeJobSnapshot)
+async def get_scrape_job_route(job_id: str):
+    job = await get_scrape_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="刮削任务不存在")
+    return job
+
+
+@app.post("/api/scrape/jobs/{job_id}/cancel", response_model=ScrapeJobCancelResult)
+async def cancel_scrape_job_route(job_id: str):
+    job = await cancel_scrape_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="刮削任务不存在")
+    return {
+        "id": job_id,
+        "status": "cancel_requested",
+        "message": "已请求取消当前刮削任务",
+    }
 
 
 @app.post("/api/scrape/batch", response_model=ScrapeBatchResult)

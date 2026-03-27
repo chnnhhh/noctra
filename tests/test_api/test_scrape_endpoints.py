@@ -303,6 +303,53 @@ def test_get_scrape_list_default_params(mock_connect, sample_rows):
     assert len(data['items']) == 4
 
 
+@patch('app.main.aiosqlite.connect')
+@patch('app.main.get_active_scrape_job', new_callable=AsyncMock)
+def test_get_scrape_list_returns_failure_details_and_active_job(mock_active_job, mock_connect, sample_rows):
+    """GET /api/scrape should expose failure details and active scrape job state."""
+    from app.main import app
+
+    enriched_rows = [
+        {
+            **sample_rows[0],
+            'original_path': '/source/ABC-001.mp4',
+            'status': 'organized',
+            'scrape_stage': 'querying_source',
+            'scrape_source': 'javdb',
+            'scrape_error': 'timeout',
+            'scrape_error_user_message': '连接 JavDB 失败，请稍后重试',
+            'scrape_logs': '[{"at":"2026-03-27T10:00:00","level":"info","stage":"querying_source","source":"javdb","message":"正在查询 JavDB"}]',
+            'scrape_started_at': '2026-03-27T10:00:00',
+            'scrape_finished_at': '2026-03-27T10:00:10',
+        }
+    ]
+
+    mock_db = AsyncMock()
+    mock_connect.return_value.__aenter__.return_value = mock_db
+
+    _mock_scrape_list_queries(
+        mock_db,
+        total=1,
+        rows=enriched_rows,
+        stats_rows=_build_stats_row(enriched_rows),
+    )
+    mock_active_job.return_value = {"id": "job123", "status": "running"}
+
+    client = TestClient(app, raise_server_exceptions=False)
+    response = client.get('/api/scrape')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["active_job"]["id"] == "job123"
+    assert payload["items"][0]["scrape_stage"] == "querying_source"
+    assert payload["items"][0]["scrape_source"] == "javdb"
+    assert payload["items"][0]["scrape_started_at"] == "2026-03-27T10:00:00"
+    assert payload["items"][0]["scrape_finished_at"] == "2026-03-27T10:00:10"
+    assert payload["items"][0]["scrape_error"] == "timeout"
+    assert payload["items"][0]["scrape_error_user_message"] == '连接 JavDB 失败，请稍后重试'
+    assert payload["items"][0]["scrape_logs"][0]["message"] == '正在查询 JavDB'
+
+
 def test_get_scrape_list_invalid_filter():
     """GET /api/scrape with invalid filter returns 400."""
     from app.main import app
