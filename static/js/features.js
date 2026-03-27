@@ -70,16 +70,9 @@
             },
 
             resetSortForView(viewName = this.view) {
-                if (viewName === 'history') {
-                    this.sortField = 'time';
-                    this.sortDirection = 'desc';
-                    return;
-                }
-
                 if (viewName === 'scrape') {
                     return;
                 }
-
                 this.sortField = 'default';
                 this.sortDirection = 'asc';
             },
@@ -209,7 +202,6 @@
                     this.distDir = '/dist';
                     this.currentFilter = hiddenAfterProcessed.includes(preservedFilter) ? 'all' : preservedFilter;
                     this.currentPage = this.currentFilter === preservedFilter ? preservedPage : 1;
-                    this.historyLoaded = false;
                 } catch (error) {
                     this.error = '刷新扫描结果失败：' + error.message;
                 }
@@ -271,7 +263,7 @@
             },
 
             switchVisibleFiles() {
-                this.files = this.view === 'history' ? this.historyFilesCache : this.scanFilesCache;
+                this.files = this.scanFilesCache;
                 this.selectedFiles = {};
                 this.currentPage = 1;
                 this.closeStatusMenu();
@@ -280,29 +272,27 @@
             async switchView(viewName) {
                 this.view = viewName;
                 this.resetSortForView(viewName);
-
                 this.currentFilter = 'all';
                 this.error = null;
                 this.success = null;
 
                 if (viewName === 'scrape') {
-                    if (typeof ScrapePage !== 'undefined') {
-                        ScrapePage.init();
-                    }
-                    return;
-                }
-
-                if (viewName === 'scan') {
-                    if (!this.scanLoaded) {
-                        await this.scanFiles();
+                    if (!this.scrapeLoaded) {
+                        await this.loadScrapeFiles();
                         return;
                     }
-                } else if (!this.historyLoaded) {
-                    await this.loadHistory();
                     return;
                 }
 
-                this.switchVisibleFiles();
+                if (!this.scanLoaded) {
+                    await this.scanFiles();
+                    return;
+                }
+
+                this.files = this.scanFilesCache;
+                this.selectedFiles = {};
+                this.currentPage = 1;
+                this.closeStatusMenu();
             },
 
             async scanFiles(forceRescan = false) {
@@ -336,31 +326,128 @@
                 }
             },
 
-            async loadHistory() {
+            async loadScrapeFiles() {
                 this.loading = true;
-                this.loadingText = '正在加载历史记录...';
+                this.loadingText = '正在加载刮削列表...';
                 this.error = null;
                 this.success = null;
-                this.currentFilter = 'all';
 
                 try {
-                    const response = await fetch('/api/history');
+                    const response = await fetch('/api/scrape');
                     const data = await response.json();
 
-                    this.updateStats(data);
-                    this.historyFilesCache = data.files.filter(file => file.status === 'processed');
-                    this.files = this.historyFilesCache;
-                    this.historyLoaded = true;
-                    this.selectedFiles = {};
-                    this.confirmFiles = [];
-                    this.currentPage = 1;
+                    if (!response.ok) {
+                        throw new Error(data.detail || '加载刮削列表失败');
+                    }
+
+                    this.scrapeFilesCache = (data.items || []).map(item => ({
+                        id: item.file_id,
+                        identified_code: item.code,
+                        target_path: item.target_path || '',
+                        scrape_status: item.scrape_status || 'pending',
+                        last_scrape_at: item.last_scrape_at || null,
+                        original_path: item.original_path || '',
+                        status: item.status || 'processed'
+                    }));
+                    this.scrapeLoaded = true;
+                    this.scrapeSelectedFiles = {};
+                    this.scrapePage = 1;
                     this.closeStatusMenu();
-                    this.view = 'history';
                 } catch (e) {
-                    this.error = '加载历史失败: ' + e.message;
+                    this.error = '加载刮削列表失败: ' + e.message;
                 } finally {
                     this.loading = false;
                 }
+            },
+
+            setScrapeFilter(filter) {
+                this.scrapeFilter = filter;
+                this.scrapePage = 1;
+                this.closeStatusMenu();
+            },
+
+            setScrapeSortField(field) {
+                this.scrapeSortField = field;
+                this.scrapePage = 1;
+                this.closeStatusMenu();
+            },
+
+            toggleScrapeSortDirection() {
+                this.scrapeSortDirection = this.scrapeSortDirection === 'desc' ? 'asc' : 'desc';
+                this.scrapePage = 1;
+                this.closeStatusMenu();
+            },
+
+            setScrapeFileSelected(file, checked) {
+                if (!this.canSelectScrapeFile(file)) return;
+                const next = { ...this.scrapeSelectedFiles };
+                if (checked) { next[file.id] = true; } else { delete next[file.id]; }
+                this.scrapeSelectedFiles = next;
+            },
+
+            toggleScrapeFileSelection(file) {
+                if (!this.canSelectScrapeFile(file)) return;
+                this.setScrapeFileSelected(file, !this.scrapeSelectedFiles[file.id]);
+            },
+
+            toggleScrapeCurrentPageSelection(forceChecked = null) {
+                const shouldSelect = forceChecked === null ? this.scrapePageSelectionState !== 'all' : forceChecked;
+                const next = { ...this.scrapeSelectedFiles };
+                this.scrapeCurrentPageSelectableFiles.forEach(file => {
+                    if (shouldSelect) { next[file.id] = true; } else { delete next[file.id]; }
+                });
+                this.scrapeSelectedFiles = next;
+            },
+
+            clearScrapeSelection() {
+                this.scrapeSelectedFiles = {};
+            },
+
+            async handleScrapeAction(file) {
+                this.closeStatusMenu();
+                try {
+                    const response = await fetch(`/api/scrape/${file.id}`, { method: 'POST' });
+                    const result = await response.json();
+                    if (!response.ok) {
+                        throw new Error(result.detail || '刮削失败');
+                    }
+                    this.success = `${file.identified_code} 刮削成功`;
+                    await this.loadScrapeFiles();
+                } catch (e) {
+                    this.error = '刮削失败: ' + e.message;
+                }
+            },
+
+            async confirmBatchScrape() {
+                const entries = this.scrapeSelectedEntries.filter(file => this.canSelectScrapeFile(file));
+                if (entries.length === 0) return;
+                this.scrapeSelectedFiles = {};
+                let succeeded = 0;
+                let failed = 0;
+
+                for (const file of entries) {
+                    try {
+                        const response = await fetch(`/api/scrape/${file.id}`, { method: 'POST' });
+                        const result = await response.json();
+                        if (!response.ok) throw new Error(result.detail || '刮削失败');
+                        succeeded++;
+                    } catch (e) {
+                        failed++;
+                    }
+                }
+
+                if (failed === 0) {
+                    this.success = `批量刮削完成：${succeeded} 项成功`;
+                } else {
+                    this.success = `批量刮削完成：${succeeded} 项成功，${failed} 项失败`;
+                }
+                await this.loadScrapeFiles();
+            },
+
+            goToScrapePage(page) {
+                const nextPage = Math.max(1, Math.min(this.scrapeTotalPages, page));
+                this.scrapePage = nextPage;
+                this.closeStatusMenu();
             },
 
             confirmOrganize() {
@@ -487,7 +574,6 @@
                     }
 
                     this.success = data.message;
-                    this.historyLoaded = false;
                     await this.scanFiles();
                 } catch (e) {
                     this.error = '删除失败: ' + e.message;
