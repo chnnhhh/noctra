@@ -48,29 +48,52 @@ class JavDBCrawler(BaseCrawler):
         Returns:
             ScrapingMetadata if successful, None otherwise
         """
+        self._reset_diagnostics()
         code = code.strip().upper()
 
         # Step 1 - search for the code
         search_url = f"{self.BASE_URL}/search?q={code}&locale=zh"
-        search_html = await self._request(search_url)
+        search_html = await self._request_with_context(search_url, context="搜索页")
         if not search_html:
+            if not self.last_error:
+                self._set_error("JavDB 搜索页请求失败")
             return None
 
         detail_url = self._find_first_detail_url(search_html, code)
         if not detail_url:
+            self._set_error(f"JavDB 搜索结果中没有找到匹配番号 {code} 的详情页")
             return None
+        detail_path = detail_url.replace(self.BASE_URL, "", 1) or detail_url
+        self._record_diagnostic(f"JavDB 搜索命中详情页：{detail_path}")
 
         # Step 2 - fetch the detail page
-        detail_html = await self._request(detail_url)
+        detail_html = await self._request_with_context(detail_url, context="详情页")
         if not detail_html:
+            if not self.last_error:
+                self._set_error("JavDB 详情页请求失败")
             return None
+        self._record_diagnostic("JavDB 详情页请求成功，正在解析元数据")
 
         # Step 3 - parse
-        return self._parse_detail(detail_html, code)
+        metadata = self._parse_detail(detail_html, code)
+        if metadata is None:
+            self._set_error("JavDB 详情页已返回，但元数据解析失败")
+            return None
+
+        self._record_diagnostic("JavDB 元数据解析成功")
+        return metadata
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    async def _request_with_context(self, url: str, *, context: str) -> Optional[str]:
+        try:
+            return await self._request(url, context=context)
+        except TypeError as exc:
+            if "unexpected keyword argument 'context'" not in str(exc):
+                raise
+            return await self._request(url)
 
     def _find_first_detail_url(self, html: str, code: str) -> Optional[str]:
         """Find the first detail URL from a JavDB search results page."""

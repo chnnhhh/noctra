@@ -21,7 +21,7 @@ SCRAPE_SOURCE_JAVDB = "javdb"
 
 
 def _utcnow_iso() -> str:
-    return datetime.utcnow().isoformat()
+    return datetime.now().isoformat()
 
 
 def _source_label(source: str | None) -> str:
@@ -32,11 +32,15 @@ def _source_label(source: str | None) -> str:
     return mapping.get(source or "", source or "")
 
 
-def _map_failure(stage: str, source: str | None, technical_error: str | None) -> str:
+def _map_failure(stage: str | None, source: str | None, technical_error: str | None) -> str:
     source_label = _source_label(source)
     text = (technical_error or "").lower()
 
     if stage == "querying_source":
+        if "cloudflare" in text or "just a moment" in text or "http 403" in text:
+            return f"{source_label} 当前拦截了程序化访问，请稍后重试"
+        if "没有找到匹配番号" in (technical_error or ""):
+            return f"在 {source_label} 没有找到这个番号的元数据"
         if "not found" in text or "failed to crawl metadata" in text:
             return f"在 {source_label} 没有找到这个番号的元数据"
         return f"连接 {source_label} 失败，请稍后重试"
@@ -68,7 +72,7 @@ class ScraperScheduler:
             ScrapeResponse with success status, code, or error message.
         """
         logs: list[dict] = []
-        current_stage = "validating"
+        current_stage: str | None = None
         current_source = None
 
         async def emit(
@@ -107,6 +111,18 @@ class ScraperScheduler:
                     scrape_stage=stage,
                     scrape_source=event_source,
                     scrape_logs=json.dumps(logs, ensure_ascii=False),
+                )
+
+        async def emit_crawler_diagnostics(crawler, *, stage: str, source: str) -> None:
+            diagnostics = getattr(crawler, "diagnostics", None)
+            if not isinstance(diagnostics, list):
+                diagnostics = []
+            for item in diagnostics:
+                await emit(
+                    stage,
+                    item.get("message", ""),
+                    source=source,
+                    level=item.get("level", "info"),
                 )
 
         try:
@@ -161,9 +177,19 @@ class ScraperScheduler:
             )
             crawler = JavDBCrawler()
             metadata = await crawler.crawl(code)
+            await emit_crawler_diagnostics(
+                crawler,
+                stage="querying_source",
+                source=SCRAPE_SOURCE_JAVDB,
+            )
 
             if metadata is None:
-                raise ValueError(f"Failed to crawl metadata for code '{code}'")
+                crawler_error = getattr(crawler, "last_error", None)
+                if not isinstance(crawler_error, str) or not crawler_error.strip():
+                    crawler_error = None
+                raise ValueError(
+                    crawler_error or f"Failed to crawl metadata for code '{code}'"
+                )
 
             await emit(
                 "parsing_metadata",

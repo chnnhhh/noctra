@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.scraper import ScraperScheduler
+from app.scraper import ScraperScheduler, _utcnow_iso
 from app.scrapers.metadata import ScrapingMetadata
 
 
@@ -164,6 +164,18 @@ class TestScrapeSingle:
         assert result.success is False
         assert "not found" in result.error
         assert "999" in result.error
+
+    @pytest.mark.asyncio
+    async def test_database_error_before_validation_maps_to_unknown_error(self):
+        """Database failures before the first stage should not masquerade as file-info errors."""
+        scheduler = ScraperScheduler()
+        scheduler._get_file = AsyncMock(side_effect=RuntimeError("database is locked"))
+
+        result = await scheduler.scrape_single(1)
+
+        assert result.success is False
+        assert result.error == "database is locked"
+        assert result.user_message == "刮削过程中发生未知错误"
 
     @pytest.mark.asyncio
     async def test_wrong_status(self):
@@ -452,6 +464,21 @@ class TestScrapeSingle:
         expected_dir = Path("/dist/SSIS-789")
         assert actual_nfo_path == expected_dir / f"{code}.nfo"
         assert actual_poster_path == expected_dir / f"{code}-poster.jpg"
+
+
+def test_scrape_timestamps_match_app_local_clock():
+    """Scrape timestamps should stay consistent with the app's local naive ISO format."""
+    class FakeDatetime:
+        @staticmethod
+        def now():
+            return datetime(2026, 3, 27, 12, 0, 0)
+
+        @staticmethod
+        def utcnow():
+            return datetime(2026, 3, 27, 4, 0, 0)
+
+    with patch("app.scraper.datetime", FakeDatetime):
+        assert _utcnow_iso() == "2026-03-27T12:00:00"
 
 
 if __name__ == "__main__":
