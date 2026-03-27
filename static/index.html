@@ -412,7 +412,7 @@
                     <div class="filter filter-subtle toolbar-filter">
                         <span class="filter-label">筛选</span>
                         <button class="filter-button" :class="{ 'active': scrapeFilter === 'all' }" @click="setScrapeFilter('all')">全部</button>
-                        <button class="filter-button" :class="{ 'active': scrapeFilter === 'pending' }" @click="setScrapeFilter('pending')">待刮削</button>
+                        <button class="filter-button" :class="{ 'active': scrapeFilter === 'pending' }" @click="setScrapeFilter('pending')">已整理</button>
                         <button class="filter-button" :class="{ 'active': scrapeFilter === 'success' }" @click="setScrapeFilter('success')">已刮削</button>
                         <button class="filter-button" :class="{ 'active': scrapeFilter === 'failed' }" @click="setScrapeFilter('failed')">刮削失败</button>
                     </div>

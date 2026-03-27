@@ -106,7 +106,7 @@
             getScrapeFilterLabel(filter) {
                 const map = {
                     all: '全部',
-                    pending: '待刮削',
+                    pending: '已整理',
                     success: '已刮削',
                     failed: '刮削失败'
                 };

@@ -245,7 +245,7 @@
                 if (this.batchJob.failed > 0) {
                     return '批量整理已结束，失败项仍保留在列表中，方便你继续筛选和处理。';
                 }
-                return '本批次已结束，整理结果已同步到列表和历史记录中。';
+                return '本批次已结束，整理结果已同步到列表中。';
             },
 
             get confirmCodes() {
