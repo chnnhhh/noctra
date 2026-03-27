@@ -1316,6 +1316,34 @@
             color: #dbe5ef;
         }
 
+        .batch-log-list,
+        .modal-log-list {
+            display: grid;
+            gap: 8px;
+            margin-top: 12px;
+            padding: 12px;
+            border-radius: 12px;
+            background: rgba(15, 23, 42, 0.55);
+            border: 1px solid rgba(148, 163, 184, 0.18);
+        }
+
+        .batch-log-line,
+        .modal-log-line {
+            font-size: 13px;
+            line-height: 1.5;
+            color: #dbe7ff;
+            word-break: break-word;
+        }
+
+        .batch-log-time {
+            color: #93a4c3;
+            margin-right: 8px;
+        }
+
+        .batch-log-message {
+            color: #e8eefc;
+        }
+
         .mini-pager {
             gap: 10px;
         }
@@ -2408,6 +2436,10 @@
             font-family: 'JetBrains Mono', 'Fira Code', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
             color: #8b949e;
             word-break: break-all;
+        }
+
+        .modal-info-value.modal-log-list {
+            word-break: break-word;
         }
 
         .modal-code-list {

@@ -219,6 +219,23 @@
 
                     <div class="batch-detail-panel">
                         <div class="batch-note" x-text="scrapeBatchInfoLine"></div>
+                        <div class="batch-note">
+                            当前文件：<strong x-text="scrapeBatchJob?.current_file_code || '-'"></strong>
+                        </div>
+                        <div class="batch-note">
+                            当前阶段：<strong x-text="getScrapeStageLabel(scrapeBatchJob?.current_stage, scrapeBatchJob?.current_source)"></strong>
+                        </div>
+                        <div class="batch-note">
+                            当前数据源：<strong x-text="getScrapeSourceLabel(scrapeBatchJob?.current_source)"></strong>
+                        </div>
+                        <div class="batch-log-list" x-show="(scrapeBatchJob?.recent_logs || []).length > 0">
+                            <template x-for="entry in scrapeBatchJob?.recent_logs || []" :key="`${entry.at}-${entry.message}`">
+                                <div class="batch-log-line">
+                                    <span class="batch-log-time" x-text="formatProcessedTime(entry.at)"></span>
+                                    <span class="batch-log-message" x-text="entry.message"></span>
+                                </div>
+                            </template>
+                        </div>
                         <div class="batch-note" x-show="scrapeBatchJob?.failed > 0">
                             当前批次包含 <strong x-text="scrapeBatchJob?.failed"></strong> 个失败项，表格中的对应行会保留失败状态，点击失败状态可查看详细错误信息。
                         </div>
@@ -721,6 +738,22 @@
             <div class="modal-info">
                 <div class="modal-info-label">失败原因：</div>
                 <div class="modal-info-value" x-text="getScrapeErrorUserMessage(scrapeErrorFile)"></div>
+            </div>
+            <div class="modal-info">
+                <div class="modal-info-label">失败阶段：</div>
+                <div class="modal-info-value" x-text="getScrapeStageLabel(scrapeErrorFile?.scrape_stage, scrapeErrorFile?.scrape_source)"></div>
+            </div>
+            <div class="modal-info">
+                <div class="modal-info-label">数据源：</div>
+                <div class="modal-info-value" x-text="getScrapeSourceLabel(scrapeErrorFile?.scrape_source)"></div>
+            </div>
+            <div class="modal-info" x-show="(scrapeErrorFile?.scrape_logs || []).length > 0">
+                <div class="modal-info-label">最近日志：</div>
+                <div class="modal-info-value modal-log-list">
+                    <template x-for="entry in scrapeErrorFile?.scrape_logs || []" :key="`${entry.at}-${entry.message}`">
+                        <div class="modal-log-line" x-text="entry.message"></div>
+                    </template>
+                </div>
             </div>
             <div class="modal-info" x-show="scrapeErrorFile?.scrape_error">
                 <div class="modal-info-label">技术详情：</div>
