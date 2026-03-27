@@ -498,7 +498,9 @@
                     scrape_error_user_message: liveItem.user_message || file.scrape_error_user_message || null,
                     scrape_logs: (file.scrape_logs && file.scrape_logs.length > 0)
                         ? file.scrape_logs
-                        : (this.scrapeBatchJob?.recent_logs || [])
+                        : ((this.scrapeBatchJob?.current_file_id === file.id)
+                            ? (this.scrapeBatchJob?.recent_logs || [])
+                            : [])
                 } : file;
                 this.showScrapeErrorModal = true;
             },
