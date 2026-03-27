@@ -1011,6 +1011,8 @@ async def create_scrape_job_route(request: ScrapeJobCreateRequest):
         raise HTTPException(status_code=400, detail="没有可刮削的文件")
 
     job = await create_scrape_job(rows)
+    if not job:
+        raise HTTPException(status_code=409, detail="已有刮削任务正在运行，请等待当前任务完成")
     asyncio.create_task(run_scrape_job(job["id"]))
     return job
 
@@ -1028,6 +1030,12 @@ async def cancel_scrape_job_route(job_id: str):
     job = await cancel_scrape_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="刮削任务不存在")
+    if job["status"] not in {"queued", "running"}:
+        return {
+            "id": job_id,
+            "status": job["status"],
+            "message": "刮削任务当前不可取消",
+        }
     return {
         "id": job_id,
         "status": "cancel_requested",

@@ -41,45 +41,48 @@ async def get_scrape_job(job_id: str) -> Optional[dict]:
         return _clone_scrape_job(job) if job else None
 
 
-async def create_scrape_job(rows: list[dict]) -> dict:
-    job_id = uuid.uuid4().hex[:12]
-    now = _now_iso()
-    items = [
-        {
-            "id": row["id"],
-            "code": row.get("identified_code"),
-            "target_path": row.get("target_path"),
-            "status": "pending",
-            "stage": None,
-            "source": None,
-            "user_message": None,
-            "technical_error": None,
+async def create_scrape_job(rows: list[dict]) -> Optional[dict]:
+    async with scrape_jobs_lock:
+        if any(job.get("status") in {"queued", "running"} for job in scrape_jobs.values()):
+            return None
+
+        job_id = uuid.uuid4().hex[:12]
+        now = _now_iso()
+        items = [
+            {
+                "id": row["id"],
+                "code": row.get("identified_code"),
+                "target_path": row.get("target_path"),
+                "status": "pending",
+                "stage": None,
+                "source": None,
+                "user_message": None,
+                "technical_error": None,
+                "started_at": None,
+                "finished_at": None,
+            }
+            for row in rows
+        ]
+        job = {
+            "id": job_id,
+            "status": "queued",
+            "total": len(items),
+            "processed": 0,
+            "succeeded": 0,
+            "failed": 0,
+            "created_at": now,
             "started_at": None,
             "finished_at": None,
+            "cancel_requested": False,
+            "current_file_id": None,
+            "current_file_code": None,
+            "current_stage": None,
+            "current_source": None,
+            "recent_logs": [],
+            "items": items,
         }
-        for row in rows
-    ]
-    job = {
-        "id": job_id,
-        "status": "queued",
-        "total": len(items),
-        "processed": 0,
-        "succeeded": 0,
-        "failed": 0,
-        "created_at": now,
-        "started_at": None,
-        "finished_at": None,
-        "cancel_requested": False,
-        "current_file_id": None,
-        "current_file_code": None,
-        "current_stage": None,
-        "current_source": None,
-        "recent_logs": [],
-        "items": items,
-    }
-    async with scrape_jobs_lock:
         scrape_jobs[job_id] = job
-    return _clone_scrape_job(job)
+        return _clone_scrape_job(job)
 
 
 async def cancel_scrape_job(job_id: str) -> Optional[dict]:
@@ -87,6 +90,8 @@ async def cancel_scrape_job(job_id: str) -> Optional[dict]:
         job = scrape_jobs.get(job_id)
         if not job:
             return None
+        if job.get("status") not in {"queued", "running"}:
+            return _clone_scrape_job(job)
         job["cancel_requested"] = True
         return _clone_scrape_job(job)
 

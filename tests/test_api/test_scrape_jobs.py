@@ -3,6 +3,16 @@
 from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
+import pytest
+
+from app.scrape_jobs import cancel_scrape_job, create_scrape_job, scrape_jobs
+
+
+@pytest.fixture(autouse=True)
+def clear_scrape_jobs_registry():
+    scrape_jobs.clear()
+    yield
+    scrape_jobs.clear()
 
 
 def _scrape_job_snapshot(**overrides):
@@ -38,6 +48,14 @@ def _scrape_job_snapshot(**overrides):
     }
     job.update(overrides)
     return job
+
+
+def _scrape_row(file_id=1, code="ALDN-480"):
+    return {
+        "id": file_id,
+        "identified_code": code,
+        "target_path": f"/dist/{code}/{code}.mp4",
+    }
 
 
 @patch("app.main.create_scrape_job", new_callable=AsyncMock)
@@ -180,3 +198,43 @@ def test_cancel_scrape_job_returns_404_when_missing(mock_cancel_scrape_job):
     assert response.status_code == 404
     assert response.json()["detail"] == "刮削任务不存在"
     mock_cancel_scrape_job.assert_awaited_once_with("job-missing")
+
+
+@patch("app.main.cancel_scrape_job", new_callable=AsyncMock)
+def test_cancel_scrape_job_returns_terminal_status_when_job_is_done(mock_cancel_scrape_job):
+    from app.main import app
+
+    mock_cancel_scrape_job.return_value = _scrape_job_snapshot(status="completed")
+
+    client = TestClient(app, raise_server_exceptions=False)
+    response = client.post("/api/scrape/jobs/job123/cancel")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": "job123",
+        "status": "completed",
+        "message": "刮削任务当前不可取消",
+    }
+    mock_cancel_scrape_job.assert_awaited_once_with("job123")
+
+
+@pytest.mark.asyncio
+async def test_create_scrape_job_rejects_second_active_job():
+    first = await create_scrape_job([_scrape_row()])
+    second = await create_scrape_job([_scrape_row(file_id=2, code="BBAN-347")])
+
+    assert first is not None
+    assert second is None
+
+
+@pytest.mark.asyncio
+async def test_cancel_scrape_job_keeps_terminal_job_unchanged():
+    job = await create_scrape_job([_scrape_row()])
+    assert job is not None
+
+    scrape_jobs[job["id"]]["status"] = "completed"
+    cancelled = await cancel_scrape_job(job["id"])
+
+    assert cancelled is not None
+    assert cancelled["status"] == "completed"
+    assert cancelled["cancel_requested"] is False
