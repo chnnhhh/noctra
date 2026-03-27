@@ -619,9 +619,19 @@
                                                  :style="getScrapeStatusRailStyle(file)"
                                                  @mouseenter="showStatusMenu(file.id)"
                                                  @mouseleave="scheduleStatusMenuHide(file.id)">
-                                                <span class="status-trigger" :aria-label="getScrapeStatusText(file)">
-                                                    <span class="status-label" x-text="getScrapeStatusText(file)"></span>
-                                                </span>
+                                                <template x-if="canOpenScrapeErrorDetails(file)">
+                                                    <button type="button"
+                                                            class="status-trigger clickable"
+                                                            :aria-label="`${getScrapeStatusText(file)}，点击查看失败详情`"
+                                                            @click="showScrapeErrorDetails(file)">
+                                                        <span class="status-label" x-text="getScrapeStatusText(file)"></span>
+                                                    </button>
+                                                </template>
+                                                <template x-if="!canOpenScrapeErrorDetails(file)">
+                                                    <span class="status-trigger" :aria-label="getScrapeStatusText(file)">
+                                                        <span class="status-label" x-text="getScrapeStatusText(file)"></span>
+                                                    </span>
+                                                </template>
                                                 <div class="status-actions">
                                                     <template x-for="action in getScrapeStatusActions(file)" :key="action.key">
                                                         <button :class="['icon-action', `action-${action.key}`]"

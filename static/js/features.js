@@ -495,7 +495,10 @@
                     scrape_stage: liveItem.stage || file.scrape_stage || null,
                     scrape_source: liveItem.source || file.scrape_source || null,
                     scrape_error: liveItem.technical_error || file.scrape_error || null,
-                    scrape_error_user_message: liveItem.user_message || file.scrape_error_user_message || null
+                    scrape_error_user_message: liveItem.user_message || file.scrape_error_user_message || null,
+                    scrape_logs: (file.scrape_logs && file.scrape_logs.length > 0)
+                        ? file.scrape_logs
+                        : (this.scrapeBatchJob?.recent_logs || [])
                 } : file;
                 this.showScrapeErrorModal = true;
             },

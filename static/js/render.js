@@ -132,6 +132,11 @@
                     !this.isScrapeBatchItemBlocking(file);
             },
 
+            canOpenScrapeErrorDetails(file) {
+                const batchItem = this.getScrapeBatchItem(file);
+                return (batchItem && batchItem.status === 'failed') || file.scrape_status === 'failed';
+            },
+
             getScrapeStatusActions(file) {
                 const batchItem = this.getScrapeBatchItem(file);
                 if (batchItem) {
