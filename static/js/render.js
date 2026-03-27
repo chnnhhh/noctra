@@ -15,10 +15,11 @@
 
             getStatusText(status) {
                 const map = {
-                    'pending': '待处理',
+                    'pending': '待整理',
                     'duplicate': '重复',
                     'target_exists': '已存在',
-                    'processed': '已处理',
+                    'processed': '已整理',
+                    'scraped': '已刮削',
                     'skipped': '未识别',
                     'failed': '失败'
                 };
@@ -38,9 +39,9 @@
 
             getBatchItemStatusText(status) {
                 const map = {
-                    pending: '待处理',
+                    pending: '待整理',
                     processing: '处理中',
-                    success: '已处理',
+                    success: '已整理',
                     skipped: '已跳过',
                     failed: '失败'
                 };
@@ -64,6 +65,52 @@
                     return this.getBatchItemStatusText(batchItem.status);
                 }
                 return this.getStatusText(file.status);
+            },
+
+            getScrapeStatusText(file) {
+                const map = {
+                    'pending': '待刮削',
+                    'success': '已刮削',
+                    'failed': '刮削失败'
+                };
+                return map[file.scrape_status] || file.scrape_status || '-';
+            },
+
+            getScrapeBadgeClass(file) {
+                const map = {
+                    'pending': 'pending',
+                    'success': 'processed',
+                    'failed': 'failed'
+                };
+                return map[file.scrape_status] || 'pending';
+            },
+
+            canSelectScrapeFile(file) {
+                return this.view === 'scrape' &&
+                    file.scrape_status === 'pending';
+            },
+
+            getScrapeStatusActions(file) {
+                if (file.scrape_status === 'pending' || file.scrape_status === 'failed') {
+                    return [
+                        { key: 'scrape', label: '刮削', icon: 'sparkles' }
+                    ];
+                }
+                return [];
+            },
+
+            hasScrapeStatusAction(file) {
+                return this.view === 'scrape' && this.getScrapeStatusActions(file).length > 0;
+            },
+
+            getScrapeFilterLabel(filter) {
+                const map = {
+                    all: '全部',
+                    pending: '待刮削',
+                    success: '已刮削',
+                    failed: '刮削失败'
+                };
+                return map[filter] || filter;
             },
 
             isBatchItemBlocking(file) {
@@ -111,7 +158,7 @@
                 if (this.canSelectFile(file)) {
                     return '';
                 }
-                return '仅待处理项可加入整理集合';
+                return '仅待整理项可加入整理集合';
             },
 
             getStatusSortWeight(file) {
@@ -174,9 +221,6 @@
                 const diff = (this.getStatusSortWeight(a) - this.getStatusSortWeight(b)) * multiplier;
                 if (diff !== 0) {
                     return diff;
-                }
-                if (this.view === 'history') {
-                    return this.compareTimeSort(a, b, 'desc');
                 }
                 return this.compareCodeSort(a, b, 1);
             },
@@ -369,6 +413,13 @@
                             <path d="M6 6l12 12"/>
                             <path d="M18 6L6 18"/>
                         </svg>
+                    `,
+                    sparkles: `
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 2l1.1 3.4L16.5 7l-3.4 1.6L12 12l-1.1-3.4L7.5 7l3.4-1.6z"/>
+                            <path d="M5 14l.6 1.8L7.5 17l-1.9.7L5 19.5l-.6-1.8L2.5 17l1.9-.7z"/>
+                            <path d="M17 13l.7 2.2L20 16.5l-2.3.8L17 19.5l-.7-2.2L14.5 16.5l2.3-.8z"/>
+                        </svg>
                     `
                 };
                 return icons[name] || '';
@@ -379,17 +430,16 @@
                     all: '全部',
                     identified: '已识别',
                     unidentified: '未识别',
-                    pending: '待处理',
+                    pending: '待整理',
                     duplicate: '重复',
                     target_exists: '已存在',
-                    processed: '已处理'
+                    processed: '已整理'
                 };
                 return map[filter] || filter;
             },
 
             getResultLabel(result) {
-                const match = this.scanFilesCache.find(file => file.id === result.file_id)
-                    || this.historyFilesCache.find(file => file.id === result.file_id);
+                const match = this.scanFilesCache.find(file => file.id === result.file_id);
                 return match?.identified_code || this.getFilename(result.original_path);
             },
         };
