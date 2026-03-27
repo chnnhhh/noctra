@@ -1,13 +1,13 @@
 """Tests for database initialization and schema backfills."""
 
 import asyncio
+import os
 import sqlite3
-
-import app.main as main_mod
+from unittest.mock import patch
 
 
 def test_init_db_backfills_scrape_columns(tmp_path):
-    """Existing databases should gain scrape columns on startup."""
+    """Existing databases should gain scrape observability columns on startup."""
     db_path = tmp_path / "noctra.db"
 
     conn = sqlite3.connect(db_path)
@@ -22,7 +22,9 @@ def test_init_db_backfills_scrape_columns(tmp_path):
             file_size INTEGER NOT NULL,
             file_mtime REAL NOT NULL,
             created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
+            updated_at TEXT NOT NULL,
+            scrape_status TEXT DEFAULT 'pending',
+            last_scrape_at TEXT
         )
         """
     )
@@ -30,8 +32,8 @@ def test_init_db_backfills_scrape_columns(tmp_path):
         """
         INSERT INTO files (
             original_path, identified_code, target_path, status,
-            file_size, file_mtime, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            file_size, file_mtime, created_at, updated_at, scrape_status, last_scrape_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             "/source/SSIS-123.mp4",
@@ -42,23 +44,26 @@ def test_init_db_backfills_scrape_columns(tmp_path):
             1700000000.0,
             "2024-01-01T00:00:00",
             "2024-01-01T00:00:00",
+            "pending",
+            None,
         )
     )
     conn.commit()
     conn.close()
 
-    original_db_path = main_mod.DB_PATH
-    try:
-        main_mod.DB_PATH = str(db_path)
-        asyncio.run(main_mod.init_db())
+    with patch.dict(os.environ, {"DB_PATH": str(db_path)}):
+        import app.main as main
 
-        conn = sqlite3.connect(db_path)
-        columns = {row[1] for row in conn.execute("PRAGMA table_info(files)").fetchall()}
-        scrape_status = conn.execute("SELECT scrape_status FROM files").fetchone()[0]
-        conn.close()
+        asyncio.run(main.init_db())
 
-        assert "scrape_status" in columns
-        assert "last_scrape_at" in columns
-        assert scrape_status == "pending"
-    finally:
-        main_mod.DB_PATH = original_db_path
+    conn = sqlite3.connect(db_path)
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(files)").fetchall()}
+    conn.close()
+
+    assert "scrape_started_at" in columns
+    assert "scrape_finished_at" in columns
+    assert "scrape_stage" in columns
+    assert "scrape_source" in columns
+    assert "scrape_error" in columns
+    assert "scrape_error_user_message" in columns
+    assert "scrape_logs" in columns

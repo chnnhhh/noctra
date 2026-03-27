@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import uuid
 from functools import cmp_to_key
@@ -84,11 +85,21 @@ async def ensure_scrape_schema(db: aiosqlite.Connection):
     rows = await cursor.fetchall()
     existing_columns = {row[1] for row in rows}
 
-    if 'scrape_status' not in existing_columns:
-        await db.execute("ALTER TABLE files ADD COLUMN scrape_status TEXT DEFAULT 'pending'")
+    columns_to_add = [
+        ('scrape_status', "ALTER TABLE files ADD COLUMN scrape_status TEXT DEFAULT 'pending'"),
+        ('last_scrape_at', "ALTER TABLE files ADD COLUMN last_scrape_at TEXT"),
+        ('scrape_started_at', "ALTER TABLE files ADD COLUMN scrape_started_at TEXT"),
+        ('scrape_finished_at', "ALTER TABLE files ADD COLUMN scrape_finished_at TEXT"),
+        ('scrape_stage', "ALTER TABLE files ADD COLUMN scrape_stage TEXT"),
+        ('scrape_source', "ALTER TABLE files ADD COLUMN scrape_source TEXT"),
+        ('scrape_error', "ALTER TABLE files ADD COLUMN scrape_error TEXT"),
+        ('scrape_error_user_message', "ALTER TABLE files ADD COLUMN scrape_error_user_message TEXT"),
+        ('scrape_logs', "ALTER TABLE files ADD COLUMN scrape_logs TEXT"),
+    ]
 
-    if 'last_scrape_at' not in existing_columns:
-        await db.execute("ALTER TABLE files ADD COLUMN last_scrape_at TEXT")
+    for column_name, alter_sql in columns_to_add:
+        if column_name not in existing_columns:
+            await db.execute(alter_sql)
 
     await db.execute("UPDATE files SET scrape_status = 'pending' WHERE scrape_status IS NULL")
     await db.execute('CREATE INDEX IF NOT EXISTS idx_files_scrape_status ON files(scrape_status)')
@@ -198,6 +209,16 @@ async def get_all_files() -> list[dict]:
         cursor = await db.execute('SELECT * FROM files ORDER BY id DESC')
         rows = await cursor.fetchall()
         return [dict(row) for row in rows]
+
+
+def _parse_scrape_logs(raw: Optional[str]) -> list[dict]:
+    if not raw:
+        return []
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    return value if isinstance(value, list) else []
 
 
 async def get_processed_history_codes() -> set[str]:
@@ -872,7 +893,21 @@ async def get_scrape_list(
             # Query items
             offset = (page - 1) * per_page
             data_sql = f"""
-                SELECT id, identified_code, target_path, COALESCE(scrape_status, 'pending') AS scrape_status, last_scrape_at
+                SELECT
+                    id,
+                    original_path,
+                    identified_code,
+                    target_path,
+                    status,
+                    COALESCE(scrape_status, 'pending') AS scrape_status,
+                    last_scrape_at,
+                    scrape_started_at,
+                    scrape_finished_at,
+                    scrape_stage,
+                    scrape_source,
+                    scrape_error,
+                    scrape_error_user_message,
+                    scrape_logs
                 FROM files
                 WHERE {where_sql}
                 {order_sql}
@@ -883,16 +918,27 @@ async def get_scrape_list(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f'Database error: {str(e)}')
 
-    items = [
-        ScrapeListItem(
-            file_id=row['id'],
-            code=row['identified_code'] or '',
-            target_path=row['target_path'] or '',
-            scrape_status=row['scrape_status'] or 'pending',
-            last_scrape_at=row['last_scrape_at'],
+    items = []
+    for row in rows:
+        row_data = dict(row)
+        items.append(
+            ScrapeListItem(
+                file_id=row_data['id'],
+                code=row_data.get('identified_code') or '',
+                target_path=row_data.get('target_path') or '',
+                original_path=row_data.get('original_path') or '',
+                status=row_data.get('status') or 'processed',
+                scrape_status=row_data.get('scrape_status') or 'pending',
+                last_scrape_at=row_data.get('last_scrape_at'),
+                scrape_started_at=row_data.get('scrape_started_at'),
+                scrape_finished_at=row_data.get('scrape_finished_at'),
+                scrape_stage=row_data.get('scrape_stage'),
+                scrape_source=row_data.get('scrape_source'),
+                scrape_error=row_data.get('scrape_error'),
+                scrape_error_user_message=row_data.get('scrape_error_user_message'),
+                scrape_logs=_parse_scrape_logs(row_data.get('scrape_logs')),
+            )
         )
-        for row in rows
-    ]
 
     stats = {
         'organized': int(stats_row['organized'] or 0) if stats_row else 0,
