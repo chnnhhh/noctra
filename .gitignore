@@ -30,4 +30,5 @@ nohup.out
 noctra.db
 data/
 test_data/
+.claude/
 .gstack/
