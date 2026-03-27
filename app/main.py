@@ -11,6 +11,7 @@ import aiosqlite
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import ValidationError
 
 from app.models import (
     BatchCancelResult,
@@ -24,6 +25,7 @@ from app.models import (
     OrganizeRequest,
     OrganizeResult,
     ScanResult,
+    ScrapeLogEntry,
     ScrapeListItem,
     ScrapeResponse,
     ScrapeBatchResult,
@@ -211,14 +213,24 @@ async def get_all_files() -> list[dict]:
         return [dict(row) for row in rows]
 
 
-def _parse_scrape_logs(raw: Optional[str]) -> list[dict]:
+def _parse_scrape_logs(raw: Optional[str]) -> list[ScrapeLogEntry]:
     if not raw:
         return []
     try:
         value = json.loads(raw)
-    except json.JSONDecodeError:
+    except (TypeError, ValueError, json.JSONDecodeError):
         return []
-    return value if isinstance(value, list) else []
+
+    if not isinstance(value, list):
+        return []
+
+    parsed_logs: list[ScrapeLogEntry] = []
+    for item in value:
+        try:
+            parsed_logs.append(ScrapeLogEntry.model_validate(item))
+        except (TypeError, ValueError, ValidationError):
+            continue
+    return parsed_logs
 
 
 async def get_processed_history_codes() -> set[str]:

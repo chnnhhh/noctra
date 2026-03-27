@@ -4,6 +4,8 @@
 # stubbed in tests/conftest.py so that app.main can be imported without the
 # full scraping runtime.
 
+import json
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -505,6 +507,43 @@ def test_scrape_list_item_fields(mock_connect, sample_rows):
     assert 'target_path' in item
     assert 'scrape_status' in item
     assert 'last_scrape_at' in item
+
+
+@patch('app.main.aiosqlite.connect')
+def test_scrape_list_item_skips_malformed_logs(mock_connect, sample_rows):
+    """GET /api/scrape should skip malformed scrape_logs entries instead of failing."""
+    from app.main import app
+
+    mock_db = AsyncMock()
+    mock_connect.return_value.__aenter__.return_value = mock_db
+
+    row = dict(sample_rows[0])
+    row['scrape_logs'] = json.dumps([
+        {
+            'at': '2026-03-27T10:00:00',
+            'level': 'info',
+            'stage': 'querying_source',
+            'message': '正在查询 JavDB',
+        },
+        {'at': '2026-03-27T10:00:01', 'level': 'info'},
+        'bad-entry',
+        42,
+    ])
+
+    _mock_scrape_list_queries(
+        mock_db,
+        total=1,
+        rows=[row],
+        stats_rows=_build_stats_row(sample_rows),
+    )
+
+    client = TestClient(app, raise_server_exceptions=False)
+    response = client.get('/api/scrape')
+
+    assert response.status_code == 200
+    logs = response.json()['items'][0]['scrape_logs']
+    assert len(logs) == 1
+    assert logs[0]['message'] == '正在查询 JavDB'
 
 
 @patch('app.main.aiosqlite.connect')

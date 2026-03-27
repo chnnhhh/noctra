@@ -1,6 +1,7 @@
 """Tests for database initialization and schema backfills."""
 
 import asyncio
+import importlib
 import os
 import sqlite3
 from unittest.mock import patch
@@ -51,13 +52,23 @@ def test_init_db_backfills_scrape_columns(tmp_path):
     conn.commit()
     conn.close()
 
-    with patch.dict(os.environ, {"DB_PATH": str(db_path)}):
-        import app.main as main
+    original_env_db_path = os.environ.get("DB_PATH")
+    import app.main as main
 
-        asyncio.run(main.init_db())
+    with patch.dict(os.environ, {"DB_PATH": str(db_path)}):
+        main = importlib.reload(main)
+        try:
+            asyncio.run(main.init_db())
+        finally:
+            if original_env_db_path is None:
+                os.environ.pop("DB_PATH", None)
+            else:
+                os.environ["DB_PATH"] = original_env_db_path
+            main = importlib.reload(main)
 
     conn = sqlite3.connect(db_path)
     columns = {row[1] for row in conn.execute("PRAGMA table_info(files)").fetchall()}
+    scrape_status = conn.execute("SELECT scrape_status FROM files").fetchone()[0]
     conn.close()
 
     assert "scrape_started_at" in columns
@@ -67,3 +78,4 @@ def test_init_db_backfills_scrape_columns(tmp_path):
     assert "scrape_error" in columns
     assert "scrape_error_user_message" in columns
     assert "scrape_logs" in columns
+    assert scrape_status == "pending"
