@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 import aiosqlite
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -23,9 +23,12 @@ from app.models import (
     OrganizeRequest,
     OrganizeResult,
     ScanResult,
+    ScrapeListItem,
+    ScrapeResponse,
 )
 from app.scanner import JAVScanner
 from app.organizer import JAVOrganizer
+from app.scraper import ScraperScheduler
 from app.statuses import (
     SELECTABLE_SCAN_STATUSES,
     assign_batch_duplicate_statuses,
@@ -779,6 +782,101 @@ async def get_history():
         skipped=skipped,
         files=file_records
     )
+
+
+@app.get("/api/scrape")
+async def get_scrape_list(
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=50, ge=1, le=200),
+    filter: str = Query(default='all'),
+    sort: str = Query(default='code'),
+):
+    """
+    获取刮削列表 (仅 organized 状态文件)
+
+    参数:
+    - page: 页码 (默认 1)
+    - per_page: 每页条数 (默认 50)
+    - filter: 过滤 scrape_status (all/pending/success/failed)
+    - sort: 排序方式 (code/scrape_time)
+    """
+    # Validate filter
+    valid_filters = {'all', 'pending', 'success', 'failed'}
+    if filter not in valid_filters:
+        raise HTTPException(status_code=400, detail=f'Invalid filter: {filter}')
+
+    # Validate sort
+    valid_sorts = {'code', 'scrape_time'}
+    if sort not in valid_sorts:
+        raise HTTPException(status_code=400, detail=f'Invalid sort: {sort}')
+
+    # Build WHERE clauses
+    where_clauses = ["status = ?"]
+    params: list = ['organized']
+
+    if filter != 'all':
+        where_clauses.append("scrape_status = ?")
+        params.append(filter)
+
+    where_sql = " AND ".join(where_clauses)
+
+    # Build ORDER BY
+    if sort == 'code':
+        order_sql = "ORDER BY identified_code ASC"
+    else:  # scrape_time
+        order_sql = "ORDER BY last_scrape_at DESC"
+
+    # Count total
+    count_sql = f"SELECT COUNT(*) FROM files WHERE {where_sql}"
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            cursor = await db.execute(count_sql, tuple(params))
+            row = await cursor.fetchone()
+            total = row[0] if row else 0
+
+            # Query items
+            offset = (page - 1) * per_page
+            data_sql = f"""
+                SELECT id, identified_code, target_path, scrape_status, last_scrape_at
+                FROM files
+                WHERE {where_sql}
+                {order_sql}
+                LIMIT ? OFFSET ?
+            """
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(data_sql, (*tuple(params), per_page, offset))
+            rows = await cursor.fetchall()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f'Database error: {str(e)}')
+
+    items = [
+        ScrapeListItem(
+            file_id=row['id'],
+            code=row['identified_code'] or '',
+            target_path=row['target_path'] or '',
+            scrape_status=row['scrape_status'] or 'pending',
+            last_scrape_at=row['last_scrape_at'],
+        )
+        for row in rows
+    ]
+
+    return {"total": total, "items": items}
+
+
+@app.post("/api/scrape/{file_id}", response_model=ScrapeResponse)
+async def scrape_file(file_id: int):
+    """
+    刮削单个文件元数据
+
+    参数:
+    - file_id: 文件数据库 ID
+    """
+    scheduler = ScraperScheduler()
+    try:
+        result = await scheduler.scrape_single(file_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return result
 
 
 @app.get("/api/health")
