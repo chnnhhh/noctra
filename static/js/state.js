@@ -58,6 +58,18 @@
             confirmFiles: [],
             showDeleteModal: false,
             deleteTargetFile: null,
+            showScrapeErrorModal: false,
+            scrapeErrorFile: null,
+            scrapeBatchJob: null,
+            scrapeBatchItemsIndex: {},
+            scrapeBatchPollTimer: null,
+            scrapeBatchPollingBusy: false,
+            scrapeBatchExpanded: false,
+            scrapeBatchSubmitting: false,
+            scrapeBatchCancelling: false,
+            scrapeBatchVisibleSince: 0,
+            scrapeBatchExpandTimer: null,
+            scrapeBatchExpanding: false,
             distDir: '/dist',
 
             get allSelected() {
@@ -246,6 +258,75 @@
                     return '批量整理已结束，失败项仍保留在列表中，方便你继续筛选和处理。';
                 }
                 return '本批次已结束，整理结果已同步到列表中。';
+            },
+
+            get scrapeBatchRunning() {
+                return !!this.scrapeBatchJob && ['queued', 'running'].includes(this.scrapeBatchJob.status);
+            },
+
+            get scrapeBatchPanelVisible() {
+                return !!this.scrapeBatchJob;
+            },
+
+            get scrapeBatchPanelState() {
+                if (!this.scrapeBatchJob) {
+                    return 'idle';
+                }
+                if (this.scrapeBatchRunning || this.scrapeBatchSubmitting) {
+                    return 'running';
+                }
+                return 'completed';
+            },
+
+            get scrapeBatchCancelable() {
+                return this.scrapeBatchRunning &&
+                       !!this.scrapeBatchJob &&
+                       !String(this.scrapeBatchJob.id || '').startsWith('optimistic-');
+            },
+
+            get scrapeBatchProgressPercent() {
+                if (!this.scrapeBatchJob || this.scrapeBatchJob.total === 0) {
+                    return 0;
+                }
+                return Math.max(0, Math.min(100, Math.round((this.scrapeBatchJob.processed / this.scrapeBatchJob.total) * 100)));
+            },
+
+            get scrapeBatchProgressText() {
+                if (!this.scrapeBatchJob) {
+                    return '';
+                }
+                if (this.scrapeBatchJob.status === 'queued') {
+                    return `批处理已创建，共 ${this.scrapeBatchJob.total} 项，即将开始刮削`;
+                }
+                if (this.scrapeBatchJob.status === 'running') {
+                    return `正在处理第 ${this.scrapeBatchJob.processed} / ${this.scrapeBatchJob.total} 项`;
+                }
+                if (this.scrapeBatchJob.status === 'completed') {
+                    return `刮削完成，共 ${this.scrapeBatchJob.total} 项`;
+                }
+                if (this.scrapeBatchJob.status === 'cancelled') {
+                    return `批处理已取消，已完成 ${this.scrapeBatchJob.processed} / ${this.scrapeBatchJob.total} 项`;
+                }
+                return '';
+            },
+
+            get scrapeBatchInfoLine() {
+                if (!this.scrapeBatchJob) {
+                    return '';
+                }
+                if (this.scrapeBatchJob.status === 'queued') {
+                    return '批处理已加入队列，面板会持续显示当前任务状态，开始执行后会实时同步进度。';
+                }
+                if (this.scrapeBatchRunning) {
+                    return '系统正在按顺序处理选中的文件，表格中的对应行会实时同步到当前进度。';
+                }
+                if (this.scrapeBatchJob.status === 'cancelled') {
+                    return '批处理已取消，已完成的项目会保留结果，未完成的项目保持原有状态。';
+                }
+                if (this.scrapeBatchJob.failed > 0) {
+                    return '批量刮削已结束，失败项仍保留在列表中，点击失败状态可查看详细错误信息。';
+                }
+                return '本批次已结束，刮削结果已同步到列表中。';
             },
 
             get confirmCodes() {

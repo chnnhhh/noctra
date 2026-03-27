@@ -177,6 +177,55 @@
                 </div>
             </div>
 
+            <div class="batch-panel"
+                 x-show="view === 'scrape' && scrapeBatchPanelVisible"
+                 :data-state="scrapeBatchPanelState"
+                 :class="[scrapeBatchJob ? scrapeBatchJob.status : '', scrapeBatchExpanded ? 'expanded' : 'collapsed', scrapeBatchExpanding ? 'expanding' : '']">
+                <div class="batch-rail-header">
+                    <button class="batch-rail-toggle" @click="toggleScrapeBatchExpanded()" :aria-expanded="scrapeBatchExpanded">
+                        <span class="batch-summary-line">
+                            <span class="batch-status-chip"
+                                  :class="`status-${scrapeBatchJob?.status || 'pending'}`"
+                                  x-text="getScrapeBatchJobStatusLabel(scrapeBatchJob?.status)"></span>
+                            <span>批量刮削 <span x-text="scrapeBatchJob?.processed || 0">0</span> / <span x-text="scrapeBatchJob?.total || 0">0</span></span>
+                        </span>
+                        <span class="batch-rail-caret" x-html="getUiIcon('chevron_down')"></span>
+                    </button>
+                    <div class="batch-rail-actions">
+                        <button class="rail-button"
+                                x-show="scrapeBatchCancelable"
+                                @click="cancelScrapeBatch"
+                                :disabled="scrapeBatchCancelling">
+                            <span x-text="scrapeBatchCancelling ? '取消中...' : '取消'"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="batch-panel-body" :class="scrapeBatchExpanded ? 'expanded' : 'collapsed'">
+                    <div class="batch-rail-summary">
+                        <span class="batch-subline">总数 <strong x-text="scrapeBatchJob?.total || 0">0</strong></span>
+                        <span class="batch-metrics">
+                            <span class="batch-metric success">成功 <strong x-text="scrapeBatchJob?.succeeded || 0">0</strong></span>
+                            <span class="batch-metric failed">失败 <strong x-text="scrapeBatchJob?.failed || 0">0</strong></span>
+                        </span>
+                    </div>
+
+                    <div class="batch-progress">
+                        <div class="batch-progress-track">
+                            <div class="batch-progress-fill" :style="`width: ${scrapeBatchProgressPercent}%`"></div>
+                        </div>
+                        <div class="batch-subline" x-text="scrapeBatchProgressText"></div>
+                    </div>
+
+                    <div class="batch-detail-panel">
+                        <div class="batch-note" x-text="scrapeBatchInfoLine"></div>
+                        <div class="batch-note" x-show="scrapeBatchJob?.failed > 0">
+                            当前批次包含 <strong x-text="scrapeBatchJob?.failed"></strong> 个失败项，表格中的对应行会保留失败状态，点击失败状态可查看详细错误信息。
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="table-meta toolbar" x-show="!loading && files.length > 0">
                 <div class="toolbar-left">
                     <div class="filter filter-subtle toolbar-filter">
@@ -423,7 +472,7 @@
                         <span class="selection-inline-count">已选 <span x-text="scrapeSelectedCount">0</span> 项</span>
                         <span class="selection-inline-divider">·</span>
                         <div class="selection-inline-actions">
-                            <button class="selection-inline-action" @click="confirmBatchScrape" :disabled="!scrapeHasSelected">刮削选中</button>
+                            <button class="selection-inline-action" @click="confirmScrapeSelected" :disabled="!scrapeHasSelected">刮削选中</button>
                             <span class="selection-inline-divider">·</span>
                             <button class="selection-clear" @click="clearScrapeSelection" :disabled="!scrapeHasSelected" aria-label="清空选择" title="清空选择">×</button>
                         </div>
@@ -550,7 +599,7 @@
                                         <template x-if="hasScrapeStatusAction(file)">
                                             <div class="status-action"
                                                  :class="[`status-${getScrapeBadgeClass(file)}`, { 'visible': activeStatusMenuId === file.id }]"
-                                                 :style="getStatusRailStyle(file)"
+                                                 :style="getScrapeStatusRailStyle(file)"
                                                  @mouseenter="showStatusMenu(file.id)"
                                                  @mouseleave="scheduleStatusMenuHide(file.id)">
                                                 <span class="status-trigger" :aria-label="getScrapeStatusText(file)">
@@ -570,7 +619,15 @@
                                             </div>
                                         </template>
                                         <template x-if="!hasScrapeStatusAction(file)">
-                                            <span class="badge" :class="getScrapeBadgeClass(file)" x-text="getScrapeStatusText(file)"></span>
+                                            <button class="badge clickable"
+                                                    :class="getScrapeBadgeClass(file)"
+                                                    x-text="getScrapeStatusText(file)"
+                                                    @click="showScrapeErrorDetails(file)"
+                                                    x-show="file.scrape_status === 'failed'"></button>
+                                            <span class="badge"
+                                                  :class="getScrapeBadgeClass(file)"
+                                                  x-text="getScrapeStatusText(file)"
+                                                  x-show="file.scrape_status !== 'failed'"></span>
                                         </template>
                                     </td>
                                     <td class="cell-time">
@@ -648,6 +705,29 @@
                 <button class="danger" @click="executeDelete('delete_source')">删除原始文件</button>
                 <button class="secondary" @click="executeDelete('ignore_scan')">仅删除扫描记录</button>
                 <button class="secondary" @click="closeDeleteModal">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scrape Error Modal -->
+    <div x-show="showScrapeErrorModal" class="modal-overlay" @click.self="showScrapeErrorModal = false">
+        <div class="modal">
+            <div class="modal-title">
+                ⚠️ 刮削失败
+            </div>
+            <div class="modal-content">
+                <div>番号：<strong x-text="scrapeErrorFile?.identified_code || '未知'"></strong></div>
+            </div>
+            <div class="modal-info">
+                <div class="modal-info-label">失败原因：</div>
+                <div class="modal-info-value" x-text="getScrapeErrorUserMessage(scrapeErrorFile)"></div>
+            </div>
+            <div class="modal-info" x-show="scrapeErrorFile?.scrape_error">
+                <div class="modal-info-label">技术详情：</div>
+                <div class="modal-info-value" x-text="scrapeErrorFile?.scrape_error"></div>
+            </div>
+            <div class="modal-actions">
+                <button class="primary" @click="showScrapeErrorModal = false">关闭</button>
             </div>
         </div>
     </div>

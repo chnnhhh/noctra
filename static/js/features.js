@@ -475,6 +475,11 @@
                 this.deleteTargetFile = null;
             },
 
+            showScrapeErrorDetails(file) {
+                this.scrapeErrorFile = file;
+                this.showScrapeErrorModal = true;
+            },
+
             async executeOrganize() {
                 this.showConfirmModal = false;
                 this.batchSubmitting = true;
@@ -637,6 +642,100 @@
 
             clearSelection() {
                 this.selectedFiles = {};
+            },
+
+            // ========== Scrape Batch Methods ==========
+
+            toggleScrapeBatchExpanded() {
+                if (!this.scrapeBatchJob) {
+                    return;
+                }
+                this.scrapeBatchExpanded = !this.scrapeBatchExpanded;
+            },
+
+            animateScrapeBatchPanelExpand() {
+                if (this.scrapeBatchExpandTimer) {
+                    clearTimeout(this.scrapeBatchExpandTimer);
+                }
+
+                this.scrapeBatchExpanding = true;
+                this.scrapeBatchExpandTimer = setTimeout(() => {
+                    this.scrapeBatchExpanding = false;
+                    this.scrapeBatchExpandTimer = null;
+                }, BATCH_PANEL_ANIMATION_MS);
+            },
+
+            setScrapeBatchJob(job) {
+                this.scrapeBatchJob = job;
+                if (job) {
+                    this.scrapeBatchVisibleSince = Date.now();
+                }
+            },
+
+            async executeScrapeBatch(fileIds) {
+                this.scrapeBatchSubmitting = true;
+                this.error = null;
+                this.success = null;
+
+                this.scrapeBatchVisibleSince = Date.now();
+                this.scrapeBatchExpanded = true;
+                this.animateScrapeBatchPanelExpand();
+                this.setScrapeBatchJob(this.createOptimisticScrapeBatchJob(fileIds));
+
+                try {
+                    const result = await ScrapeAPI.scrapeBatch(fileIds);
+
+                    this.setScrapeBatchJob({
+                        id: 'scrape-batch-' + Date.now(),
+                        status: 'completed',
+                        total: fileIds.length,
+                        processed: fileIds.length,
+                        succeeded: result.success_count,
+                        failed: result.failed_count
+                    });
+
+                    // Refresh scrape list to show updated status
+                    await this.loadScrapeFiles();
+                } catch (e) {
+                    this.error = '批量刮削失败: ' + e.message;
+                    if (this.scrapeBatchJob && String(this.scrapeBatchJob.id || '').startsWith('optimistic-')) {
+                        this.setScrapeBatchJob(null);
+                    }
+                } finally {
+                    this.scrapeBatchSubmitting = false;
+                    this.scrapeSelectedFiles = {};
+                }
+            },
+
+            createOptimisticScrapeBatchJob(fileIds) {
+                return {
+                    id: 'optimistic-scrape-' + Date.now(),
+                    status: 'running',
+                    total: fileIds.length,
+                    processed: 0,
+                    succeeded: 0,
+                    failed: 0,
+                    created_at: new Date().toISOString()
+                };
+            },
+
+            async handleScrapeAction(file) {
+                const fileIds = [file.id];
+                await this.executeScrapeBatch(fileIds);
+            },
+
+            async confirmScrapeSelected() {
+                const selectedFiles = [...this.scrapeSelectedEntries];
+                if (selectedFiles.length === 0) {
+                    return;
+                }
+
+                const fileIds = selectedFiles.map(f => f.id);
+                await this.executeScrapeBatch(fileIds);
+            },
+
+            clearScrapeSelection() {
+                this.scrapeSelectedFiles = {};
             },
 
             init() {

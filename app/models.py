@@ -111,3 +111,17 @@ class ScrapeResponse(BaseModel):
     success: bool
     code: Optional[str] = None
     error: Optional[str] = None
+
+
+class ScrapeBatchResultItem(BaseModel):
+    """批量刮削结果项"""
+    file_id: int
+    success: bool
+    error: Optional[str] = None
+
+
+class ScrapeBatchResult(BaseModel):
+    """批量刮削响应"""
+    success_count: int
+    failed_count: int
+    results: list[ScrapeBatchResultItem]

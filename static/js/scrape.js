@@ -27,5 +27,20 @@ const ScrapeAPI = {
             throw new Error(data.detail || `HTTP ${response.status}`);
         }
         return await response.json();
+    },
+
+    async scrapeBatch(fileIds) {
+        const response = await fetch('/api/scrape/batch', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ file_ids: fileIds })
+        });
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.detail || `HTTP ${response.status}`);
+        }
+        return await response.json();
     }
 };

@@ -37,6 +37,17 @@
                 return map[status] || status;
             },
 
+            getScrapeBatchJobStatusLabel(status) {
+                const map = {
+                    queued: 'QUEUED',
+                    running: 'RUNNING',
+                    completed: 'COMPLETED',
+                    failed: 'FAILED',
+                    cancelled: 'CANCELLED'
+                };
+                return map[status] || status || 'PENDING';
+            },
+
             getBatchItemStatusText(status) {
                 const map = {
                     pending: '待整理',
@@ -93,7 +104,7 @@
             getScrapeStatusActions(file) {
                 if (file.scrape_status === 'pending' || file.scrape_status === 'failed') {
                     return [
-                        { key: 'scrape', label: '刮削', icon: 'sparkles' }
+                        { key: 'scrape', label: '刮削', icon: 'file_search' }
                     ];
                 }
                 return [];
@@ -111,6 +122,37 @@
                     failed: '刮削失败'
                 };
                 return map[filter] || filter;
+            },
+
+            getScrapeErrorUserMessage(file) {
+                if (!file || !file.scrape_error) {
+                    return '未知错误';
+                }
+
+                const error = file.scrape_error.toLowerCase();
+
+                // Error type mapping
+                if (error.includes('not found') || error.includes('未找到') || error.includes('no metadata')) {
+                    return '未找到对应元数据';
+                }
+                if (error.includes('timeout') || error.includes('连接失败') || error.includes('connection') || error.includes('network')) {
+                    return '远程站点请求失败';
+                }
+                if (error.includes('parse') || error.includes('解析') || error.includes('parsing')) {
+                    return '元数据解析失败';
+                }
+                if (error.includes('nfo') || error.includes('xml')) {
+                    return 'NFO 生成失败';
+                }
+                if (error.includes('image') || error.includes('poster') || error.includes('thumb') || error.includes('picture') || error.includes('图片')) {
+                    return '图片下载失败';
+                }
+                if (error.includes('write') || error.includes('file') || error.includes('写入') || error.includes('文件')) {
+                    return '本地文件写入失败';
+                }
+
+                // Default fallback
+                return '未知错误';
             },
 
             isBatchItemBlocking(file) {
@@ -134,6 +176,16 @@
 
             getStatusRailStyle(file) {
                 const actionCount = this.getStatusActions(file).length;
+                const collapsedWidth = 100;
+                const slotWidth = 34;
+                const gap = 6;
+                const actionsPadding = actionCount > 0 ? 12 : 0;
+                const expandedWidth = collapsedWidth + actionsPadding + (actionCount * slotWidth) + (Math.max(actionCount - 1, 0) * gap);
+                return `--status-width-collapsed: ${collapsedWidth}px; --status-width-expanded: ${expandedWidth}px;`;
+            },
+
+            getScrapeStatusRailStyle(file) {
+                const actionCount = this.getScrapeStatusActions(file).length;
                 const collapsedWidth = 100;
                 const slotWidth = 34;
                 const gap = 6;
@@ -420,7 +472,16 @@
                             <path d="M5 14l.6 1.8L7.5 17l-1.9.7L5 19.5l-.6-1.8L2.5 17l1.9-.7z"/>
                             <path d="M17 13l.7 2.2L20 16.5l-2.3.8L17 19.5l-.7-2.2L14.5 16.5l2.3-.8z"/>
                         </svg>
+                    `,
+                    file_search: `
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                            <circle cx="12" cy="14" r="3"/>
+                            <path d="m16.5 16.5-2.5-2.5"/>
+                        </svg>
                     `
+
                 };
                 return icons[name] || '';
             },

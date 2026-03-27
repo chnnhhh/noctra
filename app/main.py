@@ -25,6 +25,7 @@ from app.models import (
     ScanResult,
     ScrapeListItem,
     ScrapeResponse,
+    ScrapeBatchResult,
 )
 from app.scanner import JAVScanner
 from app.organizer import JAVOrganizer
@@ -901,6 +902,48 @@ async def get_scrape_list(
     }
 
     return {"total": total, "items": items, "stats": stats}
+
+
+@app.post("/api/scrape/batch", response_model=ScrapeBatchResult)
+async def scrape_files_batch(request: OrganizeRequest):
+    """
+    批量刮削文件元数据
+
+    请求：
+    {
+        "file_ids": [1, 2, 3]
+    }
+    """
+    scheduler = ScraperScheduler()
+    results = []
+    success_count = 0
+    failed_count = 0
+
+    for file_id in request.file_ids:
+        try:
+            result = await scheduler.scrape_single(file_id)
+            results.append({
+                'file_id': file_id,
+                'success': result.success,
+                'error': result.error
+            })
+            if result.success:
+                success_count += 1
+            else:
+                failed_count += 1
+        except Exception as e:
+            results.append({
+                'file_id': file_id,
+                'success': False,
+                'error': str(e)
+            })
+            failed_count += 1
+
+    return ScrapeBatchResult(
+        success_count=success_count,
+        failed_count=failed_count,
+        results=results
+    )
 
 
 @app.post("/api/scrape/{file_id}", response_model=ScrapeResponse)
