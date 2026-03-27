@@ -29,8 +29,6 @@ nohup.out
 *.sqlite3
 noctra.db
 data/
-test_data/*.db
-test_data/*.db-shm
-test_data/*.db-wal
-test_data/*.db-journal
+test_data/
+.claude/
 .gstack/

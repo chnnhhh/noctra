@@ -159,12 +159,15 @@ class JAVOrganizer:
 
             # 执行移动
             (success, reason) = self.move_file(original_path, target_path)
+            result_status = 'moved'
+            if not success:
+                result_status = 'skipped' if reason == '目标文件已存在' else 'failed'
 
             results.append({
                 'file_id': file_id,
                 'original_path': original_path,
                 'target_path': target_path,
-                'status': 'moved' if success else 'failed',
+                'status': result_status,
                 'reason': reason,
             })
 

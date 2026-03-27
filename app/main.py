@@ -1,19 +1,37 @@
+import asyncio
+import os
+import uuid
+from functools import cmp_to_key
+from datetime import datetime
+from pathlib import Path
+from typing import Optional
+
+import aiosqlite
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-import aiosqlite
-import os
-from pathlib import Path
-from typing import Optional
-from datetime import datetime
 
 from app.models import (
-    ScanResult, OrganizeRequest, OrganizeResult,
-    HistoryResult, FileRecord, DeleteFileRequest, DeleteFileResult
+    BatchCancelResult,
+    BatchCreateRequest,
+    BatchJob,
+    BatchItemResult,
+    DeleteFileRequest,
+    DeleteFileResult,
+    FileRecord,
+    HistoryResult,
+    OrganizeRequest,
+    OrganizeResult,
+    ScanResult,
 )
 from app.scanner import JAVScanner
 from app.organizer import JAVOrganizer
-from app.statuses import resolve_scan_status
+from app.statuses import (
+    SELECTABLE_SCAN_STATUSES,
+    assign_batch_duplicate_statuses,
+    compare_candidate_priority,
+    resolve_scan_status,
+)
 
 app = FastAPI(title="Noctra JAV Organizer", version="1.0.0")
 
@@ -25,6 +43,8 @@ DB_PATH = os.getenv('DB_PATH', '/app/data/noctra.db')
 # 初始化组件
 scanner = JAVScanner(SOURCE_DIR, DIST_DIR)
 organizer = JAVOrganizer(DIST_DIR)
+batch_jobs: dict[str, dict] = {}
+batch_jobs_lock = asyncio.Lock()
 
 # 挂载静态文件
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -126,6 +146,29 @@ async def refresh_file_record(
         await db.commit()
 
 
+async def mark_related_files_target_exists(file_id: int, identified_code: Optional[str]):
+    """当同番号已有一条被整理后，将其余同番号候选标记为已存在。"""
+    if not identified_code:
+        return
+
+    now = datetime.now().isoformat()
+    related_statuses = (*SELECTABLE_SCAN_STATUSES, 'target_exists')
+    placeholders = ','.join('?' * len(related_statuses))
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            f'''
+            UPDATE files
+            SET status = 'target_exists', updated_at = ?
+            WHERE id != ?
+              AND identified_code = ?
+              AND status IN ({placeholders})
+            ''',
+            (now, file_id, identified_code, *related_statuses)
+        )
+        await db.commit()
+
+
 async def get_all_files() -> list[dict]:
     """获取所有文件记录"""
     async with aiosqlite.connect(DB_PATH) as db:
@@ -133,6 +176,16 @@ async def get_all_files() -> list[dict]:
         cursor = await db.execute('SELECT * FROM files ORDER BY id DESC')
         rows = await cursor.fetchall()
         return [dict(row) for row in rows]
+
+
+async def get_processed_history_codes() -> set[str]:
+    """获取历史上已处理且源文件已不存在的番号集合。"""
+    all_files = await get_all_files()
+    return {
+        str(file['identified_code']).upper()
+        for file in all_files
+        if file.get('identified_code') and is_history_processed_record(file)
+    }
 
 
 async def get_file_by_path(original_path: str) -> Optional[dict]:
@@ -166,6 +219,151 @@ async def delete_file_record(file_id: int):
         await db.commit()
 
 
+def utcnow_iso() -> str:
+    return datetime.now().isoformat()
+
+
+def clone_batch_job(job: dict) -> dict:
+    return {
+        **job,
+        'items': [dict(item) for item in job['items']],
+    }
+
+
+async def set_batch_job(job_id: str, updater):
+    async with batch_jobs_lock:
+        job = batch_jobs.get(job_id)
+        if not job:
+            return None
+        updater(job)
+        return clone_batch_job(job)
+
+
+async def get_batch_job(job_id: str) -> Optional[dict]:
+    async with batch_jobs_lock:
+        job = batch_jobs.get(job_id)
+        return clone_batch_job(job) if job else None
+
+
+async def create_batch_job(rows: list[aiosqlite.Row]) -> dict:
+    now = utcnow_iso()
+    batch_id = uuid.uuid4().hex[:12]
+    sorted_rows = sorted((dict(row) for row in rows), key=cmp_to_key(compare_candidate_priority))
+    items = [
+        {
+            'id': row['id'],
+            'code': row['identified_code'],
+            'source_path': row['original_path'],
+            'target_path': row['target_path'],
+            'status': 'pending',
+            'message': None,
+            'started_at': None,
+            'finished_at': None,
+        }
+        for row in sorted_rows
+    ]
+    job = {
+        'id': batch_id,
+        'status': 'queued',
+        'total': len(items),
+        'processed': 0,
+        'succeeded': 0,
+        'skipped': 0,
+        'failed': 0,
+        'created_at': now,
+        'started_at': None,
+        'finished_at': None,
+        'cancel_requested': False,
+        'items': items,
+    }
+    async with batch_jobs_lock:
+        batch_jobs[batch_id] = job
+    return clone_batch_job(job)
+
+
+async def run_batch_job(batch_id: str):
+    started_at = utcnow_iso()
+
+    async with batch_jobs_lock:
+        job = batch_jobs.get(batch_id)
+        if not job:
+            return
+        job['status'] = 'running'
+        job['started_at'] = started_at
+
+    while True:
+        async with batch_jobs_lock:
+            job = batch_jobs.get(batch_id)
+            if not job:
+                return
+            if job['cancel_requested']:
+                job['status'] = 'cancelled'
+                job['finished_at'] = utcnow_iso()
+                return
+
+            pending_item = next((item for item in job['items'] if item['status'] == 'pending'), None)
+            if pending_item is None:
+                if job['failed'] == job['total'] and job['total'] > 0:
+                    job['status'] = 'failed'
+                else:
+                    job['status'] = 'completed'
+                job['finished_at'] = utcnow_iso()
+                return
+
+            pending_item['status'] = 'processing'
+            pending_item['started_at'] = utcnow_iso()
+            file_id = pending_item['id']
+            source_path = pending_item['source_path']
+            code = pending_item['code']
+            target_path = organizer.get_target_path(code, Path(source_path).name)
+            pending_item['target_path'] = target_path
+
+        success, reason = await asyncio.to_thread(organizer.move_file, source_path, target_path)
+        finished_at = utcnow_iso()
+
+        if success:
+            final_status = 'success'
+            final_message = '整理完成'
+            db_status = 'processed'
+        elif reason == '目标文件已存在':
+            final_status = 'skipped'
+            final_message = reason
+            db_status = 'target_exists'
+        else:
+            final_status = 'failed'
+            final_message = reason or '整理失败'
+            db_status = 'failed'
+
+        if final_status == 'success':
+            await update_file_status(file_id, db_status, target_path)
+            await mark_related_files_target_exists(file_id, code)
+        elif final_status == 'skipped':
+            await update_file_status(file_id, db_status, target_path)
+        else:
+            await update_file_status(file_id, db_status)
+
+        async with batch_jobs_lock:
+            job = batch_jobs.get(batch_id)
+            if not job:
+                return
+
+            item = next((candidate for candidate in job['items'] if candidate['id'] == file_id), None)
+            if not item:
+                continue
+
+            item['status'] = final_status
+            item['message'] = final_message
+            item['finished_at'] = finished_at
+            job['processed'] += 1
+
+            if final_status == 'success':
+                job['succeeded'] += 1
+            elif final_status == 'skipped':
+                job['skipped'] += 1
+            else:
+                job['failed'] += 1
+
+
 def build_global_stats(files: list[object]) -> dict[str, int]:
     """根据文件记录生成统一的全局统计。"""
     total_files = 0
@@ -194,7 +392,7 @@ def build_global_stats(files: list[object]) -> dict[str, int]:
 
         if status == 'pending':
             pending += 1
-        elif status == 'processed':
+        elif status == 'processed' and _is_processed_history_like(file):
             processed += 1
 
     return {
@@ -204,6 +402,23 @@ def build_global_stats(files: list[object]) -> dict[str, int]:
         'pending': pending,
         'processed': processed,
     }
+
+
+def is_history_processed_record(file: dict) -> bool:
+    """历史记录只展示真正已移动走源文件的 processed 项。"""
+    if file.get('status') != 'processed':
+        return False
+    original_path = file.get('original_path')
+    return bool(original_path) and not Path(original_path).exists()
+
+
+def _is_processed_history_like(file: object) -> bool:
+    if isinstance(file, dict):
+        return is_history_processed_record(file)
+
+    status = getattr(file, 'status', None)
+    original_path = getattr(file, 'original_path', None)
+    return status == 'processed' and bool(original_path) and not Path(original_path).exists()
 
 
 @app.get("/")
@@ -222,23 +437,36 @@ async def scan_files(force_rescan: bool = False):
     """
     # 扫描文件系统
     scanned_files = scanner.scan()
+    scanned_candidates = []
+    processed_history_codes = await get_processed_history_codes()
+
+    for file_info in scanned_files:
+        code = file_info['identified_code']
+        target_path = None
+        if code:
+            target_path = organizer.get_target_path(code, file_info['filename'])
+
+        status = resolve_scan_status(code, target_path)
+        if code and str(code).upper() in processed_history_codes:
+            status = 'target_exists'
+
+        scanned_candidates.append({
+            **file_info,
+            'original_path': file_info['path'],
+            'target_path': target_path,
+            'status': status,
+        })
+
+    assign_batch_duplicate_statuses(scanned_candidates)
 
     file_records = []
 
-    for file_info in scanned_files:
-        original_path = file_info['path']
+    for file_info in scanned_candidates:
+        original_path = file_info['original_path']
         code = file_info['identified_code']
+        target_path = file_info['target_path']
+        status = file_info['status']
         existing = await get_file_by_path(original_path)
-
-        # 判断是否已识别
-        if code:
-            # 计算目标路径
-            filename = file_info['filename']
-            target_path = organizer.get_target_path(code, filename)
-            status = resolve_scan_status(code, target_path)
-        else:
-            target_path = None
-            status = resolve_scan_status(code, target_path)
 
         if existing and existing['status'] == 'ignored':
             metadata_changed = (
@@ -258,57 +486,57 @@ async def scan_files(force_rescan: bool = False):
                 )
             continue
 
-        # 检查历史记录
-        if not force_rescan:
-            if existing:
-                # 文件未变化（大小和 mtime 相同）
-                if existing['file_size'] == file_info['size'] and existing['file_mtime'] == file_info['mtime']:
-                    if existing['status'] == 'processed' and status == 'pending':
-                        status = existing['status']
-                        target_path = existing['target_path']
-                    else:
-                        metadata_changed = (
-                            existing['identified_code'] != code
-                            or existing['target_path'] != target_path
-                            or existing['status'] != status
-                        )
-                        if metadata_changed:
-                            await refresh_file_record(
-                                file_id=existing['id'],
-                                identified_code=code,
-                                target_path=target_path,
-                                status=status,
-                                file_size=file_info['size'],
-                                file_mtime=file_info['mtime']
-                            )
-                            existing['identified_code'] = code
-                            existing['target_path'] = target_path
-                            existing['status'] = status
-                            existing['file_size'] = file_info['size']
-                            existing['file_mtime'] = file_info['mtime']
-                            existing['updated_at'] = datetime.now().isoformat()
-                else:
-                    # 文件已变化，更新记录
-                    await upsert_file(
-                        original_path=original_path,
+        if existing:
+            if existing['file_size'] == file_info['size'] and existing['file_mtime'] == file_info['mtime']:
+                metadata_changed = (
+                    existing['identified_code'] != code
+                    or existing['target_path'] != target_path
+                    or existing['status'] != status
+                )
+                if metadata_changed:
+                    await refresh_file_record(
+                        file_id=existing['id'],
                         identified_code=code,
                         target_path=target_path,
                         status=status,
                         file_size=file_info['size'],
                         file_mtime=file_info['mtime']
                     )
-                file_records.append(FileRecord(
-                    id=existing['id'],
-                    original_path=original_path,
+                    existing['identified_code'] = code
+                    existing['target_path'] = target_path
+                    existing['status'] = status
+                    existing['file_size'] = file_info['size']
+                    existing['file_mtime'] = file_info['mtime']
+                    existing['updated_at'] = datetime.now().isoformat()
+            else:
+                # 文件已变化，刷新记录并重新走当前扫描规则。
+                await refresh_file_record(
+                    file_id=existing['id'],
                     identified_code=code,
                     target_path=target_path,
                     status=status,
                     file_size=file_info['size'],
-                    file_mtime=file_info['mtime'],
-                    created_at=existing['created_at'],
-                    updated_at=existing['updated_at']
-                ))
-                continue
+                    file_mtime=file_info['mtime']
+                )
+                existing['identified_code'] = code
+                existing['target_path'] = target_path
+                existing['status'] = status
+                existing['file_size'] = file_info['size']
+                existing['file_mtime'] = file_info['mtime']
+                existing['updated_at'] = datetime.now().isoformat()
+
+            file_records.append(FileRecord(
+                id=existing['id'],
+                original_path=original_path,
+                identified_code=code,
+                target_path=target_path,
+                status=status,
+                file_size=file_info['size'],
+                file_mtime=file_info['mtime'],
+                created_at=existing['created_at'],
+                updated_at=existing['updated_at']
+            ))
+            continue
 
         # 插入新记录
         file_id = await upsert_file(
@@ -360,9 +588,10 @@ async def organize_files(request: OrganizeRequest):
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         placeholders = ','.join('?' * len(request.file_ids))
+        status_placeholders = ','.join('?' * len(SELECTABLE_SCAN_STATUSES))
         cursor = await db.execute(
-            f'SELECT * FROM files WHERE id IN ({placeholders}) AND status = ?',
-            (*request.file_ids, 'pending')
+            f'SELECT * FROM files WHERE id IN ({placeholders}) AND status IN ({status_placeholders})',
+            (*request.file_ids, *SELECTABLE_SCAN_STATUSES)
         )
         rows = await cursor.fetchall()
 
@@ -375,8 +604,8 @@ async def organize_files(request: OrganizeRequest):
 
     # 准备整理任务
     organize_tasks = []
-    for row in rows:
-        row_dict = dict(row)
+    sorted_rows = sorted((dict(row) for row in rows), key=cmp_to_key(compare_candidate_priority))
+    for row_dict in sorted_rows:
         organize_tasks.append({
             'file_id': row_dict['id'],
             'original_path': row_dict['original_path'],
@@ -395,10 +624,14 @@ async def organize_files(request: OrganizeRequest):
         file_id = result['file_id']
         target_path = result['target_path']
         status = result['status']
+        row_dict = next((item for item in sorted_rows if item['id'] == file_id), None)
 
         if status == 'moved':
             await update_file_status(file_id, 'processed', target_path)
+            await mark_related_files_target_exists(file_id, row_dict['identified_code'] if row_dict else None)
             success_count += 1
+        elif status == 'skipped':
+            await update_file_status(file_id, 'target_exists', target_path)
         else:
             await update_file_status(file_id, 'failed')
             failed_count += 1
@@ -407,6 +640,74 @@ async def organize_files(request: OrganizeRequest):
         success_count=success_count,
         failed_count=failed_count,
         results=results
+    )
+
+
+@app.post("/api/batches", response_model=BatchJob)
+async def create_batch(request: BatchCreateRequest):
+    """创建整理批任务并在后台串行执行。"""
+    if not request.file_ids:
+        raise HTTPException(status_code=400, detail='请选择至少一个可整理文件')
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        placeholders = ','.join('?' * len(request.file_ids))
+        status_placeholders = ','.join('?' * len(SELECTABLE_SCAN_STATUSES))
+        normalized_ids = [int(file_id) for file_id in request.file_ids]
+        cursor = await db.execute(
+            f'SELECT * FROM files WHERE id IN ({placeholders}) AND status IN ({status_placeholders})',
+            (*normalized_ids, *SELECTABLE_SCAN_STATUSES)
+        )
+        rows = await cursor.fetchall()
+
+        if not rows:
+            cursor = await db.execute(
+                f'SELECT id FROM files WHERE id IN ({placeholders})',
+                tuple(normalized_ids)
+            )
+            existing_rows = await cursor.fetchall()
+
+            if existing_rows:
+                raise HTTPException(status_code=409, detail='所选文件状态已变化，请刷新列表后重试')
+
+    if not rows:
+        raise HTTPException(status_code=400, detail='没有可整理的文件')
+
+    batch_job = await create_batch_job(rows)
+    asyncio.create_task(run_batch_job(batch_job['id']))
+    return batch_job
+
+
+@app.get("/api/batches/{batch_id}", response_model=BatchJob)
+async def get_batch(batch_id: str):
+    """获取批任务当前状态。"""
+    batch_job = await get_batch_job(batch_id)
+    if not batch_job:
+        raise HTTPException(status_code=404, detail='批任务不存在')
+    return batch_job
+
+
+@app.post("/api/batches/{batch_id}/cancel", response_model=BatchCancelResult)
+async def cancel_batch(batch_id: str):
+    """请求取消正在执行的批任务。"""
+    batch_job = await set_batch_job(
+        batch_id,
+        lambda job: job.update({'cancel_requested': True})
+    )
+    if not batch_job:
+        raise HTTPException(status_code=404, detail='批任务不存在')
+
+    if batch_job['status'] not in {'queued', 'running'}:
+        return BatchCancelResult(
+            id=batch_id,
+            status=batch_job['status'],
+            message='批任务当前不可取消'
+        )
+
+    return BatchCancelResult(
+        id=batch_id,
+        status='cancelling',
+        message='已请求取消批任务'
     )
 
 
@@ -452,7 +753,7 @@ async def get_history():
     stats = build_global_stats(all_files)
 
     skipped = sum(1 for f in all_files if f['status'] == 'skipped')
-    processed_files = [f for f in all_files if f['status'] == 'processed']
+    processed_files = [f for f in all_files if is_history_processed_record(f)]
 
     file_records = [
         FileRecord(
@@ -474,7 +775,7 @@ async def get_history():
         identified=stats['identified'],
         unidentified=stats['unidentified'],
         pending=stats['pending'],
-        processed=stats['processed'],
+        processed=len(processed_files),
         skipped=skipped,
         files=file_records
     )

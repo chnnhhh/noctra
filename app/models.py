@@ -8,7 +8,7 @@ class FileRecord(BaseModel):
     original_path: str
     identified_code: Optional[str]
     target_path: Optional[str]
-    status: str  # pending, processed, skipped, target_exists, failed, ignored
+    status: str  # pending, duplicate, processed, skipped, target_exists, failed, ignored
     file_size: int
     file_mtime: float
     created_at: str
@@ -31,8 +31,43 @@ class OrganizeRequest(BaseModel):
     file_ids: list[int]
 
 
+class BatchCreateRequest(BaseModel):
+    file_ids: list[int]
+
+
 class DeleteFileRequest(BaseModel):
     action: str  # delete_source, ignore_scan
+
+
+class BatchItemResult(BaseModel):
+    id: int
+    code: Optional[str] = None
+    source_path: str
+    target_path: Optional[str] = None
+    status: str  # pending, processing, success, skipped, failed
+    message: Optional[str] = None
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+
+
+class BatchJob(BaseModel):
+    id: str
+    status: str  # queued, running, completed, failed, cancelled
+    total: int
+    processed: int
+    succeeded: int
+    skipped: int
+    failed: int
+    created_at: str
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+    items: list[BatchItemResult]
+
+
+class BatchCancelResult(BaseModel):
+    id: str
+    status: str
+    message: str
 
 
 class OrganizeResultItem(BaseModel):

@@ -1,0 +1,184 @@
+# 当前实现状态
+
+## 1. 当前已实现的页面与组件
+
+### 扫描页
+
+已具备：
+
+- 顶部 5 张 console-style stats cards
+- 扫描目录按钮
+- 执行整理按钮
+- 当前页选择控制
+- 统一 toolbar：筛选 / 已选状态 / 排序 / 每页 / 分页
+- 扫描结果表格
+- 行 hover 光晕
+- 复制完整路径的局部 toast
+- 状态 badge / integrated expanding badge
+- 批处理 batch panel / batch rail
+
+### 历史页
+
+已具备：
+
+- 独立入口
+- 默认只展示 `processed` 记录
+- 默认按整理时间倒序
+- 独立排序组合器
+- 每页数量切换与分页
+- 更轻量的整理时间展示
+
+## 2. 当前后端实现状态
+
+### API
+
+当前主接口包括：
+
+- `GET /api/scan`
+- `GET /api/history`
+- `POST /api/batches`
+- `GET /api/batches/{id}`
+- `POST /api/batches/{id}/cancel`
+- `POST /api/files/{id}/delete`
+- `GET /api/health`
+
+### 批处理模型
+
+批量整理已经不是旧的同步 loading，而是批任务模型：
+
+- job 状态：`queued / running / completed / failed / cancelled`
+- item 状态：`pending / processing / success / skipped / failed`
+- 前端轮询频率：`400ms`
+
+### 状态映射
+
+- 扫描页显示：待处理 / 已存在 / 未识别 / 已处理
+- 历史页当前只保留已处理记录
+- 内部仍使用 `skipped` 作为“未识别”的数据库状态
+
+## 3. 当前分页 / 排序 / 跨页勾选状态
+
+### 分页
+
+- 默认每页 `50`
+- 可切换 `20 / 50 / 100`
+- 扫描页分页入口统一位于顶部 `toolbar-right`
+- 分页只影响展示，不影响全局勾选集合
+
+### 排序
+
+扫描页：
+
+- 默认排序
+- 番号
+- 状态
+
+历史页：
+
+- 时间
+- 番号
+- 状态
+
+排序均使用自然排序，避免 `ABP-10` 排在 `ABP-9` 前面。
+
+### 跨页勾选
+
+已实现：
+
+- 单条勾选
+- 当前页全选
+- 跨页累计选择
+- 当前页半选态
+
+当前规则：
+
+- 仅 `pending` 项允许加入整理集合
+- 已存在 / 未识别 / 已处理 默认不可加入整理集合
+
+## 4. 当前批处理反馈状态
+
+已实现：
+
+- 批处理状态条
+- 进度条
+- 成功 / 跳过 / 失败计数
+- 行内状态实时更新
+- 点击“执行整理”后立即创建 batch 并显示 panel
+- 最小展示时间：`800ms`
+- 运行中自动展开
+- 完成后保持展开，不自动隐藏
+- 用户可通过右上角箭头手动收起
+- 取消按钮
+
+已经替换掉旧的：
+
+- 仅按钮 loading
+- 全屏等待
+- 单纯的同步“执行中”
+
+## 5. 历史页现状
+
+当前历史页已经开始从“扫描页复用表格”转向“整理记录列表”，但仍在收口阶段。
+
+已经调整的方向：
+
+- 状态只保留记录态
+- 去掉历史页动作列
+- 整理时间单独列出
+- 长路径收敛
+- 表头和正文开始分离于扫描页
+
+### 仍在收口的问题
+
+- 历史页紧凑度和左侧对齐锚点还在微调
+- `番号` 列需要继续找到“紧凑但不贴边”的平衡
+- 与扫描页相比，历史页还需要更明显地弱化操作感
+
+## 6. 已发现但尚未完全收口的问题
+
+### UI / 交互
+
+- 历史页布局仍在微调，对齐和留白还未完全定稿
+- 复制 toast 已从全局消息改为局部提示，但未来有刮削功能后可能还要再复查位置与层级
+- 批处理状态条已经升级为稳定系统状态组件，后续重点转向失败筛选 / 重试路径
+
+### 工程 / 测试
+
+- 本地 `test_data` 在真实执行整理时容易被污染，调试后要注意还原
+- 旧文档中仍残留早期端口和旧 UI 描述
+- 本地后台启动链曾出现“脚本显示已启动但进程没有稳定驻留”的问题，当前更推荐前台 `./start.sh`
+
+### 待确认
+
+- `docs/phase1-*` 和部分旧部署文档存在历史信息，已不完全等同于当前 UI / 端口 / 交互实现
+
+## 7. 最近几轮改动重点
+
+最近几轮开发的主线包括：
+
+1. 文件名与番号识别规则收敛
+2. 扫描页整体 UI 重构为 dark / console / devtool 风格
+3. 状态列交互从独立按钮演化为 integrated expanding badge
+4. 顶部 stats cards 重构为 console module
+5. 行 hover 改为冷色 glow 反馈
+6. 复制反馈改为局部 toast
+7. 扫描页增加分页、排序、跨页勾选
+8. 批量整理升级为 batch job + 进度反馈
+9. 历史页开始从“大表格”重构为“整理记录页”
+10. 前端静态资源从单文件页面拆分为 `index.html + js/css` 模块
+
+## 8. 当前开发现场提示
+
+截至这次上下文落地时，需要特别记住两点：
+
+1. 目前真实权威实现以代码为准，尤其是：
+   - `/Users/liujiejian/git/noctra/app/main.py`
+   - `/Users/liujiejian/git/noctra/app/organizer.py`
+   - `/Users/liujiejian/git/noctra/app/scanner.py`
+   - `/Users/liujiejian/git/noctra/static/index.html`
+   - `/Users/liujiejian/git/noctra/static/js/features.js`
+   - `/Users/liujiejian/git/noctra/static/js/state.js`
+   - `/Users/liujiejian/git/noctra/static/js/render.js`
+   - `/Users/liujiejian/git/noctra/static/css/index.css`
+
+2. 如果后续继续接手 UI，优先在当前风格上“收敛和精修”，不要再回到大改结构、推翻式重写。

@@ -5,1591 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Noctra JAV 整理工具</title>
     <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js" defer></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap');
-
-        * {
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'JetBrains Mono', 'Fira Code', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
-            margin: 0;
-            padding: 28px;
-            background:
-                radial-gradient(circle at top left, rgba(88, 166, 255, 0.09), transparent 26%),
-                radial-gradient(circle at top right, rgba(167, 139, 250, 0.08), transparent 24%),
-                linear-gradient(180deg, #0f1117 0%, #0b0f14 100%);
-            color: #c9d1d9;
-        }
-
-        .container {
-            max-width: 1520px;
-            margin: 0 auto;
-            background: linear-gradient(180deg, rgba(15, 17, 23, 0.98) 0%, rgba(11, 15, 20, 0.98) 100%);
-            backdrop-filter: blur(14px);
-            padding: 28px;
-            border-radius: 28px;
-            border: 1px solid #30363d;
-            box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
-        }
-
-        /* ========== Header ========== */
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-
-        .header-copy {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .header h1 {
-            margin: 0;
-            font-size: 28px;
-            color: #eaf2ff;
-            letter-spacing: -0.03em;
-        }
-
-        .header-nav {
-            display: flex;
-            gap: 10px;
-            padding: 6px;
-            border-radius: 999px;
-            background: rgba(17, 24, 39, 0.86);
-            border: 1px solid rgba(71, 85, 105, 0.55);
-        }
-
-        .header-nav a {
-            text-decoration: none;
-            color: #8b949e;
-            font-size: 14px;
-            padding: 10px 18px;
-            border-radius: 999px;
-            transition: all 0.2s;
-        }
-
-        .header-nav a:hover {
-            background: rgba(29, 78, 216, 0.14);
-            color: #a78bfa;
-        }
-
-        .header-nav a.active {
-            background: linear-gradient(135deg, rgba(29, 78, 216, 0.34) 0%, rgba(14, 165, 233, 0.18) 100%);
-            color: #e6edf3;
-            font-weight: 600;
-            border: 1px solid rgba(96, 165, 250, 0.38);
-            box-shadow: inset 0 0 0 1px rgba(125, 211, 252, 0.08);
-        }
-
-        .overview-card {
-            margin-bottom: 24px;
-            padding: 24px 26px;
-            border-radius: 24px;
-            background: #161b22;
-            border: 1px solid #30363d;
-            box-shadow: 0 18px 36px rgba(0, 0, 0, 0.24);
-        }
-
-        .overview-header {
-            display: flex;
-            justify-content: space-between;
-            gap: 24px;
-            align-items: flex-start;
-            margin-bottom: 18px;
-        }
-
-        .eyebrow {
-            font-size: 12px;
-            font-weight: 700;
-            letter-spacing: 0.14em;
-            text-transform: uppercase;
-            color: #6e7681;
-            margin-bottom: 10px;
-        }
-
-        .overview-header h2 {
-            margin: 0;
-            color: #14213d;
-            font-size: 28px;
-            letter-spacing: -0.03em;
-        }
-
-        .overview-header p {
-            margin: 8px 0 0;
-            color: #6b7a90;
-            font-size: 14px;
-        }
-
-        .view-pill {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 10px 16px;
-            min-width: 96px;
-            border-radius: 999px;
-            background: rgba(31, 111, 235, 0.1);
-            color: #58a6ff;
-            border: 1px solid #1f6feb;
-            font-size: 13px;
-            font-weight: 700;
-        }
-
-        /* ========== Stats Cards ========== */
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(5, minmax(0, 1fr));
-            gap: 14px;
-            margin-bottom: 18px;
-        }
-
-        .stat-card {
-            --card-border: rgba(96, 165, 250, 0.24);
-            --card-accent: rgba(129, 140, 248, 0.86);
-            --card-glow-strong: rgba(129, 140, 248, 0.16);
-            --card-glow-soft: rgba(129, 140, 248, 0.08);
-            --card-shadow: rgba(129, 140, 248, 0.08);
-            position: relative;
-            isolation: isolate;
-            overflow: hidden;
-            padding: 18px 22px 20px;
-            border-radius: 22px;
-            text-align: left;
-            cursor: default;
-            transition: border-color 0.2s ease, box-shadow 0.25s ease;
-            border: 1px solid var(--card-border);
-            background: linear-gradient(
-                135deg,
-                rgba(18, 28, 42, 0.92) 0%,
-                rgba(11, 18, 30, 0.96) 58%,
-                rgba(8, 14, 24, 0.98) 100%
-            );
-        }
-
-        .stat-card::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            z-index: 0;
-            border-radius: inherit;
-            pointer-events: none;
-            opacity: 0.84;
-            background: radial-gradient(
-                280px circle at var(--x, 18%) var(--y, 22%),
-                var(--card-glow-strong) 0%,
-                var(--card-glow-soft) 32%,
-                transparent 72%
-            );
-            transition: opacity 0.22s ease, filter 0.22s ease;
-        }
-
-        .stat-card::after {
-            content: '';
-            position: absolute;
-            inset: 0;
-            z-index: 0;
-            border-radius: inherit;
-            pointer-events: none;
-            background:
-                linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 28%),
-                linear-gradient(90deg, rgba(255, 255, 255, 0.016), transparent 46%);
-            opacity: 0.65;
-        }
-
-        .stat-card:hover {
-            border-color: var(--card-accent);
-            box-shadow:
-                inset 0 0 0 1px var(--card-glow-soft),
-                0 0 24px var(--card-shadow);
-        }
-
-        .stat-card:hover::before {
-            opacity: 1;
-            filter: saturate(1.08);
-        }
-
-        .stat-card.total {
-            --card-border: rgba(96, 165, 250, 0.28);
-            --card-accent: rgba(129, 140, 248, 0.88);
-            --card-glow-strong: rgba(129, 140, 248, 0.18);
-            --card-glow-soft: rgba(129, 140, 248, 0.09);
-            --card-shadow: rgba(129, 140, 248, 0.10);
-        }
-
-        .stat-card.identified {
-            --card-border: rgba(20, 184, 166, 0.30);
-            --card-accent: rgba(45, 212, 191, 0.82);
-            --card-glow-strong: rgba(45, 212, 191, 0.16);
-            --card-glow-soft: rgba(45, 212, 191, 0.08);
-            --card-shadow: rgba(45, 212, 191, 0.10);
-        }
-
-        .stat-card.unidentified {
-            --card-border: rgba(239, 68, 68, 0.24);
-            --card-accent: rgba(248, 113, 113, 0.78);
-            --card-glow-strong: rgba(248, 113, 113, 0.14);
-            --card-glow-soft: rgba(248, 113, 113, 0.07);
-            --card-shadow: rgba(248, 113, 113, 0.09);
-        }
-
-        .stat-card.pending {
-            --card-border: rgba(37, 99, 235, 0.30);
-            --card-accent: rgba(59, 130, 246, 0.84);
-            --card-glow-strong: rgba(59, 130, 246, 0.17);
-            --card-glow-soft: rgba(59, 130, 246, 0.08);
-            --card-shadow: rgba(59, 130, 246, 0.10);
-        }
-
-        .stat-card.processed {
-            --card-border: rgba(34, 197, 94, 0.26);
-            --card-accent: rgba(74, 222, 128, 0.78);
-            --card-glow-strong: rgba(74, 222, 128, 0.15);
-            --card-glow-soft: rgba(74, 222, 128, 0.07);
-            --card-shadow: rgba(74, 222, 128, 0.09);
-        }
-
-        .stat-card__meta,
-        .stat-card__id,
-        .stat-value,
-        .stat-label,
-        .stat-subtext {
-            position: relative;
-            z-index: 1;
-        }
-
-        .stat-card__meta {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 11px;
-            line-height: 1;
-            letter-spacing: 0.16em;
-            text-transform: uppercase;
-            color: rgba(148, 163, 184, 0.56);
-        }
-
-        .stat-card__meta-dot {
-            width: 6px;
-            height: 6px;
-            flex: 0 0 auto;
-            border-radius: 999px;
-            background: var(--card-accent);
-            box-shadow: 0 0 10px rgba(255, 255, 255, 0.04), 0 0 12px var(--card-glow-soft);
-        }
-
-        .stat-card__id {
-            position: absolute;
-            top: 16px;
-            right: 18px;
-            font-size: 11px;
-            line-height: 1;
-            letter-spacing: 0.14em;
-            color: rgba(100, 116, 139, 0.38);
-        }
-
-        .stat-value {
-            margin-top: 18px;
-            font-size: 56px;
-            line-height: 0.95;
-            font-weight: 750;
-            margin-bottom: 0;
-            letter-spacing: -0.045em;
-            background: linear-gradient(
-                180deg,
-                rgba(248, 250, 252, 0.98) 0%,
-                rgba(226, 232, 240, 0.90) 100%
-            );
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            text-shadow: 0 0 18px rgba(226, 232, 240, 0.06);
-        }
-
-        .stat-label {
-            margin-top: 10px;
-            font-size: 15px;
-            color: rgba(203, 213, 225, 0.72);
-            font-weight: 600;
-            letter-spacing: 0.01em;
-            text-transform: none;
-        }
-
-        .stat-subtext {
-            margin-top: 8px;
-            font-size: 12px;
-            line-height: 1.45;
-            color: rgba(100, 116, 139, 0.62);
-        }
-
-        .workspace {
-            display: grid;
-            grid-template-columns: 300px minmax(0, 1fr);
-            gap: 22px;
-            align-items: start;
-        }
-
-        .workspace.history-mode {
-            grid-template-columns: minmax(0, 1fr);
-        }
-
-        .control-panel {
-            padding: 22px 20px;
-            border-radius: 24px;
-            background: #161b22;
-            border: 1px solid #30363d;
-            box-shadow: 0 18px 36px rgba(0, 0, 0, 0.24);
-            position: sticky;
-            top: 24px;
-        }
-
-        .data-panel {
-            display: flex;
-            flex-direction: column;
-            gap: 18px;
-            min-width: 0;
-        }
-
-        .message-stack {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            margin-bottom: 18px;
-        }
-
-        .panel-surface {
-            padding: 22px;
-            border-radius: 24px;
-            background: #161b22;
-            border: 1px solid #30363d;
-            box-shadow: 0 22px 44px rgba(0, 0, 0, 0.28);
-            transition: all 0.15s ease;
-        }
-
-        .panel-surface:hover {
-            border-color: rgba(88, 166, 255, 0.35);
-            box-shadow: 0 0 20px rgba(88, 166, 255, 0.05), 0 22px 44px rgba(0, 0, 0, 0.28);
-        }
-
-        .panel-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            margin-bottom: 18px;
-        }
-
-        .panel-header-title {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-        }
-
-        .panel-title {
-            margin: 0;
-            color: #1c2b4a;
-            font-size: 20px;
-            font-weight: 700;
-            letter-spacing: -0.02em;
-        }
-
-        .panel-subtitle {
-            font-size: 13px;
-            color: #7b8ba8;
-        }
-
-        .panel-section {
-            padding: 16px 0;
-            border-top: 1px solid #edf2f7;
-        }
-
-        .panel-section:first-of-type {
-            border-top: none;
-            padding-top: 0;
-        }
-
-        .section-label {
-            display: block;
-            margin-bottom: 12px;
-            color: #475569;
-            font-size: 12px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-        }
-
-        .control-stack {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .control-stack button {
-            width: 100%;
-            justify-content: center;
-        }
-
-        .chip-grid {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-
-        .table-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            gap: 18px;
-            margin-bottom: 14px;
-        }
-
-        .table-title {
-            margin: 0;
-            color: #e6edf3;
-            font-size: 22px;
-            font-weight: 700;
-            letter-spacing: -0.02em;
-        }
-
-        .table-subtitle {
-            margin-top: 6px;
-            color: #8b949e;
-            font-size: 13px;
-            line-height: 1.5;
-            opacity: 0.8;
-        }
-
-        .table-toolbar {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            justify-content: flex-end;
-            align-items: center;
-        }
-
-        .toolbar-pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 10px 14px;
-            border-radius: 999px;
-            background: rgba(17, 24, 39, 0.88);
-            border: 1px solid #30363d;
-            color: #6e7681;
-            font-size: 13px;
-            font-weight: 600;
-            white-space: nowrap;
-        }
-
-        .toolbar-pill.strong {
-            background: rgba(29, 78, 216, 0.14);
-            border-color: rgba(96, 165, 250, 0.38);
-            color: #58a6ff;
-        }
-
-        .panel-note {
-            padding: 14px 16px;
-            border-radius: 18px;
-            background: #161b22;
-            border: 1px solid #30363d;
-            color: #8b949e;
-            font-size: 13px;
-            line-height: 1.6;
-        }
-
-        .panel-note strong {
-            display: block;
-            margin-bottom: 6px;
-            color: #c9d1d9;
-            font-size: 13px;
-        }
-
-        /* ========== Actions ========== */
-        .actions {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 12px;
-            margin-bottom: 16px;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .actions-group {
-            display: flex;
-            gap: 8px;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-
-        .actions-group.primary {
-            margin-right: 0;
-        }
-
-        .actions-group-label {
-            font-size: 12px;
-            color: #6e7681;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            padding: 8px 0;
-        }
-
-        button {
-            padding: 12px 20px;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 600;
-            transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .button-inline {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .button-icon {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 16px;
-            height: 16px;
-            flex-shrink: 0;
-        }
-
-        .button-icon svg,
-        .icon-glyph svg {
-            width: 100%;
-            height: 100%;
-            stroke: currentColor;
-            fill: none;
-            stroke-linecap: round;
-            stroke-linejoin: round;
-            stroke-width: 1.85;
-        }
-
-        button:focus-visible,
-        .header-nav a:focus-visible,
-        .filter-button:focus-visible {
-            outline: none;
-            box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.18);
-        }
-
-        button:hover {
-            transform: translateY(-1px);
-        }
-
-        button:active {
-            transform: translateY(0);
-        }
-
-        button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none !important;
-        }
-
-        button.primary {
-            background: linear-gradient(135deg, #1f6feb 0%, #58a6ff 100%);
-            color: #e6edf3;
-            border: 1px solid rgba(59, 130, 246, 0.4);
-            box-shadow: inset 0 0 0 1px rgba(125, 211, 252, 0.06);
-            font-size: 15px;
-            padding: 14px 28px;
-        }
-
-        button.primary:not(.danger):hover {
-            filter: brightness(1.08);
-            box-shadow: 0 0 12px rgba(88, 166, 255, 0.4), 0 0 0 1px rgba(96, 165, 250, 0.3), 0 10px 26px rgba(14, 165, 233, 0.18);
-        }
-
-        button.secondary {
-            background: rgba(17, 24, 39, 0.9);
-            color: #c9d1d9;
-            border: 1px solid #30363d;
-        }
-
-        button.secondary:hover {
-            background: #161b22;
-            border-color: rgba(96, 165, 250, 0.28);
-        }
-
-        button.ghost {
-            background: rgba(51, 23, 7, 0.35);
-            color: #f2cc60;
-            border: 1px solid rgba(251, 146, 60, 0.45);
-        }
-
-        button.ghost:hover {
-            background: rgba(74, 31, 10, 0.45);
-            border-color: rgba(251, 146, 60, 0.65);
-        }
-
-        button.danger {
-            background: linear-gradient(135deg, rgba(69, 10, 10, 0.96) 0%, rgba(127, 29, 29, 0.96) 100%);
-            color: #e6edf3;
-            border: 1px solid rgba(239, 68, 68, 0.32);
-        }
-
-        button.danger:hover {
-            box-shadow: 0 10px 24px rgba(127, 29, 29, 0.24);
-        }
-
-        /* ========== Filter ========== */
-        .filter {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 20px;
-            padding: 16px;
-            background: #f7fafc;
-            border-radius: 8px;
-            align-items: center;
-        }
-
-        .filter-label {
-            font-size: 13px;
-            color: #6e7681;
-            font-weight: 600;
-            margin-right: 12px;
-        }
-
-        .filter-button {
-            padding: 10px 14px;
-            border: 1px solid #30363d;
-            background: #161b22;
-            border-radius: 14px;
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: 600;
-            color: #6e7681;
-            transition: all 0.2s;
-        }
-
-        .filter-button:hover {
-            border-color: #58a6ff;
-            background: #1a2028;
-            color: #c9d1d9;
-        }
-
-        .filter-button.active {
-            background: rgba(31, 111, 235, 0.1);
-            color: #58a6ff;
-            border-color: #1f6feb;
-            box-shadow: none;
-        }
-
-        .filter.filter-subtle {
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-bottom: 16px;
-            padding: 0;
-            background: transparent;
-            border-radius: 0;
-            align-items: center;
-        }
-
-        .filter.filter-subtle .filter-label {
-            margin-right: 6px;
-            font-size: 12px;
-            color: #6e7681;
-            letter-spacing: 0.06em;
-            text-transform: uppercase;
-        }
-
-        .filter.filter-subtle .filter-button {
-            padding: 7px 12px;
-            border-radius: 999px;
-            background: transparent;
-            border-color: #30363d;
-            color: #6e7681;
-            font-size: 12px;
-            font-weight: 600;
-        }
-
-        .filter.filter-subtle .filter-button:hover {
-            background: rgba(22, 27, 34, 0.85);
-            border-color: #a78bfa;
-            color: #c9d1d9;
-        }
-
-        .filter.filter-subtle .filter-button.active {
-            background: rgba(31, 111, 235, 0.1);
-            color: #58a6ff;
-            border-color: #1f6feb;
-            box-shadow: none;
-        }
-
-        /* ========== Table ========== */
-        .table-container {
-            background: linear-gradient(180deg, #161b22 0%, #11161d 100%);
-            border-radius: 20px;
-            overflow-x: auto;
-            overflow-y: visible;
-            border: 1px solid #30363d;
-            box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.05);
-            transition: all 0.15s ease;
-        }
-
-        .table-container:hover {
-            border-color: rgba(88, 166, 255, 0.25);
-            box-shadow: 0 0 20px rgba(88, 166, 255, 0.05), inset 0 1px 0 rgba(148, 163, 184, 0.05);
-        }
-
-        table {
-            width: 100%;
-            border-collapse: separate;
-            border-spacing: 0;
-            table-layout: fixed;
-            min-width: 1360px;
-        }
-
-        thead tr {
-            position: relative;
-            isolation: isolate;
-        }
-
-        thead tr::before {
-            content: '';
-            position: absolute;
-            left: 10px;
-            right: 10px;
-            top: 0;
-            bottom: 0;
-            border-radius: 18px 18px 0 0;
-            background: linear-gradient(180deg, #0f1722 0%, #0b111a 100%);
-            border: 1px solid rgba(88, 166, 255, 0.12);
-            border-bottom-color: rgba(88, 166, 255, 0.08);
-            box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.04);
-            z-index: 0;
-            pointer-events: none;
-        }
-
-        th {
-            position: relative;
-            z-index: 1;
-            background: transparent;
-            padding: 20px 28px;
-            text-align: left;
-            font-weight: 600;
-            color: #9fb3c8;
-            font-size: 15px;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            text-shadow: 0 0 6px rgba(88, 166, 255, 0.15);
-            border-bottom: 1px solid transparent;
-            vertical-align: middle;
-            transition: color 0.15s ease, text-shadow 0.15s ease;
-        }
-
-        th:hover {
-            color: #58a6ff;
-            text-shadow: 0 0 8px rgba(88, 166, 255, 0.4);
-        }
-
-        td {
-            position: relative;
-            z-index: 1;
-            padding: 22px 28px;
-            border-bottom: 1px solid transparent;
-            background: transparent;
-            vertical-align: middle;
-            text-align: left;
-            color: #c9d1d9;
-            transition: color 0.15s ease;
-        }
-
-        th.col-select,
-        td.cell-select {
-            width: 64px;
-            text-align: center;
-            padding-left: 16px;
-            padding-right: 16px;
-            background: transparent !important;
-            border: none;
-            box-shadow: none !important;
-        }
-
-        th.col-code,
-        td.cell-code {
-            width: 186px;
-            text-align: center;
-        }
-
-        th.col-name,
-        td.cell-name {
-            width: 396px;
-            text-align: left;
-        }
-
-        th.col-target,
-        td.cell-target {
-            width: 470px;
-            text-align: left;
-        }
-
-        th.col-status,
-        td.cell-status {
-            width: 300px;
-            text-align: center;
-        }
-
-        td.cell-status {
-            position: relative;
-            overflow: visible;
-            padding-right: 30px;
-        }
-
-        th.col-select {
-            text-align: center;
-        }
-
-        th.col-status {
-            text-align: center;
-        }
-
-        tbody tr.row {
-            position: relative;
-            isolation: isolate;
-            overflow: hidden;
-            border-radius: 14px;
-        }
-
-        tbody tr.row::before {
-            content: '';
-            position: absolute;
-            left: 14px;
-            right: 14px;
-            top: 4px;
-            bottom: 4px;
-            border-radius: 14px;
-            background: radial-gradient(
-                240px circle at var(--x, 50%) var(--y, 50%),
-                rgba(56, 189, 248, 0.18),
-                rgba(59, 130, 246, 0.10) 40%,
-                rgba(56, 189, 248, 0.04) 65%,
-                transparent 80%
-            );
-            box-shadow:
-                inset 0 0 0 1px rgba(88, 166, 255, 0.08),
-                0 0 16px rgba(59, 130, 246, 0.06);
-            opacity: 0;
-            transform: scale(0.992);
-            transition: opacity 0.15s ease, transform 0.18s ease, box-shadow 0.18s ease;
-            z-index: 0;
-            pointer-events: none;
-        }
-
-        tbody tr.row::after {
-            content: '';
-            position: absolute;
-            left: 24px;
-            right: 24px;
-            bottom: 0;
-            border-bottom: 1px solid rgba(30, 41, 59, 0.5);
-            z-index: 0;
-            pointer-events: none;
-        }
-
-        tbody tr.row:last-child::after {
-            border-bottom-color: transparent;
-        }
-
-        tbody tr.row:hover::before,
-        tbody tr.row.row-active::before {
-            opacity: 1;
-            transform: scale(1);
-        }
-
-        tbody tr.row:hover::after,
-        tbody tr.row.row-active::after {
-            border-bottom-color: transparent;
-        }
-
-        /* ========== Badge ========== */
-        .badge {
-            padding: 6px 12px;
-            border-radius: 999px;
-            font-size: 12px;
-            font-weight: 700;
-            text-transform: none;
-            letter-spacing: 0.02em;
-            display: inline-block;
-            background: transparent;
-        }
-
-        .badge.unidentified {
-            color: #ffb3ad;
-            border: 1px solid rgba(255, 123, 114, 0.7);
-            background: rgba(255, 123, 114, 0.12);
-        }
-
-        .badge.identified {
-            color: #cbd5e1;
-            border: 1px solid #30363d;
-            background: rgba(110, 118, 129, 0.08);
-        }
-
-        .badge.pending {
-            color: #58a6ff;
-            border: 1px solid #1f6feb;
-            background: rgba(31, 111, 235, 0.1);
-        }
-
-        .badge.processed {
-            color: #3fb950;
-            border: 1px solid #238636;
-            background: rgba(35, 134, 54, 0.1);
-        }
-
-        .badge.target_exists {
-            color: #f2cc60;
-            border: 1px solid #d29922;
-            background: rgba(210, 153, 34, 0.1);
-        }
-
-        .badge.skipped {
-            color: #ffb3ad;
-            border: 1px solid rgba(255, 123, 114, 0.7);
-            background: rgba(255, 123, 114, 0.12);
-        }
-
-        .status-action {
-            --status-width-collapsed: 100px;
-            --status-width-expanded: 176px;
-            --status-border: rgba(125, 211, 252, 0.22);
-            --status-core-bg: rgba(88, 166, 255, 0.16);
-            --status-text: #c9d1d9;
-            --status-glow: rgba(88, 166, 255, 0.14);
-            position: relative;
-            display: inline-flex;
-            align-items: center;
-            justify-content: flex-start;
-            width: var(--status-width-collapsed);
-            max-width: 100%;
-            min-height: 40px;
-            height: 40px;
-            margin: 0 auto;
-            overflow: visible;
-            white-space: nowrap;
-            border-radius: 999px;
-            border: 1px solid var(--status-border);
-            background: linear-gradient(
-                90deg,
-                var(--status-core-bg) 0%,
-                var(--status-core-bg) calc(var(--status-width-collapsed) - 18px),
-                rgba(10, 16, 32, 0.8) calc(var(--status-width-collapsed) + 10px),
-                rgba(8, 17, 31, 0.88) 100%
-            );
-            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
-            transition: width 0.2s ease, border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
-        }
-
-        .status-action::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background: linear-gradient(110deg, rgba(255, 255, 255, 0.05) 0%, transparent 32%, transparent 100%);
-            pointer-events: none;
-            opacity: 0.6;
-        }
-
-        .status-action.status-pending {
-            --status-border: rgba(31, 111, 235, 0.55);
-            --status-core-bg: rgba(31, 111, 235, 0.18);
-            --status-text: #58a6ff;
-            --status-glow: rgba(88, 166, 255, 0.16);
-        }
-
-        .status-action.status-target_exists {
-            --status-border: rgba(210, 153, 34, 0.55);
-            --status-core-bg: rgba(210, 153, 34, 0.18);
-            --status-text: #f2cc60;
-            --status-glow: rgba(242, 204, 96, 0.14);
-        }
-
-        .status-action.status-skipped {
-            --status-border: rgba(255, 123, 114, 0.62);
-            --status-core-bg: rgba(255, 123, 114, 0.18);
-            --status-text: #ffb3ad;
-            --status-glow: rgba(255, 123, 114, 0.16);
-        }
-
-        .status-action.status-failed {
-            --status-border: rgba(255, 123, 114, 0.62);
-            --status-core-bg: rgba(255, 123, 114, 0.18);
-            --status-text: #ffb3ad;
-            --status-glow: rgba(255, 123, 114, 0.16);
-        }
-
-        .status-trigger {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            flex: 0 0 var(--status-width-collapsed);
-            min-width: var(--status-width-collapsed);
-            height: 100%;
-            position: relative;
-            z-index: 1;
-            cursor: default;
-            overflow: hidden;
-            border-radius: 999px;
-        }
-
-        .status-label {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 100%;
-            padding: 0 12px;
-            color: var(--status-text);
-            font-size: 12px;
-            font-weight: 700;
-            letter-spacing: 0.02em;
-            text-shadow: 0 0 6px var(--status-glow);
-        }
-
-        .status-actions {
-            position: relative;
-            z-index: 1;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            height: 100%;
-            padding: 0 8px 0 4px;
-            overflow: visible;
-            opacity: 0;
-            visibility: hidden;
-            transform: translateX(6px) scale(0.92);
-            pointer-events: none;
-            transition: opacity 0.18s ease, transform 0.2s ease, visibility 0.18s ease;
-        }
-
-        .icon-action {
-            position: relative;
-            width: 34px;
-            height: 34px;
-            min-width: 34px;
-            padding: 0;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 7px;
-            border: 1px solid transparent;
-            background: transparent;
-            color: #8b949e;
-            box-shadow: none;
-        }
-
-        .icon-action:hover,
-        .icon-action:active {
-            transform: none;
-        }
-
-        .icon-action:hover,
-        .icon-action:focus-visible {
-            background: rgba(88, 166, 255, 0.1);
-        }
-
-        .icon-action:active {
-            color: #a5f3fc;
-        }
-
-        .icon-action.action-organize {
-            color: #7dd3fc;
-        }
-
-        .icon-action.action-organize:hover,
-        .icon-action.action-organize:focus-visible {
-            color: #a5f3fc;
-            box-shadow: 0 0 8px rgba(125, 211, 252, 0.35);
-        }
-
-        .icon-action.action-delete {
-            color: #ff7b72;
-        }
-
-        .icon-action.action-delete:hover,
-        .icon-action.action-delete:focus-visible {
-            color: #ffb4ae;
-            background: rgba(255, 123, 114, 0.1);
-            box-shadow: 0 0 8px rgba(255, 123, 114, 0.28);
-        }
-
-        .icon-glyph {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 18px;
-            height: 18px;
-        }
-
-        .icon-action[data-tooltip]::after {
-            content: attr(data-tooltip);
-            position: absolute;
-            left: 50%;
-            bottom: calc(100% + 10px);
-            z-index: 12;
-            transform: translateX(-50%) translateY(4px);
-            padding: 6px 10px;
-            border-radius: 8px;
-            background: #161b22;
-            border: 1px solid #30363d;
-            color: #c9d1d9;
-            font-size: 11px;
-            line-height: 1;
-            white-space: nowrap;
-            opacity: 0;
-            visibility: hidden;
-            pointer-events: none;
-            transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s ease;
-        }
-
-        .icon-action:hover::after,
-        .icon-action:focus-visible::after {
-            opacity: 1;
-            visibility: visible;
-            transform: translateX(-50%) translateY(0);
-        }
-
-        .status-action.visible,
-        .status-action:hover {
-            width: min(var(--status-width-expanded), 100%);
-            box-shadow: 0 0 0 1px var(--status-border), 0 0 14px var(--status-glow);
-        }
-
-        .status-action.visible .status-actions,
-        .status-action:hover .status-actions {
-            opacity: 1;
-            visibility: visible;
-            transform: translateX(0) scale(1);
-            pointer-events: auto;
-        }
-
-        /* ========== Checkbox ========== */
-        .checkbox {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 18px;
-            height: 18px;
-            cursor: pointer;
-            border-radius: 4px;
-            border: 1px solid #2d3748;
-            background: #0b1220;
-            display: inline-block;
-            position: relative;
-            transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
-        }
-
-        .checkbox:hover {
-            border-color: #58a6ff;
-        }
-
-        .checkbox:focus-visible {
-            outline: none;
-            box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.16);
-        }
-
-        .checkbox:checked {
-            background: linear-gradient(135deg, #1f6feb, #58a6ff);
-            border-color: #58a6ff;
-            box-shadow: 0 0 6px rgba(88, 166, 255, 0.5);
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23e6edf3' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E");
-            background-repeat: no-repeat;
-            background-position: center;
-            background-size: 12px 12px;
-        }
-
-        /* ========== Code Highlight ========== */
-        .code {
-            font-weight: 700;
-            font-size: 14px;
-            color: #58a6ff;
-            background: #0b1220;
-            padding: 8px 12px;
-            border-radius: 8px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 116px;
-            max-width: 116px;
-            border: 1px solid #1f6feb;
-            box-shadow: none;
-            white-space: nowrap;
-            text-align: center;
-            letter-spacing: 0.5px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            transition: border-color 0.15s ease, box-shadow 0.15s ease;
-        }
-
-        .cell-code .code {
-            margin: 0 auto;
-            text-align: center;
-        }
-
-        .cell-code .code:hover {
-            border-color: #58a6ff;
-            box-shadow: 0 0 6px rgba(88, 166, 255, 0.4), 0 0 12px rgba(88, 166, 255, 0.2);
-        }
-
-        .code.empty {
-            min-width: 0;
-            width: auto;
-            max-width: none;
-            padding: 0;
-            background: transparent;
-            border: none;
-            box-shadow: none;
-            border-radius: 0;
-            justify-content: center;
-            text-align: center;
-            color: #6e7681;
-        }
-
-        /* ========== Filename ========== */
-        .filename-copy {
-            cursor: pointer;
-            display: flex;
-            flex-direction: column;
-            align-items: flex-start;
-            gap: 8px;
-            min-width: 0;
-        }
-
-        .filename {
-            font-size: 14px;
-            color: #eaf2ff;
-            font-weight: 600;
-            line-height: 1.45;
-            word-break: break-word;
-            text-align: left;
-            letter-spacing: 0.2px;
-            transition: color 0.15s ease;
-        }
-
-        .filename-copy:hover .filename {
-            color: #f0f6fc;
-        }
-
-        .copy-hint {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            margin-top: 6px;
-            font-size: 11px;
-            color: #6e7681;
-            padding: 0;
-            border-radius: 0;
-            background: transparent;
-            border: none;
-            transition: all 0.2s;
-        }
-
-        .copy-hint::before {
-            content: '⧉';
-            font-size: 11px;
-            line-height: 1;
-        }
-
-        .filename-copy:hover .copy-hint {
-            color: #58a6ff;
-        }
-
-        /* ========== Path Cell ========== */
-        .path-cell {
-            font-family: 'JetBrains Mono', 'Fira Code', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
-            font-size: 12px;
-            color: #7dd3fc;
-            line-height: 1.4;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-            max-height: calc(1.4em * 2);
-            opacity: 0.85;
-            text-shadow: 0 0 4px rgba(125, 211, 252, 0.2);
-            transition: opacity 0.15s ease, color 0.15s ease;
-        }
-
-        .cell-target:hover .path-cell,
-        tbody tr.row:hover .path-cell {
-            opacity: 1;
-            color: #a5f3fc;
-            text-shadow: 0 0 6px rgba(125, 211, 252, 0.25);
-        }
-
-        /* ========== Empty ========== */
-        .empty {
-            text-align: center;
-            padding: 60px 20px;
-            color: #6e7681;
-        }
-
-        .empty-icon {
-            font-size: 48px;
-            margin-bottom: 16px;
-        }
-
-        /* ========== Loading ========== */
-        .loading {
-            text-align: center;
-            padding: 40px;
-            color: #8b949e;
-        }
-
-        .loading-spinner {
-            display: inline-block;
-            width: 40px;
-            height: 40px;
-            border: 4px solid rgba(51, 65, 85, 0.8);
-            border-top-color: #60a5fa;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        /* ========== Error ========== */
-        .error {
-            background: rgba(69, 10, 10, 0.4);
-            color: #ff7b72;
-            padding: 16px;
-            border-radius: 12px;
-            border: 1px solid rgba(239, 68, 68, 0.28);
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .error-icon {
-            font-size: 20px;
-        }
-
-        /* ========== Success ========== */
-        .success {
-            background: rgba(6, 78, 59, 0.32);
-            color: #3fb950;
-            padding: 16px;
-            border-radius: 12px;
-            border: 1px solid rgba(34, 197, 94, 0.24);
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .success-icon {
-            font-size: 20px;
-        }
-
-        /* ========== Tooltip ========== */
-        .tooltip {
-            position: relative;
-            display: inline-block;
-            max-width: 100%;
-        }
-
-        .tooltip-text {
-            visibility: hidden;
-            background-color: rgba(10, 14, 22, 0.98);
-            color: #c9d1d9;
-            text-align: left;
-            padding: 16px;
-            border-radius: 12px;
-            position: absolute;
-            z-index: 1000;
-            bottom: calc(100% + 10px);
-            left: 0;
-            opacity: 0;
-            transition: opacity 0.3s;
-            width: min(720px, calc(100vw - 120px));
-            max-width: min(720px, calc(100vw - 120px));
-            min-width: min(420px, calc(100vw - 120px));
-            font-size: 13px;
-            font-family: 'JetBrains Mono', 'Fira Code', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
-            word-break: break-word;
-            overflow-wrap: anywhere;
-            line-height: 1.6;
-            border: 1px solid rgba(59, 130, 246, 0.24);
-            box-shadow: 0 18px 36px rgba(0, 0, 0, 0.42);
-        }
-
-        .tooltip:hover .tooltip-text {
-            visibility: visible;
-            opacity: 1;
-        }
-
-        /* ========== Confirmation Modal ========== */
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            padding: 24px;
-            background: rgba(0,0,0,0.5);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 9999;
-            overflow-y: auto;
-            animation: fadeIn 0.2s;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-
-        .modal {
-            background: linear-gradient(180deg, rgba(18, 21, 31, 0.98) 0%, rgba(12, 15, 22, 0.98) 100%);
-            border-radius: 18px;
-            padding: 32px;
-            max-width: 500px;
-            width: 90%;
-            border: 1px solid rgba(51, 65, 85, 0.76);
-            box-shadow: 0 28px 52px rgba(0, 0, 0, 0.44);
-            animation: slideUp 0.3s;
-        }
-
-        @keyframes slideUp {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .modal-title {
-            font-size: 20px;
-            font-weight: 700;
-            color: #e6edf3;
-            margin-bottom: 16px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .modal-content {
-            color: #8b949e;
-            margin-bottom: 24px;
-            line-height: 1.6;
-        }
-
-        .modal-info {
-            background: rgba(17, 24, 39, 0.9);
-            padding: 16px;
-            border-radius: 12px;
-            border: 1px solid rgba(51, 65, 85, 0.72);
-            margin-bottom: 24px;
-            font-size: 14px;
-        }
-
-        .modal-info-label {
-            font-weight: 600;
-            color: #c9d1d9;
-            margin-bottom: 4px;
-        }
-
-        .modal-info-value {
-            font-family: 'JetBrains Mono', 'Fira Code', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
-            color: #8b949e;
-            word-break: break-all;
-        }
-
-        .modal-code-list {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            max-height: 240px;
-            overflow-y: auto;
-        }
-
-        .modal-actions {
-            display: flex;
-            gap: 12px;
-            justify-content: flex-end;
-        }
-
-        .modal-actions button {
-            min-width: 100px;
-            justify-content: center;
-        }
-
-        .modal-actions.split {
-            justify-content: space-between;
-            flex-wrap: wrap;
-        }
-
-        /* ========== Responsive ========== */
-        @media (max-width: 768px) {
-            .stats {
-                grid-template-columns: repeat(2, 1fr);
-            }
-
-            .overview-header {
-                flex-direction: column;
-                align-items: flex-start;
-            }
-
-            .workspace {
-                grid-template-columns: 1fr;
-            }
-
-            .control-panel {
-                position: static;
-            }
-
-            .table-header {
-                flex-direction: column;
-                align-items: flex-start;
-            }
-
-            .table-toolbar {
-                justify-content: flex-start;
-            }
-
-            .actions {
-                flex-direction: column;
-                align-items: stretch;
-            }
-
-            .actions-group {
-                width: 100%;
-                flex-direction: column;
-            }
-
-            button {
-                width: 100%;
-                justify-content: center;
-            }
-
-            .header {
-                flex-direction: column;
-                gap: 16px;
-                align-items: flex-start;
-            }
-
-            .tooltip-text {
-                min-width: min(280px, calc(100vw - 40px));
-                width: min(520px, calc(100vw - 40px));
-                max-width: min(520px, calc(100vw - 40px));
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="/static/css/index.css">
 </head>
 <body x-data="app()">
+    <div class="page-bg"></div>
     <div class="container">
         <!-- Header -->
         <div class="header">
@@ -1669,7 +88,7 @@
 
         <div x-show="view === 'scan'" class="actions">
             <div class="actions-group primary">
-                <button class="primary" @click="scanFiles" :disabled="loading">
+                <button class="secondary" @click="scanFiles" :disabled="loading || batchRunning || batchSubmitting">
                     <span x-show="!loading" class="button-inline">
                         <span class="button-icon" x-html="getUiIcon('scan')"></span>
                         <span>扫描目录</span>
@@ -1679,17 +98,16 @@
                         扫描中...
                     </span>
                 </button>
-                <button class="primary organize-trigger" @click="confirmOrganize" :disabled="loading || !hasSelected">
+                <button class="primary organize-trigger" @click="confirmOrganize" :disabled="loading || batchRunning || batchSubmitting || !hasSelected">
                     <span class="button-inline">
                         <span class="button-icon" x-html="getUiIcon('organize')"></span>
                         <span>执行整理 (<span x-text="selectedCount"></span>)</span>
                     </span>
                 </button>
             </div>
-            <div class="actions-group secondary" x-show="!loading && files.length > 0">
-                <button class="secondary" @click="selectIdentified">选择已识别</button>
-                <button class="secondary" @click="selectAll">全选待处理</button>
-                <button class="secondary" @click="deselectAll">取消全选</button>
+            <div class="actions-group secondary" x-show="view === 'scan' && !loading && filteredFiles.length > 0">
+                <button class="secondary" @click="toggleCurrentPageSelection(true)" :disabled="currentPageSelectableFiles.length === 0">选中本页</button>
+                <button class="secondary" @click="toggleCurrentPageSelection(false)" :disabled="pageSelectedCount === 0">取消本页</button>
             </div>
         </div>
 
@@ -1706,64 +124,207 @@
                         当前筛选
                         <span x-text="getFilterLabel(currentFilter)"></span>
                     </div>
-                    <div class="toolbar-pill strong" x-show="view === 'scan' && hasSelected">
-                        已勾选
-                        <span x-text="selectedCount"></span>
-                    </div>
                     <div class="toolbar-pill" x-show="view === 'history'">
                         仅显示已处理记录
                     </div>
                 </div>
             </div>
 
-            <div x-show="view === 'scan' && !loading && files.length > 0" class="filter filter-subtle">
-                <span class="filter-label">筛选</span>
-                <button class="filter-button" :class="{ 'active': currentFilter === 'all' }" @click="setFilter('all')">全部</button>
-                <button class="filter-button" :class="{ 'active': currentFilter === 'identified' }" @click="setFilter('identified')">已识别</button>
-                <button class="filter-button" :class="{ 'active': currentFilter === 'unidentified' }" @click="setFilter('unidentified')">未识别</button>
-                <button class="filter-button" :class="{ 'active': currentFilter === 'pending' }" @click="setFilter('pending')">待处理</button>
-                <button class="filter-button" :class="{ 'active': currentFilter === 'target_exists' }" @click="setFilter('target_exists')">已存在</button>
-                <button class="filter-button" :class="{ 'active': currentFilter === 'processed' }" @click="setFilter('processed')">已处理</button>
+            <div class="batch-panel"
+                 x-show="view === 'scan' && batchPanelVisible"
+                 :data-state="batchPanelState"
+                 :class="[batchJob ? batchJob.status : '', batchExpanded ? 'expanded' : 'collapsed', batchExpanding ? 'expanding' : '']">
+                <div class="batch-rail-header">
+                    <button class="batch-rail-toggle" @click="toggleBatchExpanded()" :aria-expanded="batchExpanded">
+                        <span class="batch-summary-line">
+                            <span class="batch-status-chip"
+                                  :class="`status-${batchJob.status}`"
+                                  x-text="getBatchJobStatusLabel(batchJob.status)"></span>
+                            <span>批量整理 <span x-text="batchJob.processed">0</span> / <span x-text="batchJob.total">0</span></span>
+                        </span>
+                        <span class="batch-rail-caret" x-html="getUiIcon('chevron_down')"></span>
+                    </button>
+                    <div class="batch-rail-actions">
+                        <button class="rail-button"
+                                x-show="batchCancelable"
+                                @click="cancelBatch"
+                                :disabled="batchCancelling">
+                            <span x-text="batchCancelling ? '取消中...' : '取消'"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="batch-panel-body" :class="batchExpanded ? 'expanded' : 'collapsed'">
+                    <div class="batch-rail-summary">
+                        <span class="batch-subline">总数 <strong x-text="batchJob.total">0</strong></span>
+                        <span class="batch-metrics">
+                            <span class="batch-metric success">成功 <strong x-text="batchJob.succeeded">0</strong></span>
+                            <span class="batch-metric skipped">跳过 <strong x-text="batchJob.skipped">0</strong></span>
+                            <span class="batch-metric failed">失败 <strong x-text="batchJob.failed">0</strong></span>
+                        </span>
+                    </div>
+
+                    <div class="batch-progress">
+                        <div class="batch-progress-track">
+                            <div class="batch-progress-fill" :style="`width: ${batchProgressPercent}%`"></div>
+                        </div>
+                        <div class="batch-subline" x-text="batchProgressText"></div>
+                    </div>
+
+                    <div class="batch-detail-panel">
+                        <div class="batch-note" x-text="batchInfoLine"></div>
+                        <div class="batch-note" x-show="batchJob.failed > 0">
+                            当前批次包含 <strong x-text="batchJob.failed"></strong> 个失败项，表格中的对应行会保留失败状态，方便你继续筛选和处理。
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="table-meta toolbar" x-show="!loading && files.length > 0">
+                <div class="toolbar-left">
+                    <div x-show="view === 'scan'" class="filter filter-subtle toolbar-filter">
+                        <span class="filter-label">筛选</span>
+                        <button class="filter-button" :class="{ 'active': currentFilter === 'all' }" @click="setFilter('all')">全部</button>
+                        <button class="filter-button" :class="{ 'active': currentFilter === 'identified' }" @click="setFilter('identified')">已识别</button>
+                        <button class="filter-button" :class="{ 'active': currentFilter === 'unidentified' }" @click="setFilter('unidentified')">未识别</button>
+                        <button class="filter-button" :class="{ 'active': currentFilter === 'pending' }" @click="setFilter('pending')">待处理</button>
+                        <button class="filter-button" :class="{ 'active': currentFilter === 'duplicate' }" @click="setFilter('duplicate')">重复</button>
+                        <button class="filter-button" :class="{ 'active': currentFilter === 'target_exists' }" @click="setFilter('target_exists')">已存在</button>
+                    </div>
+                </div>
+
+                <div class="toolbar-right" x-show="filteredFiles.length > 0">
+                    <div class="page-inline-status" x-show="view === 'scan' && hasSelected">
+                        <span class="selection-inline-count">已选 <span x-text="selectedCount">0</span> 项</span>
+                        <span class="selection-inline-divider">·</span>
+                        <div class="selection-inline-actions">
+                            <button class="selection-inline-action" @click="confirmOrganize" :disabled="!hasSelected">整理选中</button>
+                            <span class="selection-inline-divider">·</span>
+                            <button class="selection-clear" @click="clearSelection" :disabled="!hasSelected" aria-label="清空选择" title="清空选择">×</button>
+                        </div>
+                    </div>
+                    <div class="control-rail">
+                        <span class="control-label">排序</span>
+                        <div class="sort-composer">
+                            <span class="sort-icon" x-html="getSortFieldIcon(sortField)"></span>
+                            <select class="sort-select" :value="sortField" @change="setSortField($event.target.value)">
+                                <template x-for="option in sortFieldOptions" :key="option.value">
+                                    <option :value="option.value" x-text="option.label"></option>
+                                </template>
+                            </select>
+                            <button class="rail-button sort-direction-button"
+                                    @click="toggleSortDirection()"
+                                    :disabled="view === 'scan' && sortField === 'default'"
+                                    :title="sortDirection === 'desc' ? '降序' : '升序'">
+                                <span class="icon-glyph" x-html="sortDirection === 'desc' ? getUiIcon('sort_desc') : getUiIcon('sort_asc')"></span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="control-rail">
+                        <span class="control-label">每页</span>
+                        <template x-for="size in pageSizeOptions" :key="size">
+                            <button class="rail-button"
+                                    :class="{ 'active': pageSize === size }"
+                                    @click="setPageSize(size)"
+                                    x-text="size"></button>
+                        </template>
+                    </div>
+                    <div class="control-rail" x-show="totalPages > 1">
+                        <span class="control-label">分页</span>
+                        <span class="toolbar-range">
+                            <span x-text="pageRangeStart">0</span>-<span x-text="pageRangeEnd">0</span> / <span x-text="sortedFiles.length">0</span>
+                        </span>
+                        <div class="mini-pager">
+                            <button class="rail-button" @click="goToPage(currentPageValue - 1)" :disabled="currentPageValue <= 1">‹ Prev</button>
+                            <span class="mini-page-status">Page <span x-text="currentPageValue">1</span> / <span x-text="totalPages">1</span></span>
+                            <button class="rail-button" @click="goToPage(currentPageValue + 1)" :disabled="currentPageValue >= totalPages">Next ›</button>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div x-show="!loading && filteredFiles.length > 0">
-                <div class="table-container">
+                <div class="table-container" :class="{ 'history-mode': view === 'history' }">
                     <table>
                         <thead>
                             <tr>
                                 <th class="col-select" x-show="view === 'scan'">
-                                    <input type="checkbox" class="checkbox" @change="toggleAll" :checked="allSelected">
+                                    <label class="checkbox-hit"
+                                           :class="{ 'disabled': currentPageSelectableFiles.length === 0 }">
+                                        <input type="checkbox"
+                                               class="checkbox"
+                                               @change="toggleCurrentPageSelection($event.target.checked)"
+                                               :checked="allSelected"
+                                               :disabled="currentPageSelectableFiles.length === 0"
+                                               x-effect="$el.indeterminate = pageSelectionState === 'partial'">
+                                    </label>
                                 </th>
-                                <th class="col-code">番号</th>
-                                <th class="col-name">文件名</th>
-                                <th class="col-target">目标路径</th>
-                                <th class="col-status">状态</th>
+                                <th class="col-code">
+                                    <span class="th-flow">
+                                        <span class="th-main">番号</span>
+                                        <span class="th-sub">Code</span>
+                                    </span>
+                                </th>
+                                <th class="col-name">
+                                    <span class="th-flow">
+                                        <span class="th-main">源文件</span>
+                                        <span class="th-sub">Source</span>
+                                    </span>
+                                </th>
+                                <th class="col-target">
+                                    <span class="th-flow">
+                                        <span class="th-main">整理结果</span>
+                                        <span class="th-sub">Output</span>
+                                    </span>
+                                </th>
+                                <th class="col-status">
+                                    <span class="th-flow">
+                                        <span class="th-main">状态</span>
+                                        <span class="th-sub">Status</span>
+                                    </span>
+                                </th>
+                                <th class="col-time" x-show="view === 'history'">
+                                    <span class="th-flow">
+                                        <span class="th-main">整理时间</span>
+                                        <span class="th-sub">Processed</span>
+                                    </span>
+                                </th>
                             </tr>
                         </thead>
                         <tbody>
-                            <template x-for="file in filteredFiles" :key="file.id">
+                            <template x-for="file in paginatedFiles" :key="file.id">
                                 <tr class="row"
-                                    :class="{ 'row-active': activeStatusMenuId === file.id }"
+                                    :class="{ 'row-active': activeStatusMenuId === file.id, 'selected': !!selectedFiles[file.id], 'history-row': view === 'history' }"
                                     @mousemove="updateRowGlow($event)">
                                     <td class="cell-select" x-show="view === 'scan'">
-                                        <input type="checkbox" class="checkbox"
-                                               x-model="selectedFiles[file.id]"
-                                               :disabled="file.status !== 'pending'">
+                                        <label class="checkbox-hit"
+                                               :class="{ 'disabled': !canSelectFile(file) }">
+                                            <input type="checkbox"
+                                                   class="checkbox"
+                                                   :checked="!!selectedFiles[file.id]"
+                                                   @change="setFileSelected(file, $event.target.checked)"
+                                                   :disabled="!canSelectFile(file)"
+                                                   :title="getSelectionDisabledReason(file)">
+                                        </label>
                                     </td>
                                     <td class="cell-code">
                                         <template x-if="file.identified_code">
-                                            <span class="code" x-text="file.identified_code"></span>
+                                            <span class="code"
+                                                  :class="{ 'selectable': canSelectFile(file) }"
+                                                  :title="canSelectFile(file) ? '点击切换选择' : getSelectionDisabledReason(file)"
+                                                  @click="toggleFileSelection(file)"
+                                                  x-text="file.identified_code"></span>
                                         </template>
                                         <template x-if="!file.identified_code">
                                             <span class="code empty">-</span>
                                         </template>
                                     </td>
                                     <td class="cell-name">
-                                        <div class="filename-copy" @click="copyToClipboard(file.original_path)">
+                                        <div class="filename-copy" @click="copyToClipboard(file.original_path, $event)">
                                             <span class="filename" x-text="getFilename(file.original_path)"></span>
                                             <template x-if="file.original_path">
                                                 <div class="tooltip">
-                                                    <span class="copy-hint">点击复制完整路径</span>
+                                                    <span class="copy-hint">完整路径</span>
                                                     <span class="tooltip-text" x-text="file.original_path"></span>
                                                 </div>
                                             </template>
@@ -1771,7 +332,9 @@
                                     </td>
                                     <td class="cell-target">
                                         <template x-if="file.target_path">
-                                            <div class="path-cell" x-text="file.target_path"></div>
+                                            <div class="path-cell"
+                                                 x-text="file.target_path"
+                                                 @click="copyToClipboard(file.target_path, $event)"></div>
                                         </template>
                                         <template x-if="!file.target_path">
                                             <span style="color: #cbd5e0;">-</span>
@@ -1784,8 +347,8 @@
                                                  :style="getStatusRailStyle(file)"
                                                  @mouseenter="showStatusMenu(file.id)"
                                                  @mouseleave="scheduleStatusMenuHide(file.id)">
-                                                <span class="status-trigger" :aria-label="getStatusText(file.status)">
-                                                    <span class="status-label" x-text="getStatusText(file.status)"></span>
+                                                <span class="status-trigger" :aria-label="getDisplayStatusText(file)">
+                                                    <span class="status-label" x-text="getDisplayStatusText(file)"></span>
                                                 </span>
                                                 <div class="status-actions">
                                                     <template x-for="action in getStatusActions(file)" :key="action.key">
@@ -1801,8 +364,14 @@
                                             </div>
                                         </template>
                                         <template x-if="!hasStatusAction(file)">
-                                            <span class="badge" :class="getBadgeClass(file)" x-text="getStatusText(file.status)"></span>
+                                            <span class="badge" :class="getBadgeClass(file)" x-text="getDisplayStatusText(file)"></span>
                                         </template>
+                                    </td>
+                                    <td class="cell-time" x-show="view === 'history'">
+                                        <div class="history-time">
+                                            <span class="history-time-main" x-text="formatProcessedDate(file.updated_at)"></span>
+                                            <span class="history-time-sub" x-text="formatProcessedTime(file.updated_at)"></span>
+                                        </div>
                                     </td>
                                 </tr>
                             </template>
@@ -1824,6 +393,13 @@
             </div>
         </div>
 
+    </div>
+
+    <div x-show="copyToast.visible"
+         class="copy-toast"
+         :style="`left: ${copyToast.x}px; top: ${copyToast.y}px; transform: ${copyToast.placement === 'left' ? 'translate(calc(-100% - 12px), -50%)' : 'translate(12px, -50%)'};`"
+         x-transition.opacity.duration.180ms>
+        <span x-text="copyToast.text"></span>
     </div>
 
     <!-- Confirmation Modal -->
@@ -1871,536 +447,11 @@
         </div>
     </div>
 
-    <script>
-        function app() {
-            return {
-                loading: false,
-                loadingText: '正在加载...',
-                error: null,
-                success: null,
-                files: [],
-                scanFilesCache: [],
-                historyFilesCache: [],
-                selectedFiles: {},
-                stats: {
-                    total_files: 0,
-                    identified: 0,
-                    unidentified: 0,
-                    pending: 0,
-                    processed: 0
-                },
-                scanLoaded: false,
-                historyLoaded: false,
-                view: 'scan', // 'scan' or 'history'
-                currentFilter: 'all',
-                activeStatusMenuId: null,
-                statusHideTimer: null,
-                showConfirmModal: false,
-                confirmFiles: [],
-                showDeleteModal: false,
-                deleteTargetFile: null,
-                distDir: '/dist',
 
-                get allSelected() {
-                    return this.filteredFiles.length > 0 &&
-                           this.filteredFiles.every(f => f.status !== 'pending' || this.selectedFiles[f.id]);
-                },
-
-                get hasSelected() {
-                    return Object.values(this.selectedFiles).some(v => v);
-                },
-
-                get selectedCount() {
-                    return Object.values(this.selectedFiles).filter(v => v).length;
-                },
-
-                get selectedEntries() {
-                    return this.files.filter(file => this.selectedFiles[file.id]);
-                },
-
-                get confirmCodes() {
-                    const seen = new Set();
-                    return this.confirmFiles
-                        .map(file => file.identified_code || this.getFilename(file.original_path))
-                        .filter(code => {
-                            if (!code || seen.has(code)) {
-                                return false;
-                            }
-                            seen.add(code);
-                            return true;
-                        });
-                },
-
-                get filteredFiles() {
-                    if (this.currentFilter === 'all') {
-                        return this.files;
-                    }
-
-                    const statusMap = {
-                        'identified': 'identified',
-                        'unidentified': 'unidentified',
-                        'pending': 'pending',
-                        'target_exists': 'target_exists',
-                        'processed': 'processed'
-                    };
-
-                    return this.files.filter(f => {
-                        if (this.currentFilter === 'identified') {
-                            return f.identified_code && f.status !== 'processed';
-                        }
-                        if (this.currentFilter === 'unidentified') {
-                            return !f.identified_code;
-                        }
-                        return f.status === statusMap[this.currentFilter];
-                    });
-                },
-
-                getBadgeClass(file) {
-                    if (!file.identified_code) {
-                        return 'unidentified';
-                    }
-                    return file.status || 'skipped';
-                },
-
-                getStatusText(status) {
-                    const map = {
-                        'pending': '待处理',
-                        'target_exists': '已存在',
-                        'processed': '已处理',
-                        'skipped': '未识别',
-                        'failed': '失败'
-                    };
-                    return map[status] || status;
-                },
-
-                hasStatusAction(file) {
-                    return this.view === 'scan' && this.getStatusActions(file).length > 0;
-                },
-
-                getStatusActionClass(file) {
-                    return `status-${this.getBadgeClass(file)}`;
-                },
-
-                getStatusRailStyle(file) {
-                    const actionCount = this.getStatusActions(file).length;
-                    const collapsedWidth = 100;
-                    const slotWidth = 34;
-                    const gap = 6;
-                    const actionsPadding = actionCount > 0 ? 12 : 0;
-                    const expandedWidth = collapsedWidth + actionsPadding + (actionCount * slotWidth) + (Math.max(actionCount - 1, 0) * gap);
-                    return `--status-width-collapsed: ${collapsedWidth}px; --status-width-expanded: ${expandedWidth}px;`;
-                },
-
-                updateRowGlow(event) {
-                    const row = event.currentTarget;
-                    const rect = row.getBoundingClientRect();
-                    row.style.setProperty('--x', `${event.clientX - rect.left}px`);
-                    row.style.setProperty('--y', `${event.clientY - rect.top}px`);
-                },
-
-                updateStatGlow(event) {
-                    const card = event.currentTarget;
-                    const rect = card.getBoundingClientRect();
-                    card.style.setProperty('--x', `${event.clientX - rect.left}px`);
-                    card.style.setProperty('--y', `${event.clientY - rect.top}px`);
-                },
-
-                getStatusActions(file) {
-                    if (file.status === 'pending') {
-                        return [
-                            { key: 'organize', label: '整理文件', icon: 'organize' },
-                            { key: 'delete', label: '删除文件', icon: 'delete' }
-                        ];
-                    }
-
-                    if (['skipped', 'target_exists'].includes(file.status)) {
-                        return [
-                            { key: 'delete', label: '删除文件', icon: 'delete' }
-                        ];
-                    }
-
-                    return [];
-                },
-
-                getUiIcon(name) {
-                    const icons = {
-                        scan: `
-                            <svg viewBox="0 0 24 24" aria-hidden="true">
-                                <path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l1.6 1.8H19.5A1.5 1.5 0 0 1 21 9.3v7.2A1.5 1.5 0 0 1 19.5 18h-15A1.5 1.5 0 0 1 3 16.5z"/>
-                                <path d="M8.5 12h7"/>
-                            </svg>
-                        `,
-                        organize: `
-                            <svg viewBox="0 0 24 24" aria-hidden="true">
-                                <path d="M12 3.5l1.4 3.6L17 8.5l-3.6 1.4L12 13.5l-1.4-3.6L7 8.5l3.6-1.4z"/>
-                                <path d="M18.5 13.5l.8 2 .2.5.5.2 2 .8-2 .8-.5.2-.2.5-.8 2-.8-2-.2-.5-.5-.2-2-.8 2-.8.5-.2.2-.5z"/>
-                                <path d="M6 15.5l.9 2.2.2.4.4.2 2.2.9-2.2.9-.4.2-.2.4L6 23l-.9-2.2-.2-.4-.4-.2-2.2-.9 2.2-.9.4-.2.2-.4z"/>
-                            </svg>
-                        `,
-                        delete: `
-                            <svg viewBox="0 0 24 24" aria-hidden="true">
-                                <path d="M4 7h16"/>
-                                <path d="M9 7V4.5h6V7"/>
-                                <path d="M7.5 7l.7 11a1.5 1.5 0 0 0 1.5 1.4h4.6a1.5 1.5 0 0 0 1.5-1.4l.7-11"/>
-                                <path d="M10 10.5v5.5"/>
-                                <path d="M14 10.5v5.5"/>
-                            </svg>
-                        `
-                    };
-                    return icons[name] || '';
-                },
-
-                showStatusMenu(fileId) {
-                    if (this.statusHideTimer) {
-                        clearTimeout(this.statusHideTimer);
-                        this.statusHideTimer = null;
-                    }
-                    this.activeStatusMenuId = fileId;
-                },
-
-                scheduleStatusMenuHide(fileId) {
-                    if (this.statusHideTimer) {
-                        clearTimeout(this.statusHideTimer);
-                    }
-
-                    this.statusHideTimer = setTimeout(() => {
-                        if (this.activeStatusMenuId === fileId) {
-                            this.activeStatusMenuId = null;
-                        }
-                        this.statusHideTimer = null;
-                    }, 300);
-                },
-
-                closeStatusMenu() {
-                    if (this.statusHideTimer) {
-                        clearTimeout(this.statusHideTimer);
-                        this.statusHideTimer = null;
-                    }
-                    this.activeStatusMenuId = null;
-                },
-
-                handleStatusAction(file, actionKey) {
-                    this.closeStatusMenu();
-
-                    if (actionKey === 'organize') {
-                        this.confirmFiles = [file];
-                        this.showConfirmModal = true;
-                        return;
-                    }
-
-                    if (actionKey === 'delete') {
-                        this.openDeleteModal(file);
-                    }
-                },
-
-                getFilename(path) {
-                    if (!path) return '-';
-                    return path.split('/').pop();
-                },
-
-                fallbackCopyToClipboard(text) {
-                    const textarea = document.createElement('textarea');
-                    textarea.value = text;
-                    textarea.setAttribute('readonly', '');
-                    textarea.style.position = 'fixed';
-                    textarea.style.opacity = '0';
-                    textarea.style.pointerEvents = 'none';
-                    document.body.appendChild(textarea);
-                    textarea.select();
-                    const copied = document.execCommand('copy');
-                    document.body.removeChild(textarea);
-
-                    if (!copied) {
-                        throw new Error('当前浏览器不支持复制');
-                    }
-                },
-
-                async copyToClipboard(text) {
-                    try {
-                        if (navigator.clipboard && window.isSecureContext) {
-                            await navigator.clipboard.writeText(text);
-                        } else {
-                            this.fallbackCopyToClipboard(text);
-                        }
-                        this.success = '路径已复制到剪贴板';
-                        this.error = null;
-                        setTimeout(() => {
-                            this.success = null;
-                        }, 2000);
-                    } catch (err) {
-                        this.error = '复制失败：' + err.message;
-                    }
-                },
-
-                setFilter(filter) {
-                    this.currentFilter = filter;
-                },
-
-                getFilterLabel(filter) {
-                    const map = {
-                        all: '全部',
-                        identified: '已识别',
-                        unidentified: '未识别',
-                        pending: '待处理',
-                        target_exists: '已存在',
-                        processed: '已处理'
-                    };
-                    return map[filter] || filter;
-                },
-
-                getResultLabel(result) {
-                    const match = this.scanFilesCache.find(file => file.id === result.file_id)
-                        || this.historyFilesCache.find(file => file.id === result.file_id);
-                    return match?.identified_code || this.getFilename(result.original_path);
-                },
-
-                formatOrganizeFailures(results) {
-                    const failedResults = results.filter(result => result.status === 'failed');
-                    if (failedResults.length === 0) {
-                        return null;
-                    }
-
-                    const details = failedResults.slice(0, 3).map(result => {
-                        const label = this.getResultLabel(result);
-                        const reason = result.reason || '未知原因';
-                        return `${label}：${reason}`;
-                    });
-                    const suffix = failedResults.length > 3 ? ' 等' : '';
-                    return `${failedResults.length} 个文件整理失败：${details.join('；')}${suffix}`;
-                },
-
-                updateStats(data) {
-                    this.stats = {
-                        total_files: data.total_files,
-                        identified: data.identified,
-                        unidentified: data.unidentified,
-                        pending: data.pending,
-                        processed: data.processed
-                    };
-                },
-
-                switchVisibleFiles() {
-                    this.files = this.view === 'history' ? this.historyFilesCache : this.scanFilesCache;
-                    this.selectedFiles = {};
-                    this.closeStatusMenu();
-                },
-
-                async switchView(viewName) {
-                    this.view = viewName;
-
-                    this.currentFilter = 'all';
-                    this.error = null;
-                    this.success = null;
-
-                    if (viewName === 'scan') {
-                        if (!this.scanLoaded) {
-                            await this.scanFiles();
-                            return;
-                        }
-                    } else if (!this.historyLoaded) {
-                        await this.loadHistory();
-                        return;
-                    }
-
-                    this.switchVisibleFiles();
-                },
-
-                async scanFiles() {
-                    this.loading = true;
-                    this.loadingText = '正在扫描目录...';
-                    this.error = null;
-                    this.success = null;
-                    this.currentFilter = 'all';
-
-                    try {
-                        const response = await fetch('/api/scan');
-                        const data = await response.json();
-
-                        this.updateStats(data);
-                        this.scanFilesCache = data.files;
-                        this.files = data.files;
-                        this.scanLoaded = true;
-                        this.selectedFiles = {};
-                        this.confirmFiles = [];
-                        this.closeStatusMenu();
-                        this.view = 'scan';
-                        this.distDir = '/dist'; // 默认值
-                    } catch (e) {
-                        this.error = '扫描失败: ' + e.message;
-                    } finally {
-                        this.loading = false;
-                    }
-                },
-
-                async loadHistory() {
-                    this.loading = true;
-                    this.loadingText = '正在加载历史记录...';
-                    this.error = null;
-                    this.success = null;
-                    this.currentFilter = 'all';
-
-                    try {
-                        const response = await fetch('/api/history');
-                        const data = await response.json();
-
-                        this.updateStats(data);
-                        this.historyFilesCache = data.files.filter(file => file.status === 'processed');
-                        this.files = this.historyFilesCache;
-                        this.historyLoaded = true;
-                        this.selectedFiles = {};
-                        this.confirmFiles = [];
-                        this.closeStatusMenu();
-                        this.view = 'history';
-                    } catch (e) {
-                        this.error = '加载历史失败: ' + e.message;
-                    } finally {
-                        this.loading = false;
-                    }
-                },
-
-                confirmOrganize() {
-                    this.confirmFiles = this.selectedEntries.filter(file => file.status === 'pending');
-
-                    if (this.confirmFiles.length === 0) {
-                        return;
-                    }
-
-                    this.showConfirmModal = true;
-                },
-
-                openDeleteModal(file) {
-                    this.closeStatusMenu();
-                    this.deleteTargetFile = file;
-                    this.showDeleteModal = true;
-                },
-
-                closeDeleteModal() {
-                    this.showDeleteModal = false;
-                    this.deleteTargetFile = null;
-                },
-
-                async executeOrganize() {
-                    this.showConfirmModal = false;
-                    this.loading = true;
-                    this.loadingText = '正在执行整理...';
-                    this.error = null;
-                    this.success = null;
-
-                    const fileIds = this.confirmFiles.map(file => file.id);
-
-                    try {
-                        const response = await fetch('/api/organize', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({ file_ids: fileIds })
-                        });
-                        const data = await response.json();
-
-                        await this.scanFiles();
-
-                        if (data.success_count > 0) {
-                            this.success = `成功整理 ${data.success_count} 个文件`;
-                        }
-
-                        if (data.failed_count > 0) {
-                            this.error = this.formatOrganizeFailures(data.results);
-                        }
-                    } catch (e) {
-                        this.error = '整理失败: ' + e.message;
-                    } finally {
-                        this.confirmFiles = [];
-                        this.loading = false;
-                    }
-                },
-
-                async executeDelete(action) {
-                    if (!this.deleteTargetFile) {
-                        return;
-                    }
-
-                    this.loading = true;
-                    this.loadingText = action === 'delete_source' ? '正在删除原始文件...' : '正在忽略扫描记录...';
-                    this.error = null;
-                    this.success = null;
-                    const fileId = this.deleteTargetFile.id;
-                    this.closeDeleteModal();
-
-                    try {
-                        const response = await fetch(`/api/files/${fileId}/delete`, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({ action })
-                        });
-                        const data = await response.json();
-
-                        if (!response.ok) {
-                            throw new Error(data.detail || '删除失败');
-                        }
-
-                        this.success = data.message;
-                        this.historyLoaded = false;
-                        await this.scanFiles();
-                    } catch (e) {
-                        this.error = '删除失败: ' + e.message;
-                    } finally {
-                        this.loading = false;
-                    }
-                },
-
-                getDeleteModalDescription() {
-                    if (!this.deleteTargetFile) {
-                        return '请选择处理方式：';
-                    }
-
-                    if (this.deleteTargetFile.status === 'target_exists') {
-                        return '已存在于目标目录中。请选择处理方式：';
-                    }
-
-                    if (this.deleteTargetFile.status === 'skipped') {
-                        return '当前文件未识别到番号。请选择处理方式：';
-                    }
-
-                    return '请选择处理方式：';
-                },
-
-                toggleAll() {
-                    const checked = this.allSelected;
-                    this.filteredFiles.forEach(file => {
-                        if (file.status === 'pending') {
-                            this.selectedFiles[file.id] = !checked;
-                        }
-                    });
-                },
-
-                selectAll() {
-                    this.filteredFiles.forEach(file => {
-                        if (file.status === 'pending') {
-                            this.selectedFiles[file.id] = true;
-                        }
-                    });
-                },
-
-                deselectAll() {
-                    this.selectedFiles = {};
-                },
-
-                selectIdentified() {
-                    this.filteredFiles.forEach(file => {
-                        if (file.status === 'pending' && file.identified_code) {
-                            this.selectedFiles[file.id] = true;
-                        }
-                    });
-                },
-
-                init() {
-                    this.scanFiles();
-                }
-            }
-        }
-    </script>
+    <script src="/static/js/state.js"></script>
+    <script src="/static/js/utils.js"></script>
+    <script src="/static/js/render.js"></script>
+    <script src="/static/js/features.js"></script>
+    <script src="/static/js/app.js"></script>
 </body>
 </html>
