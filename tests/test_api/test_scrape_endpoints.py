@@ -64,6 +64,28 @@ def _rows_to_mock(rows):
     return [_make_mock_row(r) for r in rows]
 
 
+def _build_stats_row(rows):
+    return {
+        'organized': len(rows),
+        'pending': sum(1 for row in rows if row.get('scrape_status') == 'pending'),
+        'scraped': sum(1 for row in rows if row.get('scrape_status') == 'success'),
+        'failed': sum(1 for row in rows if row.get('scrape_status') == 'failed'),
+    }
+
+
+def _mock_scrape_list_queries(mock_db, *, total, rows, stats_rows):
+    count_cursor = MagicMock()
+    count_cursor.fetchone = AsyncMock(return_value=(total,))
+
+    stats_cursor = MagicMock()
+    stats_cursor.fetchone = AsyncMock(return_value=stats_rows)
+
+    data_cursor = MagicMock()
+    data_cursor.fetchall = AsyncMock(return_value=_rows_to_mock(rows))
+
+    mock_db.execute = AsyncMock(side_effect=[count_cursor, stats_cursor, data_cursor])
+
+
 # ---------------------------------------------------------------------------
 # GET /api/scrape tests
 # ---------------------------------------------------------------------------
@@ -76,14 +98,12 @@ def test_get_scrape_list_all(mock_connect, sample_rows):
     mock_db = AsyncMock()
     mock_connect.return_value.__aenter__.return_value = mock_db
 
-    # First call: COUNT(*), returns 4
-    count_cursor = MagicMock()
-    count_cursor.fetchone = AsyncMock(return_value=(4,))
-    # Second call: data query
-    data_cursor = MagicMock()
-    data_cursor.fetchall = AsyncMock(return_value=_rows_to_mock(sample_rows))
-
-    mock_db.execute = AsyncMock(side_effect=[count_cursor, data_cursor])
+    _mock_scrape_list_queries(
+        mock_db,
+        total=4,
+        rows=sample_rows,
+        stats_rows=_build_stats_row(sample_rows),
+    )
     mock_db.row_factory = None  # will be set by the endpoint
 
     client = TestClient(app, raise_server_exceptions=False)
@@ -105,12 +125,12 @@ def test_get_scrape_list_filter_pending(mock_connect, sample_rows):
     mock_db = AsyncMock()
     mock_connect.return_value.__aenter__.return_value = mock_db
 
-    count_cursor = MagicMock()
-    count_cursor.fetchone = AsyncMock(return_value=(1,))
-    data_cursor = MagicMock()
-    data_cursor.fetchall = AsyncMock(return_value=_rows_to_mock(pending_rows))
-
-    mock_db.execute = AsyncMock(side_effect=[count_cursor, data_cursor])
+    _mock_scrape_list_queries(
+        mock_db,
+        total=1,
+        rows=pending_rows,
+        stats_rows=_build_stats_row(sample_rows),
+    )
 
     client = TestClient(app, raise_server_exceptions=False)
     response = client.get('/api/scrape?filter=pending')
@@ -133,12 +153,12 @@ def test_get_scrape_list_filter_success(mock_connect, sample_rows):
     mock_db = AsyncMock()
     mock_connect.return_value.__aenter__.return_value = mock_db
 
-    count_cursor = MagicMock()
-    count_cursor.fetchone = AsyncMock(return_value=(2,))
-    data_cursor = MagicMock()
-    data_cursor.fetchall = AsyncMock(return_value=_rows_to_mock(success_rows))
-
-    mock_db.execute = AsyncMock(side_effect=[count_cursor, data_cursor])
+    _mock_scrape_list_queries(
+        mock_db,
+        total=2,
+        rows=success_rows,
+        stats_rows=_build_stats_row(sample_rows),
+    )
 
     client = TestClient(app, raise_server_exceptions=False)
     response = client.get('/api/scrape?filter=success')
@@ -159,12 +179,12 @@ def test_get_scrape_list_filter_failed(mock_connect, sample_rows):
     mock_db = AsyncMock()
     mock_connect.return_value.__aenter__.return_value = mock_db
 
-    count_cursor = MagicMock()
-    count_cursor.fetchone = AsyncMock(return_value=(1,))
-    data_cursor = MagicMock()
-    data_cursor.fetchall = AsyncMock(return_value=_rows_to_mock(failed_rows))
-
-    mock_db.execute = AsyncMock(side_effect=[count_cursor, data_cursor])
+    _mock_scrape_list_queries(
+        mock_db,
+        total=1,
+        rows=failed_rows,
+        stats_rows=_build_stats_row(sample_rows),
+    )
 
     client = TestClient(app, raise_server_exceptions=False)
     response = client.get('/api/scrape?filter=failed')
@@ -184,15 +204,14 @@ def test_get_scrape_list_sort_code(mock_connect, sample_rows):
     mock_db = AsyncMock()
     mock_connect.return_value.__aenter__.return_value = mock_db
 
-    count_cursor = MagicMock()
-    count_cursor.fetchone = AsyncMock(return_value=(4,))
-
     # When sorted by code ASC: ABC-001, ABC-002, DEF-100, GHI-500
     sorted_rows = sorted(sample_rows, key=lambda r: r['identified_code'])
-    data_cursor = MagicMock()
-    data_cursor.fetchall = AsyncMock(return_value=_rows_to_mock(sorted_rows))
-
-    mock_db.execute = AsyncMock(side_effect=[count_cursor, data_cursor])
+    _mock_scrape_list_queries(
+        mock_db,
+        total=4,
+        rows=sorted_rows,
+        stats_rows=_build_stats_row(sample_rows),
+    )
 
     client = TestClient(app, raise_server_exceptions=False)
     response = client.get('/api/scrape?sort=code')
@@ -211,19 +230,18 @@ def test_get_scrape_list_sort_scrape_time(mock_connect, sample_rows):
     mock_db = AsyncMock()
     mock_connect.return_value.__aenter__.return_value = mock_db
 
-    count_cursor = MagicMock()
-    count_cursor.fetchone = AsyncMock(return_value=(4,))
-
     # When sorted by scrape_time DESC (non-null first): GHI-500, DEF-100, ABC-002, ABC-001
     sorted_rows = sorted(
         sample_rows,
         key=lambda r: r['last_scrape_at'] or '',
         reverse=True,
     )
-    data_cursor = MagicMock()
-    data_cursor.fetchall = AsyncMock(return_value=_rows_to_mock(sorted_rows))
-
-    mock_db.execute = AsyncMock(side_effect=[count_cursor, data_cursor])
+    _mock_scrape_list_queries(
+        mock_db,
+        total=4,
+        rows=sorted_rows,
+        stats_rows=_build_stats_row(sample_rows),
+    )
 
     client = TestClient(app, raise_server_exceptions=False)
     response = client.get('/api/scrape?sort=scrape_time')
@@ -241,15 +259,14 @@ def test_get_scrape_list_pagination(mock_connect, sample_rows):
     mock_db = AsyncMock()
     mock_connect.return_value.__aenter__.return_value = mock_db
 
-    count_cursor = MagicMock()
-    count_cursor.fetchone = AsyncMock(return_value=(4,))
-
     # Page 2, per_page 2 => should return items 3 and 4
     paged_rows = sample_rows[2:4]
-    data_cursor = MagicMock()
-    data_cursor.fetchall = AsyncMock(return_value=_rows_to_mock(paged_rows))
-
-    mock_db.execute = AsyncMock(side_effect=[count_cursor, data_cursor])
+    _mock_scrape_list_queries(
+        mock_db,
+        total=4,
+        rows=paged_rows,
+        stats_rows=_build_stats_row(sample_rows),
+    )
 
     client = TestClient(app, raise_server_exceptions=False)
     response = client.get('/api/scrape?page=2&per_page=2')
@@ -268,12 +285,12 @@ def test_get_scrape_list_default_params(mock_connect, sample_rows):
     mock_db = AsyncMock()
     mock_connect.return_value.__aenter__.return_value = mock_db
 
-    count_cursor = MagicMock()
-    count_cursor.fetchone = AsyncMock(return_value=(4,))
-    data_cursor = MagicMock()
-    data_cursor.fetchall = AsyncMock(return_value=_rows_to_mock(sample_rows))
-
-    mock_db.execute = AsyncMock(side_effect=[count_cursor, data_cursor])
+    _mock_scrape_list_queries(
+        mock_db,
+        total=4,
+        rows=sample_rows,
+        stats_rows=_build_stats_row(sample_rows),
+    )
 
     client = TestClient(app, raise_server_exceptions=False)
     response = client.get('/api/scrape')
@@ -314,12 +331,12 @@ def test_get_scrape_list_empty_result(mock_connect):
     mock_db = AsyncMock()
     mock_connect.return_value.__aenter__.return_value = mock_db
 
-    count_cursor = MagicMock()
-    count_cursor.fetchone = AsyncMock(return_value=(0,))
-    data_cursor = MagicMock()
-    data_cursor.fetchall = AsyncMock(return_value=[])
-
-    mock_db.execute = AsyncMock(side_effect=[count_cursor, data_cursor])
+    _mock_scrape_list_queries(
+        mock_db,
+        total=0,
+        rows=[],
+        stats_rows={'organized': 0, 'pending': 0, 'scraped': 0, 'failed': 0},
+    )
 
     client = TestClient(app, raise_server_exceptions=False)
     response = client.get('/api/scrape')
@@ -437,7 +454,7 @@ def test_post_scrape_file_not_found(mock_scheduler_cls):
 
 @patch('app.main.ScraperScheduler')
 def test_post_scrape_wrong_status(mock_scheduler_cls):
-    """POST /api/scrape/{file_id} returns error when file status is not 'organized'."""
+    """POST /api/scrape/{file_id} returns error when file status is not scrape-eligible."""
     from app.main import app
     from app.models import ScrapeResponse
 
@@ -445,7 +462,7 @@ def test_post_scrape_wrong_status(mock_scheduler_cls):
     mock_scheduler.scrape_single = AsyncMock(
         return_value=ScrapeResponse(
             success=False,
-            error="File status is 'pending', expected 'organized'"
+            error="File status is 'pending', expected one of ['organized', 'processed']"
         )
     )
     mock_scheduler_cls.return_value = mock_scheduler
@@ -456,7 +473,7 @@ def test_post_scrape_wrong_status(mock_scheduler_cls):
     assert response.status_code == 200
     data = response.json()
     assert data['success'] is False
-    assert 'organized' in data['error']
+    assert 'processed' in data['error']
 
 
 # ---------------------------------------------------------------------------
@@ -471,12 +488,12 @@ def test_scrape_list_item_fields(mock_connect, sample_rows):
     mock_db = AsyncMock()
     mock_connect.return_value.__aenter__.return_value = mock_db
 
-    count_cursor = MagicMock()
-    count_cursor.fetchone = AsyncMock(return_value=(1,))
-    data_cursor = MagicMock()
-    data_cursor.fetchall = AsyncMock(return_value=_rows_to_mock(sample_rows[:1]))
-
-    mock_db.execute = AsyncMock(side_effect=[count_cursor, data_cursor])
+    _mock_scrape_list_queries(
+        mock_db,
+        total=1,
+        rows=sample_rows[:1],
+        stats_rows=_build_stats_row(sample_rows),
+    )
 
     client = TestClient(app, raise_server_exceptions=False)
     response = client.get('/api/scrape')
@@ -488,3 +505,40 @@ def test_scrape_list_item_fields(mock_connect, sample_rows):
     assert 'target_path' in item
     assert 'scrape_status' in item
     assert 'last_scrape_at' in item
+
+
+@patch('app.main.aiosqlite.connect')
+def test_get_scrape_list_includes_stats(mock_connect, sample_rows):
+    """GET /api/scrape returns scrape dashboard stats for the frontend cards."""
+    from app.main import app
+
+    mock_db = AsyncMock()
+    mock_connect.return_value.__aenter__.return_value = mock_db
+
+    count_cursor = MagicMock()
+    count_cursor.fetchone = AsyncMock(return_value=(4,))
+
+    stats_cursor = MagicMock()
+    stats_cursor.fetchone = AsyncMock(return_value={
+        'organized': 4,
+        'pending': 1,
+        'scraped': 2,
+        'failed': 1,
+    })
+
+    data_cursor = MagicMock()
+    data_cursor.fetchall = AsyncMock(return_value=_rows_to_mock(sample_rows))
+
+    mock_db.execute = AsyncMock(side_effect=[count_cursor, stats_cursor, data_cursor])
+
+    client = TestClient(app, raise_server_exceptions=False)
+    response = client.get('/api/scrape')
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data['stats'] == {
+        'organized': 4,
+        'pending': 1,
+        'scraped': 2,
+        'failed': 1,
+    }

@@ -42,6 +42,7 @@ app = FastAPI(title="Noctra JAV Organizer", version="1.0.0")
 SOURCE_DIR = os.getenv('SOURCE_DIR', '/source')
 DIST_DIR = os.getenv('DIST_DIR', '/dist')
 DB_PATH = os.getenv('DB_PATH', '/app/data/noctra.db')
+PROCESSED_LIKE_STATUSES = ('processed', 'organized')
 
 # 初始化组件
 scanner = JAVScanner(SOURCE_DIR, DIST_DIR)
@@ -72,7 +73,24 @@ async def init_db():
                 updated_at TEXT NOT NULL
             )
         ''')
+        await ensure_scrape_schema(db)
         await db.commit()
+
+
+async def ensure_scrape_schema(db: aiosqlite.Connection):
+    """为已有数据库补齐刮削字段，避免新版本启动时依赖手工迁移。"""
+    cursor = await db.execute('PRAGMA table_info(files)')
+    rows = await cursor.fetchall()
+    existing_columns = {row[1] for row in rows}
+
+    if 'scrape_status' not in existing_columns:
+        await db.execute("ALTER TABLE files ADD COLUMN scrape_status TEXT DEFAULT 'pending'")
+
+    if 'last_scrape_at' not in existing_columns:
+        await db.execute("ALTER TABLE files ADD COLUMN last_scrape_at TEXT")
+
+    await db.execute("UPDATE files SET scrape_status = 'pending' WHERE scrape_status IS NULL")
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_files_scrape_status ON files(scrape_status)')
 
 
 @app.on_event("startup")
@@ -395,7 +413,7 @@ def build_global_stats(files: list[object]) -> dict[str, int]:
 
         if status == 'pending':
             pending += 1
-        elif status == 'processed' and _is_processed_history_like(file):
+        elif status in PROCESSED_LIKE_STATUSES and _is_processed_history_like(file):
             processed += 1
 
     return {
@@ -408,8 +426,8 @@ def build_global_stats(files: list[object]) -> dict[str, int]:
 
 
 def is_history_processed_record(file: dict) -> bool:
-    """历史记录只展示真正已移动走源文件的 processed 项。"""
-    if file.get('status') != 'processed':
+    """历史记录只展示真正已移动走源文件的已处理项。"""
+    if file.get('status') not in PROCESSED_LIKE_STATUSES:
         return False
     original_path = file.get('original_path')
     return bool(original_path) and not Path(original_path).exists()
@@ -421,7 +439,7 @@ def _is_processed_history_like(file: object) -> bool:
 
     status = getattr(file, 'status', None)
     original_path = getattr(file, 'original_path', None)
-    return status == 'processed' and bool(original_path) and not Path(original_path).exists()
+    return status in PROCESSED_LIKE_STATUSES and bool(original_path) and not Path(original_path).exists()
 
 
 @app.get("/")
@@ -764,7 +782,7 @@ async def get_history():
             original_path=f['original_path'],
             identified_code=f['identified_code'],
             target_path=f['target_path'],
-            status=f['status'],
+            status='processed',
             file_size=f['file_size'],
             file_mtime=f['file_mtime'],
             created_at=f['created_at'],
@@ -792,7 +810,7 @@ async def get_scrape_list(
     sort: str = Query(default='code'),
 ):
     """
-    获取刮削列表 (仅 organized 状态文件)
+    获取刮削列表 (兼容 processed / organized 两种已整理状态)
 
     参数:
     - page: 页码 (默认 1)
@@ -811,11 +829,12 @@ async def get_scrape_list(
         raise HTTPException(status_code=400, detail=f'Invalid sort: {sort}')
 
     # Build WHERE clauses
-    where_clauses = ["status = ?"]
-    params: list = ['organized']
+    processed_placeholders = ','.join('?' * len(PROCESSED_LIKE_STATUSES))
+    where_clauses = [f"status IN ({processed_placeholders})"]
+    params: list = list(PROCESSED_LIKE_STATUSES)
 
     if filter != 'all':
-        where_clauses.append("scrape_status = ?")
+        where_clauses.append("COALESCE(scrape_status, 'pending') = ?")
         params.append(filter)
 
     where_sql = " AND ".join(where_clauses)
@@ -824,26 +843,40 @@ async def get_scrape_list(
     if sort == 'code':
         order_sql = "ORDER BY identified_code ASC"
     else:  # scrape_time
-        order_sql = "ORDER BY last_scrape_at DESC"
+        order_sql = "ORDER BY last_scrape_at DESC, identified_code ASC"
 
     # Count total
     count_sql = f"SELECT COUNT(*) FROM files WHERE {where_sql}"
     try:
         async with aiosqlite.connect(DB_PATH) as db:
+            db.row_factory = aiosqlite.Row
             cursor = await db.execute(count_sql, tuple(params))
             row = await cursor.fetchone()
             total = row[0] if row else 0
 
+            stats_cursor = await db.execute(
+                f"""
+                SELECT
+                    COUNT(*) AS organized,
+                    SUM(CASE WHEN COALESCE(scrape_status, 'pending') = 'pending' THEN 1 ELSE 0 END) AS pending,
+                    SUM(CASE WHEN COALESCE(scrape_status, 'pending') = 'success' THEN 1 ELSE 0 END) AS scraped,
+                    SUM(CASE WHEN COALESCE(scrape_status, 'pending') = 'failed' THEN 1 ELSE 0 END) AS failed
+                FROM files
+                WHERE status IN ({processed_placeholders})
+                """,
+                tuple(PROCESSED_LIKE_STATUSES)
+            )
+            stats_row = await stats_cursor.fetchone()
+
             # Query items
             offset = (page - 1) * per_page
             data_sql = f"""
-                SELECT id, identified_code, target_path, scrape_status, last_scrape_at
+                SELECT id, identified_code, target_path, COALESCE(scrape_status, 'pending') AS scrape_status, last_scrape_at
                 FROM files
                 WHERE {where_sql}
                 {order_sql}
                 LIMIT ? OFFSET ?
             """
-            db.row_factory = aiosqlite.Row
             cursor = await db.execute(data_sql, (*tuple(params), per_page, offset))
             rows = await cursor.fetchall()
     except Exception as e:
@@ -860,7 +893,14 @@ async def get_scrape_list(
         for row in rows
     ]
 
-    return {"total": total, "items": items}
+    stats = {
+        'organized': int(stats_row['organized'] or 0) if stats_row else 0,
+        'pending': int(stats_row['pending'] or 0) if stats_row else 0,
+        'scraped': int(stats_row['scraped'] or 0) if stats_row else 0,
+        'failed': int(stats_row['failed'] or 0) if stats_row else 0,
+    }
+
+    return {"total": total, "items": items, "stats": stats}
 
 
 @app.post("/api/scrape/{file_id}", response_model=ScrapeResponse)

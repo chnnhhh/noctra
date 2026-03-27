@@ -27,7 +27,7 @@ def _make_metadata(code="SSIS-123", poster_url="https://example.com/poster.jpg")
 
 def _make_file_record(
     file_id=1,
-    status="organized",
+    status="processed",
     code="SSIS-123",
     target_path="/dist/SSIS-123/SSIS-123.mp4",
 ):
@@ -117,7 +117,7 @@ class TestScrapeSingle:
 
     @pytest.mark.asyncio
     async def test_wrong_status(self):
-        """Test when file status is not 'organized'."""
+        """Test when file status is not scrape-eligible."""
         record = _make_file_record(status="pending")
 
         scheduler = ScraperScheduler()
@@ -127,7 +127,35 @@ class TestScrapeSingle:
 
         assert result.success is False
         assert "pending" in result.error
-        assert "organized" in result.error
+        assert "processed" in result.error
+
+    @pytest.mark.asyncio
+    async def test_processed_status_is_allowed(self):
+        """Historical processed records should remain scrapeable."""
+        record = _make_file_record(status="processed")
+        metadata = _make_metadata()
+
+        scheduler = ScraperScheduler()
+        scheduler._get_file = AsyncMock(return_value=record)
+
+        mock_crawler = AsyncMock()
+        mock_crawler.crawl = AsyncMock(return_value=metadata)
+
+        with (
+            patch("app.scraper.JavDBCrawler", return_value=mock_crawler),
+            patch("app.scraper.write_nfo"),
+            patch("app.scraper.download_poster", new_callable=AsyncMock),
+            patch("app.scraper.aiosqlite") as mock_aiosqlite,
+        ):
+            mock_conn_cm = AsyncMock()
+            mock_conn = AsyncMock()
+            mock_conn_cm.__aenter__.return_value = mock_conn
+            mock_conn_cm.__aexit__.return_value = None
+            mock_aiosqlite.connect.return_value = mock_conn_cm
+
+            result = await scheduler.scrape_single(1)
+
+        assert result.success is True
 
     @pytest.mark.asyncio
     async def test_crawl_returns_none(self):

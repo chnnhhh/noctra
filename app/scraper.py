@@ -13,6 +13,7 @@ from app.scrapers.writers.nfo import write_nfo
 from app.scrapers.writers.image import download_poster
 
 DB_PATH = os.getenv("DB_PATH", "/app/data/noctra.db")
+SCRAPE_ELIGIBLE_STATUSES = {"processed", "organized"}
 
 
 class ScraperScheduler:
@@ -23,7 +24,7 @@ class ScraperScheduler:
     """
 
     async def scrape_single(self, file_id: int) -> ScrapeResponse:
-        """Scrape metadata for a single organized file.
+        """Scrape metadata for a single已整理 file.
 
         Args:
             file_id: Database ID of the file to scrape.
@@ -40,11 +41,13 @@ class ScraperScheduler:
                     error=f"File record with id={file_id} not found",
                 )
 
-            # Step 2: Verify file has 'organized' status
-            if record["status"] != "organized":
+            # Step 2: Verify file has a processed-like status. We keep
+            # compatibility with both the historical `processed` status and
+            # the newer `organized` wording used by the scraping design docs.
+            if record["status"] not in SCRAPE_ELIGIBLE_STATUSES:
                 return ScrapeResponse(
                     success=False,
-                    error=f"File status is '{record['status']}', expected 'organized'",
+                    error=f"File status is '{record['status']}', expected one of {sorted(SCRAPE_ELIGIBLE_STATUSES)}",
                 )
 
             code = record["identified_code"]
