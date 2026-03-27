@@ -6,8 +6,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
 import pytest
+from PIL import Image
 
-from app.scrapers.writers.image import CHUNK_SIZE, DEFAULT_HEADERS, download_poster
+from app.scrapers.metadata import ScrapingMetadata
+from app.scrapers.writers.image import (
+    CHUNK_SIZE,
+    DEFAULT_HEADERS,
+    crop_poster_from_fanart,
+    download_additional_artwork,
+    download_poster,
+)
 
 FAKE_IMAGE_DATA = b"\xff\xd8\xff\xe0" + b"\x00" * 100  # fake JPEG header + padding
 
@@ -166,3 +174,63 @@ class TestDownloadPoster:
 
             with pytest.raises(PermissionError):
                 await download_poster(poster_url, output_path)
+
+
+class TestDownloadAdditionalArtwork:
+    """Tests for downloading fanart and preview images."""
+
+    @pytest.mark.asyncio
+    async def test_downloads_fanart_and_preview_images(self, tmp_path: Path):
+        metadata = ScrapingMetadata(
+            code="EBOD-829",
+            title="Title",
+            plot="",
+            poster_url="https://example.com/poster.jpg",
+            fanart_url="https://example.com/fanart.jpg",
+            preview_urls=[
+                "https://example.com/preview-1.jpg",
+                "https://example.com/preview-2.jpg",
+            ],
+        )
+
+        session_cm, _ = _build_mock_session_and_response()
+        with patch("app.scrapers.writers.image.aiohttp.ClientSession", return_value=session_cm), \
+             patch("app.scrapers.writers.image.aiofiles.open", create=True) as mock_open, \
+             patch("app.scrapers.writers.image.crop_poster_from_fanart", return_value=tmp_path / "EBOD-829-poster.jpg") as mock_crop:
+            mock_open.return_value = _make_async_context_manager(AsyncMock())
+
+            downloaded = await download_additional_artwork(
+                metadata,
+                tmp_path,
+                poster_output_path=tmp_path / "EBOD-829-poster.jpg",
+            )
+
+        assert downloaded["fanart"] == tmp_path / "EBOD-829-fanart.jpg"
+        assert downloaded["poster"] == tmp_path / "EBOD-829-poster.jpg"
+        assert downloaded["previews"] == [
+            tmp_path / "EBOD-829-preview-01.jpg",
+            tmp_path / "EBOD-829-preview-02.jpg",
+        ]
+        mock_crop.assert_called_once_with(
+            tmp_path / "EBOD-829-fanart.jpg",
+            tmp_path / "EBOD-829-poster.jpg",
+        )
+
+
+class TestCropPosterFromFanart:
+    def test_crops_right_cover_panel_into_portrait_poster(self, tmp_path: Path):
+        fanart_path = tmp_path / "EBOD-829-fanart.jpg"
+        poster_path = tmp_path / "EBOD-829-poster.jpg"
+
+        image = Image.new("RGB", (800, 538), "red")
+        image.paste("green", (380, 0, 420, 538))
+        image.paste("blue", (420, 0, 800, 538))
+        image.save(fanart_path, format="JPEG", quality=95)
+
+        cropped = crop_poster_from_fanart(fanart_path, poster_path)
+
+        assert cropped == poster_path
+        with Image.open(poster_path) as poster:
+            assert poster.size == (380, 538)
+            center = poster.getpixel((poster.size[0] // 2, poster.size[1] // 2))
+            assert center[2] > center[0]

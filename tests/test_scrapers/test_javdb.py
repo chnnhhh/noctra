@@ -214,6 +214,78 @@ DETAIL_HTML_CODE_WITH_SPLIT_HYPHEN = """
 </html>
 """
 
+DETAIL_HTML_RICH_METADATA = """
+<html>
+<body>
+  <div class="container">
+    <h2 class="title is-4">
+      <strong>EBOD-829 </strong>
+      <strong class="current-title">輸給女友耳邊呢喃淫語胸部緊貼誘惑中出的我。 北野未奈 </strong>
+      <a class="meta-link" href="javascript:;">顯示原標題</a>
+      <span class="origin-title" style="display: none">彼女の巨乳お姉さんの囁き淫語と密着おっぱい誘惑に敗北なま中出ししちゃった僕。 北野未奈</span>
+    </h2>
+
+    <div class="video-meta-panel">
+      <nav class="panel movie-panel-info">
+        <div class="panel-block first-block">
+          <strong>番號:</strong>
+          <span class="value"><a href="/video_codes/EBOD">EBOD</a>-829</span>
+        </div>
+        <div class="panel-block">
+          <strong>日期:</strong>
+          <span class="value">2021-06-13</span>
+        </div>
+        <div class="panel-block">
+          <strong>時長:</strong>
+          <span class="value">140 分鍾</span>
+        </div>
+        <div class="panel-block">
+          <strong>導演:</strong>
+          <span class="value"><a href="/directors/xvV">三島六三郎</a></span>
+        </div>
+        <div class="panel-block">
+          <strong>片商:</strong>
+          <span class="value"><a href="/makers/bgA?f=download">E-BODY</a></span>
+        </div>
+        <div class="panel-block">
+          <strong>評分:</strong>
+          <span class="value">4.09分, 由487人評價</span>
+        </div>
+        <div class="panel-block">
+          <strong>類別:</strong>
+          <span class="value">
+            <a href="/tags?c2=48">蕩婦</a>,
+            <a href="/tags?c4=17">巨乳</a>,
+            <a href="/tags?c7=28">單體作品</a>
+          </span>
+        </div>
+        <div class="panel-block">
+          <strong>演員:</strong>
+          <span class="value">
+            <a href="/actors/1">河奈亜依</a>
+            <a href="/actors/2">北野未奈</a>
+          </span>
+        </div>
+      </nav>
+    </div>
+
+    <div class="video-cover-panel">
+      <img class="video-cover" src="https://c0.jdbstatic.com/covers/5d/5D8OB.jpg" />
+    </div>
+
+    <div class="tile-images preview-images">
+      <a class="tile-item" href="https://c0.jdbstatic.com/samples/5d/5D8OB_l_0.jpg">
+        <img src="https://c0.jdbstatic.com/samples/5d/5D8OB_s_0.jpg" />
+      </a>
+      <a class="tile-item" href="https://c0.jdbstatic.com/samples/5d/5D8OB_l_1.jpg">
+        <img src="https://c0.jdbstatic.com/samples/5d/5D8OB_s_1.jpg" />
+      </a>
+    </div>
+  </div>
+</body>
+</html>
+"""
+
 
 # ---------------------------------------------------------------------------
 # Tests
@@ -251,13 +323,15 @@ class TestJavDBCrawlerCrawlSuccess:
         assert result is not None
         assert isinstance(result, ScrapingMetadata)
         assert result.code == "SSIS-743"
-        assert result.title == "Test Title - Beautiful Actress"
+        assert result.title == "SSIS-743"
+        assert result.original_title == "Test Title - Beautiful Actress"
         assert result.plot == "這是一段詳細的劇情簡介，描述了這部影片的故事情節和精彩內容。"
         assert result.actors == ["Actress A", "Actress B"]
         assert result.studio == "S1 NO.1 STYLE"
         assert result.release == "2024-06-15"
-        assert "/thumbs/" in result.poster_url
+        assert "/covers/" in result.poster_url
         assert "SSIS-743" in result.poster_url
+        assert result.website == "https://javdb.com/v/abcdefg?locale=zh"
 
     @pytest.mark.asyncio
     async def test_crawl_english_locale(self):
@@ -274,7 +348,8 @@ class TestJavDBCrawlerCrawlSuccess:
         result = await crawler.crawl("WAAA-585")
 
         assert result is not None
-        assert result.title == "English Title Here"
+        assert result.title == "WAAA-585"
+        assert result.original_title == "English Title Here"
         assert result.studio == "Wanz Factory"
         assert result.actors == ["Performer X"]
         assert result.release == "2025-03-21"
@@ -358,12 +433,40 @@ class TestJavDBCrawlerPartialFields:
 
         assert result is not None
         assert result.code == "ABC-123"
-        assert result.title == "Partial Title Only"
+        assert result.title == "ABC-123"
+        assert result.original_title == "Partial Title Only"
         assert result.plot == ""
         assert result.actors == []
         assert result.studio == ""
         assert result.release == ""
         assert result.poster_url == ""
+        assert result.tags == []
+        assert result.directors == []
+        assert result.runtime_minutes is None
+        assert result.website == "https://javdb.com/v/abcdefg?locale=zh"
+
+    def test_parse_detail_extracts_richer_metadata(self):
+        crawler = JavDBCrawler()
+
+        result = crawler._parse_detail(DETAIL_HTML_RICH_METADATA, "EBOD-829")
+
+        assert result is not None
+        assert result.title == "EBOD-829"
+        assert result.original_title == "彼女の巨乳お姉さんの囁き淫語と密着おっぱい誘惑に敗北なま中出ししちゃった僕。 北野未奈"
+        assert result.plot == "輸給女友耳邊呢喃淫語胸部緊貼誘惑中出的我。"
+        assert result.release == "2021-06-13"
+        assert result.runtime_minutes == 140
+        assert result.directors == ["三島六三郎"]
+        assert result.tags == ["蕩婦", "巨乳", "單體作品"]
+        assert result.rating == "4.09"
+        assert result.votes == 487
+        assert result.website == "https://javdb.com/v/EBOD-829?locale=zh"
+        assert result.poster_url == "https://c0.jdbstatic.com/covers/5d/5D8OB.jpg"
+        assert result.fanart_url == "https://c0.jdbstatic.com/covers/5d/5D8OB.jpg"
+        assert result.preview_urls == [
+            "https://c0.jdbstatic.com/samples/5d/5D8OB_l_0.jpg",
+            "https://c0.jdbstatic.com/samples/5d/5D8OB_l_1.jpg",
+        ]
 
 
 class TestJavDBCrawlerNormalizeRelease:
@@ -421,27 +524,25 @@ class TestJavDBCrawlerCodeNormalization:
 
         assert result is not None
         assert result.code == "EBOD-829"
-        assert result.title == "Split Code Title"
+        assert result.title == "EBOD-829"
+        assert result.original_title == "Split Code Title"
         assert result.release == "2021-06-13"
         assert result.studio == "E-BODY"
         assert result.actors == ["北野未奈"]
 
 
-class TestJavDBCrawlerExtractPosterUrl:
-    """Test poster URL extraction."""
+class TestJavDBCrawlerExtractCoverUrl:
+    """Test cover URL extraction."""
 
-    def test_cover_to_thumb_conversion(self):
-        """Cover URL should be converted to thumb URL."""
+    def test_cover_uses_full_quality_image(self):
         crawler = JavDBCrawler()
         soup = BeautifulSoup(DETAIL_HTML_SUCCESS, "lxml")
-        poster = crawler._extract_poster_url(soup)
-        assert "/thumbs/" in poster
-        assert "SSIS-743" in poster
+        poster = crawler._extract_cover_url(soup)
+        assert poster == "https://javdb.com/covers/abc/SSIS-743.jpg"
 
     def test_no_cover_image(self):
-        """Should return empty string when no cover image found."""
         crawler = JavDBCrawler()
         html = "<html><body><div>No cover here</div></body></html>"
         soup = BeautifulSoup(html, "lxml")
-        poster = crawler._extract_poster_url(soup)
+        poster = crawler._extract_cover_url(soup)
         assert poster == ""

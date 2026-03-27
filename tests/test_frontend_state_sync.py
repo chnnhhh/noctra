@@ -301,3 +301,57 @@ def test_load_scrape_files_clears_stale_batch_overlay_when_no_active_job():
     assert result["scrapeBatchExpanded"] is False
     assert result["scrapeBatchCancelling"] is False
     assert result["scrapeStatus"] == "success"
+
+
+def test_scrape_success_rows_offer_rescrape_action():
+    script = textwrap.dedent(
+        """
+        import fs from 'node:fs';
+        import vm from 'node:vm';
+
+        const context = vm.createContext({
+          console,
+          setTimeout,
+          clearTimeout,
+          setInterval,
+          clearInterval,
+          Intl,
+          URLSearchParams,
+          Date,
+        });
+        context.window = context;
+        context.globalThis = context;
+
+        for (const path of ['static/js/state.js', 'static/js/render.js']) {
+          const source = fs.readFileSync(path, 'utf8');
+          vm.runInContext(source, context, { filename: path });
+        }
+
+        function mergeSection(target, section) {
+          Object.defineProperties(target, Object.getOwnPropertyDescriptors(section));
+          return target;
+        }
+
+        const app = {};
+        mergeSection(app, context.NoctraState.createState());
+        mergeSection(app, context.NoctraRender.createRender());
+
+        app.view = 'scrape';
+        const file = {
+          id: 13,
+          scrape_status: 'success',
+        };
+
+        console.log(JSON.stringify({
+          canSelect: app.canSelectScrapeFile(file),
+          actions: app.getScrapeStatusActions(file),
+        }));
+        """
+    )
+
+    result = run_frontend_script(script)
+
+    assert result["canSelect"] is False
+    assert result["actions"] == [
+        {"key": "scrape", "label": "重新刮削", "icon": "sparkles"}
+    ]

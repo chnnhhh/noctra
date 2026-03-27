@@ -16,11 +16,17 @@ def _make_metadata(code="SSIS-123", poster_url="https://example.com/poster.jpg")
     return ScrapingMetadata(
         code=code,
         title=f"Test Title {code}",
+        original_title=f"Original Title {code}",
         plot="Test plot content",
         actors=["Actor A", "Actor B"],
         studio="Test Studio",
         release="2024-01-15",
         poster_url=poster_url,
+        fanart_url="https://example.com/fanart.jpg" if poster_url else "",
+        preview_urls=[
+            "https://example.com/preview-1.jpg",
+            "https://example.com/preview-2.jpg",
+        ] if poster_url else [],
     )
 
 
@@ -82,6 +88,16 @@ class TestScrapeSingle:
             patch("app.scraper.JavDBCrawler", return_value=mock_crawler),
             patch("app.scraper.write_nfo") as mock_write_nfo,
             patch("app.scraper.download_poster", new_callable=AsyncMock) as mock_download,
+            patch(
+                "app.scraper.download_additional_artwork",
+                new_callable=AsyncMock,
+                create=True,
+                return_value={
+                    "fanart": Path(record["target_path"]).parent / f"{code}-fanart.jpg",
+                    "poster": Path(record["target_path"]).parent / f"{code}-poster.jpg",
+                    "previews": [],
+                },
+            ) as mock_download_additional,
         ):
             result = await scheduler.scrape_single(file_id)
 
@@ -94,7 +110,12 @@ class TestScrapeSingle:
 
         mock_crawler.crawl.assert_called_once_with(code)
         mock_write_nfo.assert_called_once()
-        mock_download.assert_called_once_with(metadata.poster_url, Path(record["target_path"]).parent / f"{code}-poster.jpg")
+        mock_download.assert_not_called()
+        mock_download_additional.assert_called_once_with(
+            metadata,
+            Path(record["target_path"]).parent,
+            poster_output_path=Path(record["target_path"]).parent / f"{code}-poster.jpg",
+        )
 
     @pytest.mark.asyncio
     async def test_scrape_single_records_stage_source_and_logs_on_success(self):
@@ -119,6 +140,16 @@ class TestScrapeSingle:
             patch("app.scraper.JavDBCrawler", return_value=mock_crawler),
             patch("app.scraper.write_nfo"),
             patch("app.scraper.download_poster", new_callable=AsyncMock),
+            patch(
+                "app.scraper.download_additional_artwork",
+                new_callable=AsyncMock,
+                create=True,
+                return_value={
+                    "fanart": Path(record["target_path"]).parent / f"{code}-fanart.jpg",
+                    "poster": Path(record["target_path"]).parent / f"{code}-poster.jpg",
+                    "previews": [],
+                },
+            ),
             patch.object(
                 scheduler,
                 "_persist_attempt_update",
@@ -211,6 +242,16 @@ class TestScrapeSingle:
             patch("app.scraper.JavDBCrawler", return_value=mock_crawler),
             patch("app.scraper.write_nfo"),
             patch("app.scraper.download_poster", new_callable=AsyncMock),
+            patch(
+                "app.scraper.download_additional_artwork",
+                new_callable=AsyncMock,
+                create=True,
+                return_value={
+                    "fanart": Path(record["target_path"]).parent / "SSIS-123-fanart.jpg",
+                    "poster": Path(record["target_path"]).parent / "SSIS-123-poster.jpg",
+                    "previews": [],
+                },
+            ),
         ):
             result = await scheduler.scrape_single(1)
 
@@ -308,6 +349,12 @@ class TestScrapeSingle:
         with (
             patch("app.scraper.JavDBCrawler", return_value=mock_crawler),
             patch("app.scraper.write_nfo"),
+            patch(
+                "app.scraper.download_additional_artwork",
+                new_callable=AsyncMock,
+                create=True,
+                return_value={"fanart": None, "poster": None, "previews": []},
+            ),
             patch("app.scraper.download_poster", new_callable=AsyncMock, side_effect=Exception("Network error")),
         ):
             result = await scheduler.scrape_single(1)
@@ -332,6 +379,12 @@ class TestScrapeSingle:
         with (
             patch("app.scraper.JavDBCrawler", return_value=mock_crawler),
             patch("app.scraper.write_nfo"),
+            patch(
+                "app.scraper.download_additional_artwork",
+                new_callable=AsyncMock,
+                create=True,
+                return_value={"fanart": None, "poster": None, "previews": []},
+            ),
             patch(
                 "app.scraper.download_poster",
                 new_callable=AsyncMock,
@@ -458,6 +511,12 @@ class TestScrapeSingle:
             patch("app.scraper.JavDBCrawler", return_value=mock_crawler),
             patch("app.scraper.write_nfo", side_effect=capture_nfo),
             patch("app.scraper.download_poster", new_callable=AsyncMock, side_effect=capture_poster),
+            patch(
+                "app.scraper.download_additional_artwork",
+                new_callable=AsyncMock,
+                create=True,
+                return_value={"fanart": None, "poster": None, "previews": []},
+            ),
         ):
             await scheduler.scrape_single(file_id)
 

@@ -282,7 +282,7 @@ async def get_scrape_candidates_for_job(file_ids: list[int]) -> list[dict]:
     if not file_ids:
         return []
 
-    allowed_scrape_statuses = ("pending", "failed") if len(file_ids) == 1 else ("pending",)
+    allowed_scrape_statuses = ("pending", "failed", "success") if len(file_ids) == 1 else ("pending",)
     placeholders = ",".join("?" * len(file_ids))
     status_placeholders = ",".join("?" * len(PROCESSED_LIKE_STATUSES))
     scrape_placeholders = ",".join("?" * len(allowed_scrape_statuses))

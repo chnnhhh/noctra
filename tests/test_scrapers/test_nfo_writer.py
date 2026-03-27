@@ -14,11 +14,23 @@ def _make_metadata(**overrides) -> ScrapingMetadata:
     defaults = {
         "code": "SSIS-743",
         "title": "SSIS-743 テストタイトル",
+        "original_title": "SSIS-743 オリジナルタイトル",
         "plot": "テストプロット内容",
         "actors": ["女優A", "女優B", "女優C"],
         "studio": "S1 NO.1 STYLE",
         "release": "2023-06-27",
+        "website": "https://javdb.com/v/abc123?locale=zh",
+        "runtime_minutes": 140,
+        "directors": ["監督A"],
+        "tags": ["巨乳", "單體作品"],
+        "rating": "4.09",
+        "votes": 487,
         "poster_url": "https://example.com/poster.jpg",
+        "fanart_url": "https://example.com/fanart.jpg",
+        "preview_urls": [
+            "https://example.com/preview-1.jpg",
+            "https://example.com/preview-2.jpg",
+        ],
     }
     defaults.update(overrides)
     return ScrapingMetadata(**defaults)
@@ -176,3 +188,39 @@ def test_write_nfo_empty_optional_fields(tmp_path: Path):
     assert root.find("premiered").text is None
     assert root.find("poster") is not None
     assert root.find("poster").text is None
+
+
+def test_write_nfo_rich_fields_match_reference_shape(tmp_path: Path):
+    """Generated NFO should include richer Kodi/Emby-friendly metadata."""
+    metadata = _make_metadata()
+    output_path = tmp_path / "SSIS-743.nfo"
+
+    write_nfo(metadata, output_path)
+
+    tree = ET.parse(output_path)
+    root = tree.getroot()
+
+    assert root.find("outline").text == "テストプロット内容"
+    assert root.find("lockdata").text == "false"
+    assert root.find("title").text == "SSIS-743 テストタイトル"
+    assert root.find("originaltitle").text == "SSIS-743 オリジナルタイトル"
+    assert root.find("year").text == "2023"
+    assert root.find("sorttitle").text == "SSIS-743"
+    assert root.find("imdbid").text == "SSIS-743"
+    assert root.find("uniqueid").text == "SSIS-743"
+    assert root.find("id").text == "SSIS-743"
+    assert root.find("premiered").text == "2023-06-27"
+    assert root.find("releasedate").text == "2023-06-27"
+    assert root.find("runtime").text == "140"
+    assert root.find("rating").text == "4.09"
+    assert root.find("votes").text == "487"
+    assert root.find("website").text == "https://javdb.com/v/abc123?locale=zh"
+    assert root.find("poster").text == "SSIS-743-poster.jpg"
+    assert root.find("cover").text == "SSIS-743-poster.jpg"
+    assert root.find("fanart/thumb").text == "SSIS-743-fanart.jpg"
+    assert [genre.text for genre in root.findall("genre")] == ["巨乳", "單體作品"]
+    assert [director.text for director in root.findall("director")] == ["監督A"]
+
+    actors = root.findall("actor")
+    assert actors[0].find("name").text == "女優A"
+    assert actors[0].find("type").text == "Actor"

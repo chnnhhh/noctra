@@ -3,7 +3,7 @@
 
 import re
 from typing import List, Optional
-from urllib.parse import urljoin
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 from bs4 import BeautifulSoup
 
@@ -28,6 +28,10 @@ class JavDBCrawler(BaseCrawler):
     _LABEL_ACTORS = ["演員:", "演员:", "Actors:"]
     _LABEL_STUDIO = ["片商:", "Maker:"]
     _LABEL_RELEASE = ["日期:", "Released Date:"]
+    _LABEL_RUNTIME = ["時長:", "时长:", "Duration:"]
+    _LABEL_DIRECTORS = ["導演:", "导演:", "Director:"]
+    _LABEL_TAGS = ["類別:", "类别:", "Tags:"]
+    _LABEL_RATING = ["評分:", "评分:", "Rating:"]
     _LABEL_PLOT = ["簡介", "简介", "Description", "Storyline", "剧情", "劇情"]
 
     # ------------------------------------------------------------------
@@ -67,6 +71,7 @@ class JavDBCrawler(BaseCrawler):
         self._record_diagnostic(f"JavDB 搜索命中详情页：{detail_path}")
 
         # Step 2 - fetch the detail page
+        detail_url = self._with_locale(detail_url, "zh")
         detail_html = await self._request_with_context(detail_url, context="详情页")
         if not detail_html:
             if not self.last_error:
@@ -75,7 +80,7 @@ class JavDBCrawler(BaseCrawler):
         self._record_diagnostic("JavDB 详情页请求成功，正在解析元数据")
 
         # Step 3 - parse
-        metadata = self._parse_detail(detail_html, code)
+        metadata = self._parse_detail(detail_html, code, detail_url=detail_url)
         if metadata is None:
             self._set_error("JavDB 详情页已返回，但元数据解析失败")
             return None
@@ -143,60 +148,58 @@ class JavDBCrawler(BaseCrawler):
             return None
 
     def _parse_detail(
-        self, html: str, code: str
+        self,
+        html: str,
+        code: str,
+        *,
+        detail_url: str | None = None,
     ) -> Optional[ScrapingMetadata]:
-        """Parse a JavDB detail page and extract metadata.
-
-        Returns None if the page ID does not match *code* or on parse errors.
-        """
+        """Parse a JavDB detail page and extract metadata."""
         try:
             soup = BeautifulSoup(html, "lxml")
         except Exception:
             return None
 
-        # --- Validate page code matches requested code ---
+        want_code = self._normalize_code_text(code)
+
         raw_id = self._text_after_label(soup, self._LABEL_CODE)
         if raw_id:
             page_code = self._normalize_code_text(raw_id)
-            want_code = self._normalize_code_text(code)
             if page_code and page_code != want_code:
                 return None
 
-        # --- Title ---
-        title = self._pick_text(soup, "h2.title strong.current-title") or self._pick_text(
-            soup, "h2.title"
-        )
-        if not title:
+        current_title = self._pick_text(soup, "h2.title strong.current-title")
+        fallback_title = self._pick_text(soup, "h2.title")
+        title_text = current_title or fallback_title
+        if not title_text:
             return None
 
-        # --- Plot ---
-        plot = self._extract_plot(soup)
-
-        # --- Actors ---
         actors = self._links_after_label(soup, self._LABEL_ACTORS)
-
-        # --- Studio ---
+        plot = self._extract_plot(soup, title_text=title_text, code=want_code)
         studio_links = self._links_after_label(soup, self._LABEL_STUDIO)
         studio = studio_links[0] if studio_links else ""
-
-        # --- Release date ---
         release_raw = self._text_after_label(soup, self._LABEL_RELEASE).strip()
-        release = self._normalize_release(release_raw) if release_raw else ""
-
-        # --- Poster URL ---
-        poster_url = self._extract_poster_url(soup)
+        runtime_raw = self._text_after_label(soup, self._LABEL_RUNTIME).strip()
+        rating_raw = self._text_after_label(soup, self._LABEL_RATING).strip()
 
         return ScrapingMetadata(
-            code=code,
-            title=title,
+            code=want_code,
+            title=want_code,
+            original_title=self._extract_original_title(soup, code=want_code, title_text=title_text),
             plot=plot,
+            website=self._normalize_detail_url(detail_url, want_code),
             actors=actors,
             studio=studio,
-            release=release,
-            poster_url=poster_url,
+            release=self._normalize_release(release_raw) if release_raw else "",
+            runtime_minutes=self._extract_runtime_minutes(runtime_raw),
+            directors=self._links_after_label(soup, self._LABEL_DIRECTORS),
+            tags=self._links_after_label(soup, self._LABEL_TAGS),
+            rating=self._extract_rating_value(rating_raw),
+            votes=self._extract_vote_count(rating_raw),
+            poster_url=self._extract_cover_url(soup),
+            fanart_url=self._extract_cover_url(soup),
+            preview_urls=self._extract_preview_urls(soup),
         )
-
-    # --- Field extraction helpers ---
 
     @staticmethod
     def _pick_text(soup: BeautifulSoup, selector: str) -> str:
@@ -236,8 +239,8 @@ class JavDBCrawler(BaseCrawler):
                 return list(dict.fromkeys(links))
         return []
 
-    def _extract_plot(self, soup: BeautifulSoup) -> str:
-        """Extract the plot/description from the detail page."""
+    def _extract_plot(self, soup: BeautifulSoup, *, title_text: str, code: str) -> str:
+        """Extract plot, preferring explicit description blocks and then title sentence."""
         for label in self._LABEL_PLOT:
             node = soup.find(
                 "strong", string=lambda s: isinstance(s, str) and label in s
@@ -251,19 +254,89 @@ class JavDBCrawler(BaseCrawler):
             txt = txt.replace(lab_txt, "", 1).strip().lstrip(":：").strip()
             if txt and len(txt) >= 10:
                 return txt
+
+        title_based_plot = self._extract_plot_from_title(title_text, code)
+        if title_based_plot:
+            return title_based_plot
         return ""
 
-    def _extract_poster_url(self, soup: BeautifulSoup) -> str:
-        """Extract the poster/cover image URL from the detail page."""
+    def _extract_cover_url(self, soup: BeautifulSoup) -> str:
+        """Extract the high-quality cover image URL from the detail page."""
         cover_el = soup.select_one("img.video-cover")
         if cover_el and cover_el.get("src"):
-            src = cover_el["src"]
-            poster_url = src
-            # Derive poster (thumbnail) from cover URL if possible
-            if "/covers/" in src:
-                poster_url = src.replace("/covers/", "/thumbs/")
-            return urljoin(self.BASE_URL, poster_url)
+            return urljoin(self.BASE_URL, cover_el["src"])
         return ""
+
+    def _extract_preview_urls(self, soup: BeautifulSoup) -> list[str]:
+        preview_urls: list[str] = []
+        for anchor in soup.select("div.preview-images a.tile-item"):
+            href = (anchor.get("href") or "").strip()
+            if href:
+                preview_urls.append(urljoin(self.BASE_URL, href))
+                continue
+            image = anchor.select_one("img")
+            src = (image.get("src") or "").strip() if image else ""
+            if src:
+                preview_urls.append(urljoin(self.BASE_URL, src))
+        return list(dict.fromkeys(preview_urls))
+
+    @staticmethod
+    def _extract_runtime_minutes(raw: str) -> int | None:
+        match = re.search(r"(\d+)", raw or "")
+        return int(match.group(1)) if match else None
+
+    @staticmethod
+    def _extract_rating_value(raw: str) -> str:
+        match = re.search(r"([0-9]+(?:\.[0-9]+)?)", raw or "")
+        return match.group(1) if match else ""
+
+    @staticmethod
+    def _extract_vote_count(raw: str) -> int | None:
+        for pattern in (r"由\s*(\d+)\s*人", r"(\d+)\s*人評價", r"(\d+)\s*votes?"):
+            match = re.search(pattern, raw or "", re.IGNORECASE)
+            if match:
+                return int(match.group(1))
+        return None
+
+    @staticmethod
+    def _extract_plot_from_title(title_text: str, code: str) -> str:
+        text = re.sub(r"\s+", " ", title_text or "").strip()
+        if not text:
+            return ""
+
+        want_code = (code or "").strip().upper()
+        if want_code and text.upper().startswith(want_code):
+            text = text[len(want_code):].strip().lstrip("-:： ").strip()
+
+        sentence_match = re.search(r"^(.+?[。！？!?])(?:\s|$)", text)
+        if sentence_match:
+            candidate = sentence_match.group(1).strip()
+            if candidate and candidate.upper() != want_code:
+                return candidate
+
+        return ""
+
+    def _extract_original_title(self, soup: BeautifulSoup, *, code: str, title_text: str) -> str:
+        original_title = self._pick_text(soup, "h2.title span.origin-title")
+        if original_title:
+            return original_title
+
+        normalized = re.sub(r"\s+", " ", title_text or "").strip()
+        if normalized and normalized.upper() != (code or "").upper():
+            return normalized
+        return code
+
+    def _normalize_detail_url(self, detail_url: str | None, code: str) -> str:
+        if detail_url:
+            return self._with_locale(detail_url, "zh")
+        return self._with_locale(f"{self.BASE_URL}/v/{code}", "zh")
+
+    @staticmethod
+    def _with_locale(url: str, locale: str) -> str:
+        parsed = urlparse(urljoin(JavDBCrawler.BASE_URL, url))
+        query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+        query["locale"] = locale
+        return urlunparse(parsed._replace(query=urlencode(query)))
 
     @staticmethod
     def _normalize_release(raw: str) -> str:

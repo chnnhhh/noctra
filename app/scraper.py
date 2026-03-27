@@ -13,7 +13,7 @@ import aiosqlite
 from app.models import ScrapeResponse
 from app.scrapers.javdb import JavDBCrawler
 from app.scrapers.writers.nfo import write_nfo
-from app.scrapers.writers.image import download_poster
+from app.scrapers.writers.image import download_additional_artwork, download_poster
 
 DB_PATH = os.getenv("DB_PATH", "/app/data/noctra.db")
 SCRAPE_ELIGIBLE_STATUSES = {"processed", "organized"}
@@ -217,12 +217,30 @@ class ScraperScheduler:
             await emit("writing_nfo", "元数据解析成功，正在生成 NFO 文件")
             write_nfo(metadata, nfo_path)
 
-            # Step 6: Download poster image
+            # Step 6: Download artwork
+            has_extra_artwork = bool(metadata.fanart_url or metadata.preview_urls)
+            artwork_result = {"fanart": None, "poster": None, "previews": []}
+            if has_extra_artwork:
+                if metadata.fanart_url:
+                    await emit("downloading_poster", "NFO 已生成，正在下载 fanart 并裁切海报")
+                else:
+                    await emit("downloading_poster", "NFO 已生成，正在下载附加图片")
+                artwork_result = await download_additional_artwork(
+                    metadata,
+                    target_dir,
+                    poster_output_path=poster_path,
+                )
+
             if metadata.poster_url:
-                await emit("downloading_poster", "NFO 已生成，正在下载封面图片")
-                await download_poster(metadata.poster_url, poster_path)
+                if not artwork_result.get("poster"):
+                    message = "NFO 已生成，正在下载高清封面"
+                    if has_extra_artwork:
+                        message = "fanart 裁切海报失败，正在回退下载高清封面"
+                    await emit("downloading_poster", message)
+                    await download_poster(metadata.poster_url, poster_path)
             else:
-                await emit("downloading_poster", "未提供封面图片，跳过下载")
+                if not has_extra_artwork:
+                    await emit("downloading_poster", "未提供图片资源，跳过下载")
 
             await emit("finalizing", "正在保存刮削结果")
 

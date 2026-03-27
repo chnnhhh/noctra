@@ -153,6 +153,11 @@
                         { key: 'scrape', label: '刮削', icon: 'sparkles' }
                     ];
                 }
+                if (file.scrape_status === 'success') {
+                    return [
+                        { key: 'scrape', label: '重新刮削', icon: 'sparkles' }
+                    ];
+                }
                 return [];
             },
 
