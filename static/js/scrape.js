@@ -32,21 +32,34 @@ const ScrapePage = {
     currentPage: 1,
     perPage: 50,
     items: [],
+    filter: 'all',
+    sort: 'code',
 
     async loadList() {
         try {
             const result = await ScrapeAPI.getList(
                 this.currentPage,
                 this.perPage,
-                state.scrapeFilter,
-                state.scrapeSort
+                this.filter,
+                this.sort
             );
             this.items = result.items || [];
+            this.updateStats(result.stats);
             this.render();
         } catch (error) {
             console.error('加载刮削列表失败:', error);
             alert('加载失败: ' + error.message);
         }
+    },
+
+    updateStats(stats) {
+        if (!stats) return;
+        const elOrganized = document.querySelector('#stat-organized');
+        const elPending = document.querySelector('#stat-pending');
+        const elScraped = document.querySelector('#stat-scraped');
+        if (elOrganized) elOrganized.textContent = stats.organized ?? '-';
+        if (elPending) elPending.textContent = stats.pending ?? '-';
+        if (elScraped) elScraped.textContent = stats.scraped ?? '-';
     },
 
     async handleScrape(fileId, code) {
@@ -88,7 +101,7 @@ const ScrapePage = {
         if (!tbody) return;
 
         if (this.items.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center">暂无数据</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center">暂无数据</td></tr>';
             return;
         }
 
@@ -126,17 +139,20 @@ const ScrapePage = {
     init() {
         this.loadList();
 
-        // 筛选器
-        document.querySelector('#scrape-filter')?.addEventListener('change', (e) => {
-            state.scrapeFilter = e.target.value;
-            this.currentPage = 1;
-            this.loadList();
-        });
+        // 筛选器 (only bind once)
+        if (!this._initialized) {
+            this._initialized = true;
 
-        // 排序器
-        document.querySelector('#scrape-sort')?.addEventListener('change', (e) => {
-            state.scrapeSort = e.target.value;
-            this.loadList();
-        });
+            document.querySelector('#scrape-filter')?.addEventListener('change', (e) => {
+                this.filter = e.target.value;
+                this.currentPage = 1;
+                this.loadList();
+            });
+
+            document.querySelector('#scrape-sort')?.addEventListener('change', (e) => {
+                this.sort = e.target.value;
+                this.loadList();
+            });
+        }
     }
 };

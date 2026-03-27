@@ -18,7 +18,7 @@
             },
             scanLoaded: false,
             historyLoaded: false,
-            view: 'scan', // 'scan' or 'history'
+            view: 'scan', // 'scan', 'scrape', or 'history'
             currentFilter: 'all',
             sortField: 'default',
             sortDirection: 'asc',

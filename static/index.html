@@ -18,6 +18,7 @@
             </div>
             <div class="header-nav">
                 <a href="#" @click.prevent="switchView('scan')" :class="{ 'active': view === 'scan' }">📂 扫描</a>
+                <a href="#" @click.prevent="switchView('scrape')" :class="{ 'active': view === 'scrape' }">🔍 刮削</a>
                 <a href="#" @click.prevent="switchView('history')" :class="{ 'active': view === 'history' }">📋 历史</a>
             </div>
         </div>
@@ -111,7 +112,7 @@
             </div>
         </div>
 
-        <div class="panel-surface">
+        <div class="panel-surface" x-show="view !== 'scrape'">
             <div class="table-header">
                 <div>
                     <div class="table-title" x-text="view === 'scan' ? '扫描结果' : '整理历史'"></div>
@@ -393,6 +394,62 @@
             </div>
         </div>
 
+        <!-- Scrape Tab -->
+        <div x-show="view === 'scrape'" class="panel-surface">
+            <div class="table-header">
+                <div>
+                    <div class="table-title">刮削管理</div>
+                    <div class="table-subtitle">对已识别番号的文件进行元数据刮削，从远程数据源获取影片信息。</div>
+                </div>
+            </div>
+
+            <!-- 刮削统计卡 -->
+            <div class="scrape-stats-cards">
+                <div class="stat-card">
+                    <div class="stat-label">已整理总数</div>
+                    <div class="stat-value" id="stat-organized">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">待刮削</div>
+                    <div class="stat-value" id="stat-pending">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">已刮削</div>
+                    <div class="stat-value" id="stat-scraped">-</div>
+                </div>
+            </div>
+
+            <!-- 筛选和排序 -->
+            <div class="toolbar">
+                <select id="scrape-filter">
+                    <option value="all">全部</option>
+                    <option value="pending">待刮削</option>
+                    <option value="success">已刮削</option>
+                    <option value="failed">刮削失败</option>
+                </select>
+
+                <select id="scrape-sort">
+                    <option value="code">按番号</option>
+                    <option value="scrape_time">按刮削时间</option>
+                </select>
+            </div>
+
+            <!-- 刮削列表表格 -->
+            <table id="scrape-table">
+                <thead>
+                    <tr>
+                        <th>番号</th>
+                        <th>刮削状态</th>
+                        <th>上次刮削时间</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td colspan="4" class="text-center">加载中...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
     </div>
 
     <div x-show="copyToast.visible"
@@ -452,6 +509,7 @@
     <script src="/static/js/utils.js"></script>
     <script src="/static/js/render.js"></script>
     <script src="/static/js/features.js"></script>
+    <script src="/static/js/scrape.js"></script>
     <script src="/static/js/app.js"></script>
 </body>
 </html>

@@ -76,6 +76,10 @@
                     return;
                 }
 
+                if (viewName === 'scrape') {
+                    return;
+                }
+
                 this.sortField = 'default';
                 this.sortDirection = 'asc';
             },
@@ -280,6 +284,13 @@
                 this.currentFilter = 'all';
                 this.error = null;
                 this.success = null;
+
+                if (viewName === 'scrape') {
+                    if (typeof ScrapePage !== 'undefined') {
+                        ScrapePage.init();
+                    }
+                    return;
+                }
 
                 if (viewName === 'scan') {
                     if (!this.scanLoaded) {
