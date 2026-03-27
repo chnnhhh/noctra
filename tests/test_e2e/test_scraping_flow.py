@@ -19,6 +19,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi.testclient import TestClient
 
 from app.scrapers.metadata import ScrapingMetadata
 from app.scrapers.writers.nfo import write_nfo
@@ -42,7 +43,14 @@ CREATE TABLE IF NOT EXISTS files (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     scrape_status TEXT DEFAULT 'pending',
-    last_scrape_at TEXT
+    last_scrape_at TEXT,
+    scrape_started_at TEXT,
+    scrape_finished_at TEXT,
+    scrape_stage TEXT,
+    scrape_source TEXT,
+    scrape_error TEXT,
+    scrape_error_user_message TEXT,
+    scrape_logs TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_files_scrape_status ON files(scrape_status);
 """
@@ -340,6 +348,17 @@ def test_dist_dir(tmp_path):
     dist = tmp_path / "dist"
     dist.mkdir()
     yield dist
+
+
+@pytest.fixture
+def client(test_db, monkeypatch):
+    """Create a TestClient pointed at the real test database."""
+    import app.main as main_module
+
+    monkeypatch.setattr(main_module, "DB_PATH", test_db)
+
+    with TestClient(main_module.app, raise_server_exceptions=False) as test_client:
+        yield test_client
 
 
 @pytest.fixture
@@ -843,6 +862,44 @@ class TestApiIntegration:
         assert record["last_scrape_at"] is not None
         datetime.fromisoformat(record["last_scrape_at"])
 
+    @patch("app.main.get_active_scrape_job", new_callable=AsyncMock)
+    def test_scrape_list_includes_active_job_snapshot(self, mock_active_job, client, test_db):
+        """GET /api/scrape should surface the active scrape job snapshot."""
+        _insert_file_record(test_db, code="FPRE-055")
+
+        mock_active_job.return_value = {
+            "id": "job-active-1",
+            "status": "running",
+            "total": 2,
+            "processed": 1,
+            "succeeded": 1,
+            "failed": 0,
+            "created_at": "2026-03-27T10:00:00",
+            "started_at": "2026-03-27T10:00:01",
+            "finished_at": None,
+            "current_file_id": 2,
+            "current_file_code": "FPRE-055",
+            "current_stage": "querying_source",
+            "current_source": "javdb",
+            "recent_logs": [
+                {
+                    "at": "2026-03-27T10:00:02",
+                    "level": "info",
+                    "stage": "querying_source",
+                    "source": "javdb",
+                    "message": "正在查询 JavDB",
+                }
+            ],
+            "items": [],
+        }
+
+        response = client.get("/api/scrape")
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["active_job"]["current_file_code"] == "FPRE-055"
+        assert payload["active_job"]["recent_logs"][0]["message"] == "正在查询 JavDB"
+
 
 # ===========================================================================
 # Test 4: Error handling
@@ -877,16 +934,24 @@ class TestErrorHandling:
         async def get_real(fid):
             return _query_file(test_db, fid)
 
-        with patch.object(scheduler, "_get_file", side_effect=get_real):
+        with (
+            patch.object(scheduler, "_get_file", side_effect=get_real),
+            patch("app.scraper.aiosqlite") as mock_aiosqlite,
+        ):
+            mock_aiosqlite.connect.return_value = _make_mock_conn_cm_for_real_db(test_db)
             result = await scheduler.scrape_single(file_id)
 
         assert result.success is False
         assert "pending" in result.error
         assert "organized" in result.error
+        record = _query_file(test_db, file_id)
+        assert record["scrape_status"] == "failed"
+        assert record["scrape_stage"] == "validating"
+        assert record["scrape_error_user_message"] == "文件信息不完整，无法开始刮削"
 
     @pytest.mark.asyncio
     async def test_wrong_status_processed(self, test_db):
-        """File with 'processed' status should be rejected."""
+        """Historical 'processed' status should remain scrapeable."""
         file_id = _insert_file_record(test_db, code="PROC-001", status="processed")
 
         scheduler = ScraperScheduler()
@@ -894,11 +959,22 @@ class TestErrorHandling:
         async def get_real(fid):
             return _query_file(test_db, fid)
 
-        with patch.object(scheduler, "_get_file", side_effect=get_real):
+        with (
+            patch.object(scheduler, "_get_file", side_effect=get_real),
+            patch("app.scraper.JavDBCrawler") as MockCrawler,
+            patch("app.scraper.aiosqlite") as mock_aiosqlite,
+        ):
+            mock_crawler_instance = AsyncMock()
+            mock_crawler_instance.crawl = AsyncMock(return_value=None)
+            MockCrawler.return_value = mock_crawler_instance
+            mock_aiosqlite.connect.return_value = _make_mock_conn_cm_for_real_db(test_db)
             result = await scheduler.scrape_single(file_id)
 
         assert result.success is False
-        assert "processed" in result.error
+        assert "Failed to crawl" in result.error
+        record = _query_file(test_db, file_id)
+        assert record["scrape_status"] == "failed"
+        assert record["scrape_stage"] == "querying_source"
 
     @pytest.mark.asyncio
     async def test_crawl_failure_updates_scrape_status(self, test_db, test_dist_dir):
@@ -919,10 +995,10 @@ class TestErrorHandling:
 
         with (
             patch.object(scheduler, "_get_file", side_effect=get_real),
-            patch.object(scheduler, "_update_scrape_status",
-                         new_callable=AsyncMock) as mock_update,
             patch("app.scraper.JavDBCrawler") as MockCrawler,
+            patch("app.scraper.aiosqlite") as mock_aiosqlite,
         ):
+            mock_aiosqlite.connect.return_value = _make_mock_conn_cm_for_real_db(test_db)
             mock_crawler_instance = AsyncMock()
             mock_crawler_instance.crawl = AsyncMock(return_value=None)
             MockCrawler.return_value = mock_crawler_instance
@@ -931,12 +1007,51 @@ class TestErrorHandling:
 
         assert result.success is False
         assert "Failed to crawl" in result.error
-        mock_update.assert_called_once_with(file_id, "failed")
+        record = _query_file(test_db, file_id)
+        assert record["scrape_status"] == "failed"
+        assert record["scrape_stage"] == "querying_source"
+        assert record["scrape_error_user_message"] == "在 JavDB 没有找到这个番号的元数据"
+
+    @pytest.mark.asyncio
+    async def test_failed_scrape_persists_last_attempt_details(self, test_db, test_dist_dir):
+        """A scrape failure should persist the latest readable details and logs."""
+        code = "FPRE-004"
+        target_dir = test_dist_dir / code
+        target_dir.mkdir()
+        target_path = target_dir / f"{code}.mp4"
+        target_path.write_bytes(b"\x00" * 256)
+
+        file_id = _insert_file_record(test_db, code=code, target_path=str(target_path))
+        scheduler = ScraperScheduler()
+
+        async def get_real(fid):
+            return _query_file(test_db, fid)
+
+        with (
+            patch.object(scheduler, "_get_file", side_effect=get_real),
+            patch("app.scraper.JavDBCrawler") as MockCrawler,
+            patch("app.scraper.aiosqlite") as mock_aiosqlite,
+        ):
+            mock_aiosqlite.connect.return_value = _make_mock_conn_cm_for_real_db(test_db)
+
+            mock_crawler_instance = AsyncMock()
+            mock_crawler_instance.crawl = AsyncMock(return_value=None)
+            MockCrawler.return_value = mock_crawler_instance
+
+            result = await scheduler.scrape_single(file_id)
+
+        record = _query_file(test_db, file_id)
+
+        assert result.success is False
+        assert record["scrape_status"] == "failed"
+        assert record["scrape_source"] == "javdb"
+        assert record["scrape_stage"] == "querying_source"
+        assert record["scrape_error_user_message"] == "在 JavDB 没有找到这个番号的元数据"
+        assert record["scrape_logs"]
 
     @pytest.mark.asyncio
     async def test_no_identified_code_in_record(self, test_db):
         """File record without identified_code should fail gracefully."""
-        now = datetime.now().isoformat()
         file_id = _insert_file_record(test_db, code="NOCODE-001",
                                       identified_code=None)
 
@@ -947,14 +1062,17 @@ class TestErrorHandling:
 
         with (
             patch.object(scheduler, "_get_file", side_effect=get_real),
-            patch.object(scheduler, "_update_scrape_status",
-                         new_callable=AsyncMock) as mock_update,
+            patch("app.scraper.aiosqlite") as mock_aiosqlite,
         ):
+            mock_aiosqlite.connect.return_value = _make_mock_conn_cm_for_real_db(test_db)
             result = await scheduler.scrape_single(file_id)
 
         assert result.success is False
         assert "no identified_code" in result.error
-        mock_update.assert_called_once_with(file_id, "failed")
+        record = _query_file(test_db, file_id)
+        assert record["scrape_status"] == "failed"
+        assert record["scrape_stage"] == "validating"
+        assert record["scrape_error_user_message"] == "文件信息不完整，无法开始刮削"
 
     @pytest.mark.asyncio
     async def test_no_target_path_in_record(self, test_db):
@@ -968,14 +1086,17 @@ class TestErrorHandling:
 
         with (
             patch.object(scheduler, "_get_file", side_effect=get_real),
-            patch.object(scheduler, "_update_scrape_status",
-                         new_callable=AsyncMock) as mock_update,
+            patch("app.scraper.aiosqlite") as mock_aiosqlite,
         ):
+            mock_aiosqlite.connect.return_value = _make_mock_conn_cm_for_real_db(test_db)
             result = await scheduler.scrape_single(file_id)
 
         assert result.success is False
         assert "no target_path" in result.error
-        mock_update.assert_called_once_with(file_id, "failed")
+        record = _query_file(test_db, file_id)
+        assert record["scrape_status"] == "failed"
+        assert record["scrape_stage"] == "validating"
+        assert record["scrape_error_user_message"] == "文件信息不完整，无法开始刮削"
 
     @pytest.mark.asyncio
     async def test_exception_during_nfo_write_marks_failed(self, test_db, test_dist_dir):
@@ -996,11 +1117,11 @@ class TestErrorHandling:
 
         with (
             patch.object(scheduler, "_get_file", side_effect=get_real),
-            patch.object(scheduler, "_update_scrape_status",
-                         new_callable=AsyncMock) as mock_update,
             patch("app.scraper.JavDBCrawler") as MockCrawler,
             patch("app.scraper.write_nfo", side_effect=OSError("Permission denied")),
+            patch("app.scraper.aiosqlite") as mock_aiosqlite,
         ):
+            mock_aiosqlite.connect.return_value = _make_mock_conn_cm_for_real_db(test_db)
             mock_crawler_instance = AsyncMock()
             mock_crawler_instance.crawl = AsyncMock(
                 return_value=ScrapingMetadata(
@@ -1014,7 +1135,10 @@ class TestErrorHandling:
 
         assert result.success is False
         assert "Permission denied" in result.error
-        mock_update.assert_called_once_with(file_id, "failed")
+        record = _query_file(test_db, file_id)
+        assert record["scrape_status"] == "failed"
+        assert record["scrape_stage"] == "writing_nfo"
+        assert record["scrape_error_user_message"] == "元数据已获取，但写入 NFO 文件失败"
 
     @pytest.mark.asyncio
     async def test_already_scraped_file_can_be_re_scraped(self, test_db, test_dist_dir):

@@ -46,6 +46,11 @@ This document provides step-by-step instructions for manually verifying the scra
 - [ ] Verify button shows loading state
 - [ ] Verify status updates to "success" or "failed"
 - [ ] Verify error message shown if scrape fails
+- [ ] Single-file scrape opens the same progress panel as batch scrape (`1 / 1`)
+- [ ] Panel shows current file, current stage, current source, and recent logs
+- [ ] Refresh during an active scrape restores the panel and keeps polling
+- [ ] Failed badge click opens a modal with readable reason, stage, source, logs, and technical details
+- [ ] Failed rows cannot be batch-selected, but still expose row-level retry
 
 ---
 
