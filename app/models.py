@@ -171,6 +171,10 @@ class ScrapeResponse(BaseModel):
     success: bool
     code: Optional[str] = None
     error: Optional[str] = None
+    user_message: Optional[str] = None
+    stage: Optional[str] = None
+    source: Optional[str] = None
+    logs: list[ScrapeLogEntry] = Field(default_factory=list)
 
 
 class ScrapeBatchResultItem(BaseModel):

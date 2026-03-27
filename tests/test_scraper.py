@@ -1,13 +1,12 @@
 """Tests for ScraperScheduler."""
 
-import asyncio
+import json
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.models import ScrapeResponse
 from app.scraper import ScraperScheduler
 from app.scrapers.metadata import ScrapingMetadata
 
@@ -72,8 +71,7 @@ class TestScrapeSingle:
         # Mock _get_file to return the record
         scheduler._get_file = AsyncMock(return_value=record)
 
-        # Mock _update_scrape_status
-        scheduler._update_scrape_status = AsyncMock()
+        scheduler._persist_attempt_update = AsyncMock()
 
         # Mock JavDBCrawler.crawl
         mock_crawler = AsyncMock()
@@ -84,24 +82,76 @@ class TestScrapeSingle:
             patch("app.scraper.JavDBCrawler", return_value=mock_crawler),
             patch("app.scraper.write_nfo") as mock_write_nfo,
             patch("app.scraper.download_poster", new_callable=AsyncMock) as mock_download,
-            patch("app.scraper.aiosqlite") as mock_aiosqlite,
         ):
-            # Setup the DB context manager for the success update
-            mock_conn_cm = AsyncMock()
-            mock_conn = AsyncMock()
-            mock_conn_cm.__aenter__.return_value = mock_conn
-            mock_conn_cm.__aexit__.return_value = None
-            mock_aiosqlite.connect.return_value = mock_conn_cm
-
             result = await scheduler.scrape_single(file_id)
 
         assert result.success is True
         assert result.code == code
         assert result.error is None
+        assert result.user_message == "刮削完成"
+        assert result.stage == "success"
+        assert result.source == "javdb"
 
         mock_crawler.crawl.assert_called_once_with(code)
         mock_write_nfo.assert_called_once()
         mock_download.assert_called_once_with(metadata.poster_url, Path(record["target_path"]).parent / f"{code}-poster.jpg")
+
+    @pytest.mark.asyncio
+    async def test_scrape_single_records_stage_source_and_logs_on_success(self):
+        """Successful scrape should emit stage/source/log progress and persist it."""
+        file_id = 1
+        code = "ALDN-480"
+        record = _make_file_record(file_id=file_id, code=code)
+        metadata = _make_metadata(code=code)
+
+        scheduler = ScraperScheduler()
+        scheduler._get_file = AsyncMock(return_value=record)
+
+        observed = []
+
+        def recorder(event):
+            observed.append(event)
+
+        mock_crawler = AsyncMock()
+        mock_crawler.crawl = AsyncMock(return_value=metadata)
+
+        with (
+            patch("app.scraper.JavDBCrawler", return_value=mock_crawler),
+            patch("app.scraper.write_nfo"),
+            patch("app.scraper.download_poster", new_callable=AsyncMock),
+            patch.object(
+                scheduler,
+                "_persist_attempt_update",
+                create=True,
+                new_callable=AsyncMock,
+            ) as mock_persist,
+        ):
+            result = await scheduler.scrape_single(file_id, progress_callback=recorder)
+
+        assert result.success is True
+        assert result.code == code
+        assert result.user_message == "刮削完成"
+        assert result.stage == "success"
+        assert result.source == "javdb"
+
+        observed_stages = [event["stage"] for event in observed]
+        assert observed_stages == [
+            "validating",
+            "querying_source",
+            "parsing_metadata",
+            "writing_nfo",
+            "downloading_poster",
+            "finalizing",
+        ]
+        assert any(event["source"] == "javdb" for event in observed)
+        assert result.logs[-1].stage == "finalizing"
+
+        final_persisted = mock_persist.await_args_list[-1].kwargs
+        assert final_persisted["scrape_status"] == "success"
+        assert final_persisted["scrape_stage"] == "success"
+        assert final_persisted["scrape_source"] == "javdb"
+        persisted_logs = json.loads(final_persisted["scrape_logs"])
+        assert persisted_logs[-1]["stage"] == "finalizing"
 
     @pytest.mark.asyncio
     async def test_file_not_found(self):
@@ -122,12 +172,15 @@ class TestScrapeSingle:
 
         scheduler = ScraperScheduler()
         scheduler._get_file = AsyncMock(return_value=record)
+        scheduler._persist_attempt_update = AsyncMock()
 
         result = await scheduler.scrape_single(1)
 
         assert result.success is False
         assert "pending" in result.error
         assert "processed" in result.error
+        assert result.stage == "validating"
+        assert result.user_message == "文件信息不完整，无法开始刮削"
 
     @pytest.mark.asyncio
     async def test_processed_status_is_allowed(self):
@@ -137,6 +190,7 @@ class TestScrapeSingle:
 
         scheduler = ScraperScheduler()
         scheduler._get_file = AsyncMock(return_value=record)
+        scheduler._persist_attempt_update = AsyncMock()
 
         mock_crawler = AsyncMock()
         mock_crawler.crawl = AsyncMock(return_value=metadata)
@@ -145,14 +199,7 @@ class TestScrapeSingle:
             patch("app.scraper.JavDBCrawler", return_value=mock_crawler),
             patch("app.scraper.write_nfo"),
             patch("app.scraper.download_poster", new_callable=AsyncMock),
-            patch("app.scraper.aiosqlite") as mock_aiosqlite,
         ):
-            mock_conn_cm = AsyncMock()
-            mock_conn = AsyncMock()
-            mock_conn_cm.__aenter__.return_value = mock_conn
-            mock_conn_cm.__aexit__.return_value = None
-            mock_aiosqlite.connect.return_value = mock_conn_cm
-
             result = await scheduler.scrape_single(1)
 
         assert result.success is True
@@ -164,7 +211,7 @@ class TestScrapeSingle:
 
         scheduler = ScraperScheduler()
         scheduler._get_file = AsyncMock(return_value=record)
-        scheduler._update_scrape_status = AsyncMock()
+        scheduler._persist_attempt_update = AsyncMock()
 
         mock_crawler = AsyncMock()
         mock_crawler.crawl = AsyncMock(return_value=None)
@@ -174,7 +221,8 @@ class TestScrapeSingle:
 
         assert result.success is False
         assert "Failed to crawl" in result.error
-        scheduler._update_scrape_status.assert_called_once_with(1, "failed")
+        assert result.stage == "querying_source"
+        assert result.user_message == "在 JavDB 没有找到这个番号的元数据"
 
     @pytest.mark.asyncio
     async def test_no_identified_code(self):
@@ -183,13 +231,14 @@ class TestScrapeSingle:
 
         scheduler = ScraperScheduler()
         scheduler._get_file = AsyncMock(return_value=record)
-        scheduler._update_scrape_status = AsyncMock()
+        scheduler._persist_attempt_update = AsyncMock()
 
         result = await scheduler.scrape_single(1)
 
         assert result.success is False
         assert "no identified_code" in result.error
-        scheduler._update_scrape_status.assert_called_once_with(1, "failed")
+        assert result.stage == "validating"
+        assert result.user_message == "文件信息不完整，无法开始刮削"
 
     @pytest.mark.asyncio
     async def test_no_target_path(self):
@@ -198,13 +247,14 @@ class TestScrapeSingle:
 
         scheduler = ScraperScheduler()
         scheduler._get_file = AsyncMock(return_value=record)
-        scheduler._update_scrape_status = AsyncMock()
+        scheduler._persist_attempt_update = AsyncMock()
 
         result = await scheduler.scrape_single(1)
 
         assert result.success is False
         assert "no target_path" in result.error
-        scheduler._update_scrape_status.assert_called_once_with(1, "failed")
+        assert result.stage == "validating"
+        assert result.user_message == "文件信息不完整，无法开始刮削"
 
     @pytest.mark.asyncio
     async def test_nfo_write_failure(self):
@@ -214,7 +264,7 @@ class TestScrapeSingle:
 
         scheduler = ScraperScheduler()
         scheduler._get_file = AsyncMock(return_value=record)
-        scheduler._update_scrape_status = AsyncMock()
+        scheduler._persist_attempt_update = AsyncMock()
 
         mock_crawler = AsyncMock()
         mock_crawler.crawl = AsyncMock(return_value=metadata)
@@ -227,7 +277,8 @@ class TestScrapeSingle:
 
         assert result.success is False
         assert "Disk full" in result.error
-        scheduler._update_scrape_status.assert_called_once_with(1, "failed")
+        assert result.stage == "writing_nfo"
+        assert result.user_message == "元数据已获取，但写入 NFO 文件失败"
 
     @pytest.mark.asyncio
     async def test_poster_download_failure(self):
@@ -237,7 +288,7 @@ class TestScrapeSingle:
 
         scheduler = ScraperScheduler()
         scheduler._get_file = AsyncMock(return_value=record)
-        scheduler._update_scrape_status = AsyncMock()
+        scheduler._persist_attempt_update = AsyncMock()
 
         mock_crawler = AsyncMock()
         mock_crawler.crawl = AsyncMock(return_value=metadata)
@@ -251,7 +302,45 @@ class TestScrapeSingle:
 
         assert result.success is False
         assert "Network error" in result.error
-        scheduler._update_scrape_status.assert_called_once_with(1, "failed")
+        assert result.stage == "downloading_poster"
+        assert result.user_message == "NFO 已生成，但封面图片下载失败"
+
+    @pytest.mark.asyncio
+    async def test_scrape_single_maps_poster_failure_to_user_message(self):
+        """Poster failures should map to readable stage-aware user messaging."""
+        record = _make_file_record(code="EBOD-829")
+        metadata = _make_metadata(code="EBOD-829")
+
+        scheduler = ScraperScheduler()
+        scheduler._get_file = AsyncMock(return_value=record)
+
+        mock_crawler = AsyncMock()
+        mock_crawler.crawl = AsyncMock(return_value=metadata)
+
+        with (
+            patch("app.scraper.JavDBCrawler", return_value=mock_crawler),
+            patch("app.scraper.write_nfo"),
+            patch(
+                "app.scraper.download_poster",
+                new_callable=AsyncMock,
+                side_effect=Exception("poster timeout"),
+            ),
+            patch.object(
+                scheduler,
+                "_persist_attempt_update",
+                create=True,
+                new_callable=AsyncMock,
+            ) as mock_persist,
+        ):
+            result = await scheduler.scrape_single(1)
+
+        assert result.success is False
+        assert result.error == "poster timeout"
+        assert result.user_message == "NFO 已生成，但封面图片下载失败"
+        assert result.stage == "downloading_poster"
+        persisted = mock_persist.await_args_list[-1].kwargs
+        assert persisted["scrape_stage"] == "downloading_poster"
+        assert persisted["scrape_error_user_message"] == "NFO 已生成，但封面图片下载失败"
 
     @pytest.mark.asyncio
     async def test_no_poster_url_skips_download(self):
@@ -263,7 +352,7 @@ class TestScrapeSingle:
 
         scheduler = ScraperScheduler()
         scheduler._get_file = AsyncMock(return_value=record)
-        scheduler._update_scrape_status = AsyncMock()
+        scheduler._persist_attempt_update = AsyncMock()
 
         mock_crawler = AsyncMock()
         mock_crawler.crawl = AsyncMock(return_value=metadata)
@@ -272,34 +361,22 @@ class TestScrapeSingle:
             patch("app.scraper.JavDBCrawler", return_value=mock_crawler),
             patch("app.scraper.write_nfo"),
             patch("app.scraper.download_poster", new_callable=AsyncMock) as mock_download,
-            patch("app.scraper.aiosqlite") as mock_aiosqlite,
         ):
-            mock_conn_cm = AsyncMock()
-            mock_conn = AsyncMock()
-            mock_conn_cm.__aenter__.return_value = mock_conn
-            mock_conn_cm.__aexit__.return_value = None
-            mock_aiosqlite.connect.return_value = mock_conn_cm
-
             result = await scheduler.scrape_single(file_id)
 
         assert result.success is True
         assert result.code == code
+        assert result.stage == "success"
+        assert result.source == "javdb"
         # download_poster should NOT have been called since poster_url is empty
         mock_download.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_db_update_on_success_uses_parameterized_query(self):
-        """Test that the success DB update uses parameterized queries."""
-        file_id = 42
-        code = "ABW-100"
-        record = _make_file_record(file_id=file_id, code=code)
-        metadata = _make_metadata(code=code)
-
+    async def test_persist_attempt_update_uses_parameterized_query(self):
+        """Persist helper should use parameterized SQL and ignore unknown fields."""
         scheduler = ScraperScheduler()
-        scheduler._get_file = AsyncMock(return_value=record)
-
-        mock_crawler = AsyncMock()
-        mock_crawler.crawl = AsyncMock(return_value=metadata)
+        file_id = 42
+        timestamp = datetime.now().isoformat()
 
         captured_sql = None
         captured_params = None
@@ -311,12 +388,7 @@ class TestScrapeSingle:
             mock_cursor = MagicMock()
             return mock_cursor
 
-        with (
-            patch("app.scraper.JavDBCrawler", return_value=mock_crawler),
-            patch("app.scraper.write_nfo"),
-            patch("app.scraper.download_poster", new_callable=AsyncMock),
-            patch("app.scraper.aiosqlite") as mock_aiosqlite,
-        ):
+        with patch("app.scraper.aiosqlite") as mock_aiosqlite:
             mock_conn_cm = AsyncMock()
             mock_conn = AsyncMock()
             mock_conn.execute = fake_execute
@@ -324,15 +396,21 @@ class TestScrapeSingle:
             mock_conn_cm.__aexit__.return_value = None
             mock_aiosqlite.connect.return_value = mock_conn_cm
 
-            await scheduler.scrape_single(file_id)
+            await scheduler._persist_attempt_update(
+                file_id,
+                scrape_status="success",
+                last_scrape_at=timestamp,
+                invalid_field="ignored",
+            )
 
         # Verify parameterized query was used
         assert captured_sql is not None
         assert "?" in captured_sql
-        assert "UPDATE files SET scrape_status" in captured_sql
-        assert captured_params == ("success", captured_params[1], file_id)
-        # Verify timestamp is ISO format
-        datetime.fromisoformat(captured_params[1])
+        assert "UPDATE files SET" in captured_sql
+        assert "scrape_status = ?" in captured_sql
+        assert "last_scrape_at = ?" in captured_sql
+        assert "invalid_field" not in captured_sql
+        assert captured_params == ("success", timestamp, file_id)
 
     @pytest.mark.asyncio
     async def test_scrape_single_derives_correct_paths(self):
@@ -348,7 +426,7 @@ class TestScrapeSingle:
 
         scheduler = ScraperScheduler()
         scheduler._get_file = AsyncMock(return_value=record)
-        scheduler._update_scrape_status = AsyncMock()
+        scheduler._persist_attempt_update = AsyncMock()
 
         mock_crawler = AsyncMock()
         mock_crawler.crawl = AsyncMock(return_value=metadata)
@@ -368,14 +446,7 @@ class TestScrapeSingle:
             patch("app.scraper.JavDBCrawler", return_value=mock_crawler),
             patch("app.scraper.write_nfo", side_effect=capture_nfo),
             patch("app.scraper.download_poster", new_callable=AsyncMock, side_effect=capture_poster),
-            patch("app.scraper.aiosqlite") as mock_aiosqlite,
         ):
-            mock_conn_cm = AsyncMock()
-            mock_conn = AsyncMock()
-            mock_conn_cm.__aenter__.return_value = mock_conn
-            mock_conn_cm.__aexit__.return_value = None
-            mock_aiosqlite.connect.return_value = mock_conn_cm
-
             await scheduler.scrape_single(file_id)
 
         expected_dir = Path("/dist/SSIS-789")
