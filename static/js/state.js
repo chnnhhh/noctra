@@ -7,7 +7,7 @@
             success: null,
             files: [],
             scanFilesCache: [],
-            historyFilesCache: [],
+            scrapeFilesCache: [],
             selectedFiles: {},
             stats: {
                 total_files: 0,
@@ -17,13 +17,16 @@
                 processed: 0
             },
             scanLoaded: false,
-            historyLoaded: false,
-            view: 'scan', // 'scan', 'scrape', or 'history'
+            scrapeLoaded: false,
+            view: 'scan', // 'scan' or 'scrape'
             currentFilter: 'all',
             sortField: 'default',
             sortDirection: 'asc',
-            scrapeFilter: 'all',  // all, pending, success, failed
-            scrapeSort: 'code',   // code, scrape_time
+            scrapeFilter: 'all',
+            scrapeSortField: 'code',
+            scrapeSortDirection: 'asc',
+            scrapeSelectedFiles: {},
+            scrapePage: 1,
             pageSize: 50,
             pageSizeOptions: [20, 50, 100],
             currentPage: 1,
@@ -72,6 +75,100 @@
 
             get selectedEntries() {
                 return this.scanFilesCache.filter(file => this.selectedFiles[file.id]);
+            },
+
+            get scrapeHasSelected() {
+                return Object.values(this.scrapeSelectedFiles).some(v => v);
+            },
+
+            get scrapeSelectedCount() {
+                return Object.values(this.scrapeSelectedFiles).filter(v => v).length;
+            },
+
+            get scrapeSelectedEntries() {
+                return this.scrapeFilesCache.filter(file => this.scrapeSelectedFiles[file.id]);
+            },
+
+            get scrapeFilteredFiles() {
+                if (this.scrapeFilter === 'all') {
+                    return this.scrapeFilesCache;
+                }
+                return this.scrapeFilesCache.filter(f => f.scrape_status === this.scrapeFilter);
+            },
+
+            get scrapeSortFieldOptions() {
+                return [
+                    { value: 'code', label: '番号' },
+                    { value: 'scrape_time', label: '刮削时间' },
+                    { value: 'status', label: '状态' }
+                ];
+            },
+
+            get scrapeSortedFiles() {
+                const files = [...this.scrapeFilteredFiles];
+                const dir = this.scrapeSortDirection === 'asc' ? 1 : -1;
+
+                return files.sort((a, b) => {
+                    if (this.scrapeSortField === 'code') {
+                        return this.compareNatural(a.identified_code || '', b.identified_code || '') * dir;
+                    }
+                    if (this.scrapeSortField === 'scrape_time') {
+                        const aTime = Date.parse(a.last_scrape_at || '') || 0;
+                        const bTime = Date.parse(b.last_scrape_at || '') || 0;
+                        const diff = (aTime - bTime) * dir;
+                        if (diff !== 0) return diff;
+                        return this.compareNatural(a.identified_code || '', b.identified_code || '');
+                    }
+                    if (this.scrapeSortField === 'status') {
+                        const statusOrder = { pending: 0, success: 1, failed: 2 };
+                        const diff = ((statusOrder[a.scrape_status] ?? 9) - (statusOrder[b.scrape_status] ?? 9)) * dir;
+                        if (diff !== 0) return diff;
+                        return this.compareNatural(a.identified_code || '', b.identified_code || '');
+                    }
+                    return 0;
+                });
+            },
+
+            get scrapeTotalPages() {
+                return Math.max(1, Math.ceil(this.scrapeSortedFiles.length / this.pageSize));
+            },
+
+            get scrapeCurrentPageValue() {
+                return Math.min(this.scrapePage, this.scrapeTotalPages);
+            },
+
+            get scrapePageRangeStart() {
+                if (this.scrapeSortedFiles.length === 0) return 0;
+                return ((this.scrapeCurrentPageValue - 1) * this.pageSize) + 1;
+            },
+
+            get scrapePageRangeEnd() {
+                if (this.scrapeSortedFiles.length === 0) return 0;
+                return Math.min(this.scrapePageRangeStart + this.pageSize - 1, this.scrapeSortedFiles.length);
+            },
+
+            get scrapePaginatedFiles() {
+                const start = (this.scrapeCurrentPageValue - 1) * this.pageSize;
+                return this.scrapeSortedFiles.slice(start, start + this.pageSize);
+            },
+
+            get scrapeCurrentPageSelectableFiles() {
+                return this.scrapePaginatedFiles.filter(file => this.canSelectScrapeFile(file));
+            },
+
+            get scrapePageSelectedCount() {
+                return this.scrapeCurrentPageSelectableFiles.filter(file => this.scrapeSelectedFiles[file.id]).length;
+            },
+
+            get scrapeAllSelected() {
+                return this.scrapeCurrentPageSelectableFiles.length > 0 &&
+                       this.scrapePageSelectedCount === this.scrapeCurrentPageSelectableFiles.length;
+            },
+
+            get scrapePageSelectionState() {
+                if (this.scrapePageSelectedCount === 0) return 'none';
+                if (this.scrapePageSelectedCount === this.scrapeCurrentPageSelectableFiles.length) return 'all';
+                return 'partial';
             },
 
             get batchRunning() {
@@ -190,14 +287,6 @@
             },
 
             get sortFieldOptions() {
-                if (this.view === 'history') {
-                    return [
-                        { value: 'time', label: '时间' },
-                        { value: 'code', label: '番号' },
-                        { value: 'status', label: '状态' }
-                    ];
-                }
-
                 return [
                     { value: 'default', label: '默认排序' },
                     { value: 'code', label: '番号' },
