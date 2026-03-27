@@ -93,3 +93,21 @@ class DeleteFileResult(BaseModel):
 class HistoryResult(StatsSummary):
     skipped: int
     files: list[FileRecord]
+
+
+# ===== Scraping Models (MVP) =====
+
+class ScrapeListItem(BaseModel):
+    """刮削列表项"""
+    file_id: int
+    code: str
+    target_path: str
+    scrape_status: str  # pending, success, failed
+    last_scrape_at: Optional[str] = None
+
+
+class ScrapeResponse(BaseModel):
+    """单条刮削响应"""
+    success: bool
+    code: Optional[str] = None
+    error: Optional[str] = None
