@@ -16,6 +16,32 @@ class BaseCrawler(ABC):
 
     name: str  # 子类必须定义
     MAX_DIAGNOSTICS = 20
+    REQUEST_PROFILES = (
+        {
+            "label": "Chrome",
+            "impersonate": "chrome",
+            "headers": {
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/124.0.0.0 Safari/537.36"
+                ),
+                "Accept-Language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7,ja;q=0.6",
+            },
+        },
+        {
+            "label": "Safari",
+            "impersonate": "safari17_0",
+            "headers": {
+                "User-Agent": (
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                    "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+                    "Version/17.0 Safari/605.1.15"
+                ),
+                "Accept-Language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7,ja;q=0.6",
+            },
+        },
+    )
 
     def __init__(self):
         self._session = None
@@ -56,6 +82,17 @@ class BaseCrawler(ABC):
     def _set_error(self, message: str) -> None:
         self.last_error = message
         self._record_diagnostic(message, level="error")
+
+    def _is_cloudflare_challenge(
+        self,
+        *,
+        status_code: int,
+        body: str | None,
+    ) -> bool:
+        body_lower = (body or "").lower()
+        return status_code == 403 and (
+            "just a moment" in body_lower or "cloudflare" in body_lower
+        )
 
     def _build_http_error_message(
         self,
@@ -104,27 +141,44 @@ class BaseCrawler(ABC):
             if self._session is None:
                 self._session = requests.Session()
 
-            # 执行请求
-            response = self._session.get(
-                url,
-                headers={
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-                },
-                timeout=25,
-                verify=False,
-                impersonate="chrome",  # 模拟 Chrome 浏览器指纹
-            )
+            for index, profile in enumerate(self.REQUEST_PROFILES):
+                response = self._session.get(
+                    url,
+                    headers=profile["headers"],
+                    timeout=25,
+                    verify=False,
+                    impersonate=profile["impersonate"],
+                )
 
-            if response.status_code == 200:
-                return response.text
-            self._set_error(
-                self._build_http_error_message(
+                if response.status_code == 200:
+                    if index > 0:
+                        context_label = f" {context}" if context else " 请求"
+                        self._record_diagnostic(
+                            f"{label}{context_label}已通过 {profile['label']} 浏览器指纹重试成功"
+                        )
+                    return response.text
+
+                is_cloudflare = self._is_cloudflare_challenge(
                     status_code=response.status_code,
                     body=response.text,
-                    context=context,
                 )
-            )
-            return None
+                has_fallback = index < len(self.REQUEST_PROFILES) - 1
+                if is_cloudflare and has_fallback:
+                    next_profile = self.REQUEST_PROFILES[index + 1]
+                    context_label = f" {context}" if context else " 请求"
+                    self._record_diagnostic(
+                        f"{label}{context_label}遭遇 Cloudflare 挑战，正在切换 {next_profile['label']} 浏览器指纹重试"
+                    )
+                    continue
+
+                self._set_error(
+                    self._build_http_error_message(
+                        status_code=response.status_code,
+                        body=response.text,
+                        context=context,
+                    )
+                )
+                return None
 
         except Exception as e:
             label = self._display_name()

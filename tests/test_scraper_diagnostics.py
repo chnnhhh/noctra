@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -35,6 +36,47 @@ def test_javdb_http_error_message_identifies_cloudflare_challenge():
 
 
 @pytest.mark.asyncio
+async def test_javdb_request_retries_with_safari_after_cloudflare_challenge():
+    crawler = JavDBCrawler()
+    mock_session = MagicMock()
+    mock_session.get.side_effect = [
+        SimpleNamespace(
+            status_code=403,
+            text="""
+            <!DOCTYPE html>
+            <html><head><title>Just a moment...</title></head><body></body></html>
+            """,
+            headers={"server": "cloudflare"},
+        ),
+        SimpleNamespace(
+            status_code=200,
+            text="<html><body>ok</body></html>",
+            headers={"server": "cloudflare"},
+        ),
+    ]
+
+    with patch("app.scrapers.base.requests.Session", return_value=mock_session), \
+         patch("app.scrapers.base.asyncio.sleep", new=AsyncMock()):
+        result = await crawler._request(
+            "https://javdb.com/search?q=EBOD-829&locale=zh",
+            context="搜索页",
+        )
+
+    assert result == "<html><body>ok</body></html>"
+    assert mock_session.get.call_count == 2
+    assert mock_session.get.call_args_list[0].kwargs["impersonate"] == "chrome"
+    assert mock_session.get.call_args_list[1].kwargs["impersonate"] == "safari17_0"
+    assert any(
+        "正在切换 Safari 浏览器指纹重试" in entry["message"]
+        for entry in crawler.diagnostics
+    )
+    assert any(
+        "已通过 Safari 浏览器指纹重试成功" in entry["message"]
+        for entry in crawler.diagnostics
+    )
+
+
+@pytest.mark.asyncio
 async def test_scrape_single_surfaces_crawler_diagnostics_on_source_block():
     scheduler = ScraperScheduler()
     scheduler._get_file = AsyncMock(return_value=_scrapeable_row())
@@ -59,3 +101,29 @@ async def test_scrape_single_surfaces_crawler_diagnostics_on_source_block():
         "JavDB 搜索页返回 HTTP 403，疑似被 Cloudflare 拦截（Just a moment...）",
     ]
 
+
+@pytest.mark.asyncio
+async def test_scrape_single_writes_stage_diagnostics_to_backend_logger():
+    scheduler = ScraperScheduler()
+    scheduler._get_file = AsyncMock(return_value=_scrapeable_row())
+    scheduler._persist_attempt_update = AsyncMock()
+
+    mock_crawler = MagicMock()
+    mock_crawler.crawl = AsyncMock(return_value=None)
+    mock_crawler.last_error = "JavDB 搜索页返回 HTTP 403，疑似被 Cloudflare 拦截（Just a moment...）"
+    mock_crawler.diagnostics = [
+        {"level": "info", "message": "正在请求 JavDB 搜索页"},
+        {"level": "error", "message": mock_crawler.last_error},
+    ]
+
+    with patch("app.scraper.JavDBCrawler", return_value=mock_crawler), \
+         patch("app.scraper.logger") as mock_logger:
+        await scheduler.scrape_single(1)
+
+    info_calls = [call.args[0] for call in mock_logger.info.call_args_list]
+    error_calls = [call.args[0] for call in mock_logger.error.call_args_list]
+
+    assert any("正在检查文件信息" in message for message in info_calls)
+    assert any("正在查询 JavDB" in message for message in info_calls)
+    assert any("正在请求 JavDB 搜索页" in message for message in info_calls)
+    assert any("Cloudflare" in message for message in error_calls)

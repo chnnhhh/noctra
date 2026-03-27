@@ -34,6 +34,21 @@ SEARCH_HTML_EMPTY = """
 </html>
 """
 
+SEARCH_HTML_TITLE_CODE_ONLY = """
+<html>
+<body>
+  <div class="movie-list">
+    <a class="box" href="/v/title-only">
+      <div class="video-title">
+        <strong>EBOD-829</strong>
+        Test Video Title
+      </div>
+    </a>
+  </div>
+</body>
+</html>
+"""
+
 DETAIL_HTML_SUCCESS = """
 <html>
 <body>
@@ -153,6 +168,46 @@ DETAIL_HTML_CODE_MISMATCH = """
         <strong>識別碼:</strong>
         <span class="value">XYZ-999</span>
       </div>
+    </div>
+  </div>
+</body>
+</html>
+"""
+
+DETAIL_HTML_CODE_WITH_SPLIT_HYPHEN = """
+<html>
+<body>
+  <div class="container">
+    <h2 class="title is-4">
+      <strong>EBOD-829</strong>
+      <strong class="current-title">Split Code Title</strong>
+    </h2>
+
+    <div class="video-meta-panel">
+      <div class="panel-block first-block">
+        <strong>番號:</strong>
+        <span class="value"><a href="/video_codes/EBOD">EBOD</a>-829</span>
+      </div>
+      <div class="panel-block">
+        <strong>日期:</strong>
+        <span>2021-06-13</span>
+      </div>
+      <div class="panel-block">
+        <strong>片商:</strong>
+        <span>
+          <a href="/makers/1">E-BODY</a>
+        </span>
+      </div>
+      <div class="panel-block">
+        <strong>演員:</strong>
+        <span>
+          <a href="/actors/1">北野未奈</a>
+        </span>
+      </div>
+    </div>
+
+    <div class="video-cover-panel">
+      <img class="video-cover" src="https://javdb.com/covers/5d/5D8OB.jpg" />
     </div>
   </div>
 </body>
@@ -346,6 +401,30 @@ class TestJavDBCrawlerFindFirstDetailUrl:
         crawler = JavDBCrawler()
         url = crawler._find_first_detail_url(SEARCH_HTML_SUCCESS, "ssis-743")
         assert url == "https://javdb.com/v/abcdefg"
+
+    def test_video_title_code_match_when_uid_is_missing(self):
+        """Newer JavDB search cards expose code in video-title strong instead of .uid."""
+        crawler = JavDBCrawler()
+        url = crawler._find_first_detail_url(SEARCH_HTML_TITLE_CODE_ONLY, "EBOD-829")
+        assert url == "https://javdb.com/v/title-only"
+
+
+class TestJavDBCrawlerCodeNormalization:
+    """Test normalization for codes rendered with extra spaces."""
+
+    def test_normalize_code_text_strips_spaces_around_hyphen(self):
+        assert JavDBCrawler._normalize_code_text(" EBOD -829 ") == "EBOD-829"
+
+    def test_parse_detail_accepts_split_code_rendering(self):
+        crawler = JavDBCrawler()
+        result = crawler._parse_detail(DETAIL_HTML_CODE_WITH_SPLIT_HYPHEN, "EBOD-829")
+
+        assert result is not None
+        assert result.code == "EBOD-829"
+        assert result.title == "Split Code Title"
+        assert result.release == "2021-06-13"
+        assert result.studio == "E-BODY"
+        assert result.actors == ["北野未奈"]
 
 
 class TestJavDBCrawlerExtractPosterUrl:

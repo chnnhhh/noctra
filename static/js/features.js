@@ -396,6 +396,9 @@
                         }
                     } else {
                         this.stopScrapeBatchPolling();
+                        this.setScrapeBatchJob(null);
+                        this.scrapeBatchExpanded = false;
+                        this.scrapeBatchCancelling = false;
                     }
 
                     this.scrapeLoaded = true;

@@ -197,3 +197,107 @@ def test_scrape_batch_panel_markup_lives_inside_scrape_tab():
     scrape_panel = html.index('x-show="view === \'scrape\' && scrapeBatchPanelVisible"')
 
     assert scrape_panel > scrape_tab_start
+
+
+def test_scrape_status_static_branch_uses_single_root_node():
+    html = (PROJECT_ROOT / "static/index.html").read_text(encoding="utf-8")
+
+    branch_start = html.index('<template x-if="!hasScrapeStatusAction(file)">')
+    branch = html[branch_start:branch_start + 700]
+
+    assert '<div class="status-static">' in branch
+    assert branch.index('<div class="status-static">') < branch.index('<button class="badge clickable"')
+    assert branch.index('<div class="status-static">') < branch.index('<span class="badge"')
+
+
+def test_load_scrape_files_clears_stale_batch_overlay_when_no_active_job():
+    script = textwrap.dedent(
+        """
+        import fs from 'node:fs';
+        import vm from 'node:vm';
+
+        const context = vm.createContext({
+          console,
+          setTimeout,
+          clearTimeout,
+          setInterval,
+          clearInterval,
+          Intl,
+          URLSearchParams,
+          Date,
+        });
+        context.window = context;
+        context.globalThis = context;
+
+        for (const path of ['static/js/state.js', 'static/js/features.js']) {
+          const source = fs.readFileSync(path, 'utf8');
+          vm.runInContext(source, context, { filename: path });
+        }
+
+        context.ScrapeAPI = {
+          async getList() {
+            return {
+              total: 1,
+              items: [
+                {
+                  file_id: 13,
+                  code: 'EBOD-829',
+                  target_path: '/dist/EBOD-829/EBOD-829.mp4',
+                  original_path: '/source/EBOD-829.mp4',
+                  status: 'processed',
+                  scrape_status: 'success',
+                  last_scrape_at: '2026-03-28T02:07:03',
+                },
+              ],
+              active_job: null,
+            };
+          },
+        };
+
+        function mergeSection(target, section) {
+          Object.defineProperties(target, Object.getOwnPropertyDescriptors(section));
+          return target;
+        }
+
+        const app = {};
+        mergeSection(app, context.NoctraState.createState());
+        mergeSection(app, context.NoctraFeatures.createFeatures());
+
+        app.scrapeBatchJob = {
+          id: 'job-old',
+          status: 'completed',
+          items: [
+            {
+              id: 13,
+              status: 'processing',
+            },
+          ],
+        };
+        app.scrapeBatchItemsIndex = {
+          13: {
+            id: 13,
+            status: 'processing',
+          },
+        };
+        app.scrapeBatchExpanded = true;
+        app.scrapeBatchCancelling = true;
+
+        await app.loadScrapeFiles();
+
+        console.log(JSON.stringify({
+          scrapeBatchJob: app.scrapeBatchJob,
+          scrapeBatchItemsIndex: app.scrapeBatchItemsIndex,
+          scrapeBatchExpanded: app.scrapeBatchExpanded,
+          scrapeBatchCancelling: app.scrapeBatchCancelling,
+          scrapeStatus: app.scrapeFilesCache[0]?.scrape_status || null,
+        }));
+        """
+    )
+
+    result = run_frontend_script(script)
+
+    assert result["scrapeBatchJob"] is None
+    assert result["scrapeBatchItemsIndex"] == {}
+    assert result["scrapeBatchExpanded"] is False
+    assert result["scrapeBatchCancelling"] is False
+    assert result["scrapeStatus"] == "success"

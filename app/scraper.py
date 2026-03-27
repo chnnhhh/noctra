@@ -2,6 +2,7 @@
 
 import json
 import inspect
+import logging
 import os
 from datetime import datetime
 from pathlib import Path
@@ -18,6 +19,7 @@ DB_PATH = os.getenv("DB_PATH", "/app/data/noctra.db")
 SCRAPE_ELIGIBLE_STATUSES = {"processed", "organized"}
 MAX_SCRAPE_LOGS = 30
 SCRAPE_SOURCE_JAVDB = "javdb"
+logger = logging.getLogger("uvicorn.error")
 
 
 def _utcnow_iso() -> str:
@@ -99,6 +101,15 @@ class ScraperScheduler:
             logs.append(event)
             if len(logs) > MAX_SCRAPE_LOGS:
                 del logs[:-MAX_SCRAPE_LOGS]
+
+            source_label = event_source or "-"
+            log_line = f"scrape file_id={file_id} stage={stage} source={source_label} {message}"
+            if level == "error":
+                logger.error(log_line)
+            elif level == "warning":
+                logger.warning(log_line)
+            else:
+                logger.info(log_line)
 
             if progress_callback:
                 callback_result = progress_callback(event)
@@ -239,7 +250,13 @@ class ScraperScheduler:
             )
 
         except Exception as exc:
-            print(f"ScraperScheduler.scrape_single error for file_id={file_id}: {exc}")
+            logger.error(
+                "ScraperScheduler.scrape_single failed file_id=%s stage=%s source=%s error=%s",
+                file_id,
+                current_stage,
+                current_source,
+                exc,
+            )
             user_message = _map_failure(current_stage, current_source, str(exc))
             finished_at = _utcnow_iso()
             try:
@@ -255,7 +272,11 @@ class ScraperScheduler:
                     scrape_logs=json.dumps(logs, ensure_ascii=False),
                 )
             except Exception as db_err:
-                print(f"Failed to update scrape_status to 'failed' for file_id={file_id}: {db_err}")
+                logger.error(
+                    "Failed to update scrape_status to failed file_id=%s db_error=%s",
+                    file_id,
+                    db_err,
+                )
             return ScrapeResponse(
                 success=False,
                 error=str(exc),

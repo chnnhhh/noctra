@@ -1818,6 +1818,13 @@
             transform: translateY(-1px);
         }
 
+        .status-static {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 100px;
+        }
+
         .status-action {
             --status-width-collapsed: 100px;
             --status-width-expanded: 176px;

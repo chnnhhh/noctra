@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import aiohttp
 import pytest
 
-from app.scrapers.writers.image import CHUNK_SIZE, download_poster
+from app.scrapers.writers.image import CHUNK_SIZE, DEFAULT_HEADERS, download_poster
 
 FAKE_IMAGE_DATA = b"\xff\xd8\xff\xe0" + b"\x00" * 100  # fake JPEG header + padding
 
@@ -55,6 +55,27 @@ def _build_mock_session_and_response():
 
 class TestDownloadPoster:
     """Tests for download_poster."""
+
+    @pytest.mark.asyncio
+    async def test_uses_browser_headers_and_relaxed_ssl(self, tmp_path: Path, poster_url: str):
+        """Poster downloads should use browser-like headers and disable strict SSL verification."""
+        output_path = tmp_path / "poster.jpg"
+        session_cm, _ = _build_mock_session_and_response()
+        mock_connector = MagicMock()
+
+        with patch("app.scrapers.writers.image.aiohttp.ClientSession", return_value=session_cm) as mock_client_session, \
+             patch("app.scrapers.writers.image.aiohttp.TCPConnector", return_value=mock_connector) as mock_connector_cls, \
+             patch("app.scrapers.writers.image.aiofiles.open", create=True) as mock_open:
+
+            mock_file = _make_async_context_manager(AsyncMock())
+            mock_open.return_value = mock_file
+
+            await download_poster(poster_url, output_path)
+
+        mock_connector_cls.assert_called_once_with(ssl=False)
+        session_kwargs = mock_client_session.call_args.kwargs
+        assert session_kwargs["headers"] == DEFAULT_HEADERS
+        assert session_kwargs["connector"] is mock_connector
 
     @pytest.mark.asyncio
     async def test_successful_download(self, tmp_path: Path, poster_url: str):

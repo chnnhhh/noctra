@@ -95,6 +95,16 @@ class JavDBCrawler(BaseCrawler):
                 raise
             return await self._request(url)
 
+    @staticmethod
+    def _normalize_code_text(raw: str) -> str:
+        """Normalize Jav codes like 'EBOD -829' to 'EBOD-829' for reliable matching."""
+        normalized = re.sub(r"\s*-\s*", "-", (raw or "").strip().upper())
+        normalized = re.sub(r"\s+", " ", normalized).strip()
+        match = re.search(r"[A-Z0-9]+-[A-Z0-9]+", normalized)
+        if match:
+            return match.group(0)
+        return normalized
+
     def _find_first_detail_url(self, html: str, code: str) -> Optional[str]:
         """Find the first detail URL from a JavDB search results page."""
         try:
@@ -103,21 +113,23 @@ class JavDBCrawler(BaseCrawler):
             if not boxes:
                 return None
 
-            want = code.upper().replace("-", "-").strip()
+            want = self._normalize_code_text(code)
 
-            # Prefer exact code match from the result card's UID
+            # Prefer exact code match from explicit code nodes on the result card.
             for a in boxes:
-                uid_el = a.select_one(".uid")
-                if uid_el:
-                    uid_txt = uid_el.get_text(" ", strip=True).upper()
-                    if uid_txt and uid_txt == want:
+                code_el = a.select_one(".uid") or a.select_one(".video-title strong")
+                if code_el:
+                    result_code = self._normalize_code_text(
+                        code_el.get_text(" ", strip=True)
+                    )
+                    if result_code and result_code == want:
                         href = a.get("href")
                         if href:
                             return urljoin(self.BASE_URL, href)
 
             # Fallback: accept a title that contains the code
             for a in boxes:
-                title = (a.get_text(" ", strip=True) or "").upper()
+                title = self._normalize_code_text(a.get_text(" ", strip=True) or "")
                 if want and want in title:
                     href = a.get("href")
                     if href:
@@ -145,9 +157,9 @@ class JavDBCrawler(BaseCrawler):
         # --- Validate page code matches requested code ---
         raw_id = self._text_after_label(soup, self._LABEL_CODE)
         if raw_id:
-            m = re.search(r"[A-Za-z0-9]+-[A-Za-z0-9]+", raw_id)
-            page_code = m.group(0).upper() if m else raw_id.upper()
-            if page_code and page_code != code.upper():
+            page_code = self._normalize_code_text(raw_id)
+            want_code = self._normalize_code_text(code)
+            if page_code and page_code != want_code:
                 return None
 
         # --- Title ---

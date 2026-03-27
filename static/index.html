@@ -647,15 +647,17 @@
                                             </div>
                                         </template>
                                         <template x-if="!hasScrapeStatusAction(file)">
-                                            <button class="badge clickable"
-                                                    :class="getScrapeBadgeClass(file)"
-                                                    x-text="getScrapeStatusText(file)"
-                                                    @click="showScrapeErrorDetails(file)"
-                                                    x-show="file.scrape_status === 'failed'"></button>
-                                            <span class="badge"
-                                                  :class="getScrapeBadgeClass(file)"
-                                                  x-text="getScrapeStatusText(file)"
-                                                  x-show="file.scrape_status !== 'failed'"></span>
+                                            <div class="status-static">
+                                                <button class="badge clickable"
+                                                        :class="getScrapeBadgeClass(file)"
+                                                        x-text="getScrapeStatusText(file)"
+                                                        @click="showScrapeErrorDetails(file)"
+                                                        x-show="file.scrape_status === 'failed'"></button>
+                                                <span class="badge"
+                                                      :class="getScrapeBadgeClass(file)"
+                                                      x-text="getScrapeStatusText(file)"
+                                                      x-show="file.scrape_status !== 'failed'"></span>
+                                            </div>
                                         </template>
                                     </td>
                                     <td class="cell-time">
