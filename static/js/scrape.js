@@ -11,6 +11,9 @@ const ScrapeAPI = {
         });
 
         const response = await fetch(`/api/scrape?${params}`);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
         return await response.json();
     },
 
@@ -18,6 +21,9 @@ const ScrapeAPI = {
         const response = await fetch(`/api/scrape/${fileId}`, {
             method: 'POST'
         });
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
         return await response.json();
     }
 };
