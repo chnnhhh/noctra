@@ -2,6 +2,7 @@
     const MIN_VISIBLE = 800;
     const BATCH_PANEL_ANIMATION_MS = 280;
     const OPTIMISTIC_BATCH_PREFIX = 'optimistic-';
+    const SCRAPE_LIST_FETCH_SIZE = 200;
 
     function createFeatures() {
         return {
@@ -79,7 +80,11 @@
 
             setPageSize(size) {
                 this.pageSize = Number(size);
-                this.currentPage = 1;
+                if (this.view === 'scrape') {
+                    this.scrapePage = 1;
+                } else {
+                    this.currentPage = 1;
+                }
                 this.closeStatusMenu();
             },
 
@@ -326,6 +331,48 @@
                 }
             },
 
+            normalizeScrapeFile(item) {
+                return {
+                    id: item.file_id,
+                    identified_code: item.code,
+                    target_path: item.target_path || '',
+                    scrape_status: item.scrape_status || 'pending',
+                    last_scrape_at: item.last_scrape_at || null,
+                    original_path: item.original_path || '',
+                    status: item.status || 'processed',
+                    scrape_started_at: item.scrape_started_at || null,
+                    scrape_finished_at: item.scrape_finished_at || null,
+                    scrape_stage: item.scrape_stage || null,
+                    scrape_source: item.scrape_source || null,
+                    scrape_error: item.scrape_error || null,
+                    scrape_error_user_message: item.scrape_error_user_message || null,
+                    scrape_logs: item.scrape_logs || []
+                };
+            },
+
+            async fetchAllScrapeListData() {
+                const firstPage = await ScrapeAPI.getList({
+                    page: 1,
+                    perPage: SCRAPE_LIST_FETCH_SIZE
+                });
+                const items = [...(firstPage.items || [])];
+                const total = Number(firstPage.total || items.length);
+                const totalPages = Math.max(1, Math.ceil(total / SCRAPE_LIST_FETCH_SIZE));
+
+                for (let page = 2; page <= totalPages; page += 1) {
+                    const nextPage = await ScrapeAPI.getList({
+                        page,
+                        perPage: SCRAPE_LIST_FETCH_SIZE
+                    });
+                    items.push(...(nextPage.items || []));
+                }
+
+                return {
+                    ...firstPage,
+                    items
+                };
+            },
+
             async loadScrapeFiles() {
                 this.loading = true;
                 this.loadingText = '正在加载刮削列表...';
@@ -333,22 +380,21 @@
                 this.success = null;
 
                 try {
-                    const response = await fetch('/api/scrape');
-                    const data = await response.json();
+                    const data = await this.fetchAllScrapeListData();
 
-                    if (!response.ok) {
-                        throw new Error(data.detail || '加载刮削列表失败');
+                    this.scrapeFilesCache = (data.items || []).map(item => this.normalizeScrapeFile(item));
+
+                    const activeJob = data.active_job || null;
+                    if (activeJob) {
+                        this.setScrapeBatchJob(activeJob);
+                        this.scrapeBatchExpanded = true;
+                        if (['queued', 'running'].includes(activeJob.status)) {
+                            this.startScrapeBatchPolling(activeJob.id);
+                        }
+                    } else {
+                        this.stopScrapeBatchPolling();
                     }
 
-                    this.scrapeFilesCache = (data.items || []).map(item => ({
-                        id: item.file_id,
-                        identified_code: item.code,
-                        target_path: item.target_path || '',
-                        scrape_status: item.scrape_status || 'pending',
-                        last_scrape_at: item.last_scrape_at || null,
-                        original_path: item.original_path || '',
-                        status: item.status || 'processed'
-                    }));
                     this.scrapeLoaded = true;
                     this.scrapeSelectedFiles = {};
                     this.scrapePage = 1;
@@ -403,45 +449,12 @@
                 this.scrapeSelectedFiles = {};
             },
 
-            async handleScrapeAction(file) {
-                this.closeStatusMenu();
-                try {
-                    const response = await fetch(`/api/scrape/${file.id}`, { method: 'POST' });
-                    const result = await response.json();
-                    if (!response.ok) {
-                        throw new Error(result.detail || '刮削失败');
-                    }
-                    this.success = `${file.identified_code} 刮削成功`;
-                    await this.loadScrapeFiles();
-                } catch (e) {
-                    this.error = '刮削失败: ' + e.message;
-                }
-            },
-
             async confirmBatchScrape() {
                 const entries = this.scrapeSelectedEntries.filter(file => this.canSelectScrapeFile(file));
-                if (entries.length === 0) return;
-                this.scrapeSelectedFiles = {};
-                let succeeded = 0;
-                let failed = 0;
-
-                for (const file of entries) {
-                    try {
-                        const response = await fetch(`/api/scrape/${file.id}`, { method: 'POST' });
-                        const result = await response.json();
-                        if (!response.ok) throw new Error(result.detail || '刮削失败');
-                        succeeded++;
-                    } catch (e) {
-                        failed++;
-                    }
+                if (entries.length === 0) {
+                    return;
                 }
-
-                if (failed === 0) {
-                    this.success = `批量刮削完成：${succeeded} 项成功`;
-                } else {
-                    this.success = `批量刮削完成：${succeeded} 项成功，${failed} 项失败`;
-                }
-                await this.loadScrapeFiles();
+                await this.executeScrapeBatch(entries);
             },
 
             goToScrapePage(page) {
@@ -476,7 +489,14 @@
             },
 
             showScrapeErrorDetails(file) {
-                this.scrapeErrorFile = file;
+                const liveItem = this.scrapeBatchItemsIndex[file.id] || null;
+                this.scrapeErrorFile = liveItem ? {
+                    ...file,
+                    scrape_stage: liveItem.stage || file.scrape_stage || null,
+                    scrape_source: liveItem.source || file.scrape_source || null,
+                    scrape_error: liveItem.technical_error || file.scrape_error || null,
+                    scrape_error_user_message: liveItem.user_message || file.scrape_error_user_message || null
+                } : file;
                 this.showScrapeErrorModal = true;
             },
 
@@ -665,77 +685,175 @@
                 }, BATCH_PANEL_ANIMATION_MS);
             },
 
-            setScrapeBatchJob(job) {
-                this.scrapeBatchJob = job;
-                if (job) {
-                    this.scrapeBatchVisibleSince = Date.now();
+            async ensureScrapeBatchMinimumVisibility() {
+                if (!this.scrapeBatchVisibleSince) {
+                    return;
+                }
+
+                const elapsed = Date.now() - this.scrapeBatchVisibleSince;
+                if (elapsed < MIN_VISIBLE) {
+                    await new Promise(resolve => setTimeout(resolve, MIN_VISIBLE - elapsed));
                 }
             },
 
-            async executeScrapeBatch(fileIds) {
+            setScrapeBatchJob(job) {
+                this.scrapeBatchJob = job;
+                const index = {};
+                (job?.items || []).forEach(item => {
+                    index[item.id] = item;
+                });
+                this.scrapeBatchItemsIndex = index;
+                if (job) {
+                    this.scrapeBatchVisibleSince = Date.now();
+                } else {
+                    this.scrapeBatchItemsIndex = {};
+                    this.scrapeBatchPollingBusy = false;
+                }
+            },
+
+            stopScrapeBatchPolling() {
+                if (this.scrapeBatchPollTimer) {
+                    clearInterval(this.scrapeBatchPollTimer);
+                    this.scrapeBatchPollTimer = null;
+                }
+                this.scrapeBatchPollingBusy = false;
+            },
+
+            async fetchScrapeBatchJob(jobId, { syncAfterDone = false } = {}) {
+                const job = await ScrapeAPI.getJob(jobId);
+
+                if (['completed', 'failed', 'cancelled'].includes(job.status)) {
+                    await this.ensureScrapeBatchMinimumVisibility();
+                }
+
+                this.setScrapeBatchJob(job);
+
+                if (['completed', 'failed', 'cancelled'].includes(job.status)) {
+                    this.stopScrapeBatchPolling();
+                    this.scrapeBatchSubmitting = false;
+                    this.scrapeBatchCancelling = false;
+                    if (syncAfterDone) {
+                        await this.loadScrapeFiles();
+                    }
+                }
+            },
+
+            startScrapeBatchPolling(jobId) {
+                this.stopScrapeBatchPolling();
+                this.scrapeBatchPollTimer = setInterval(async () => {
+                    if (this.scrapeBatchPollingBusy) {
+                        return;
+                    }
+
+                    this.scrapeBatchPollingBusy = true;
+                    try {
+                        await this.fetchScrapeBatchJob(jobId, { syncAfterDone: true });
+                    } catch (error) {
+                        this.stopScrapeBatchPolling();
+                        this.scrapeBatchSubmitting = false;
+                        this.scrapeBatchCancelling = false;
+                        this.error = '刮削任务状态获取失败: ' + error.message;
+                    } finally {
+                        this.scrapeBatchPollingBusy = false;
+                    }
+                }, 400);
+            },
+
+            async executeScrapeBatch(files) {
+                const entries = (files || []).filter(Boolean);
+                if (entries.length === 0) {
+                    return;
+                }
+
+                const fileIds = entries.map(file => file.id);
                 this.scrapeBatchSubmitting = true;
                 this.error = null;
                 this.success = null;
-
                 this.scrapeBatchVisibleSince = Date.now();
                 this.scrapeBatchExpanded = true;
                 this.animateScrapeBatchPanelExpand();
-                this.setScrapeBatchJob(this.createOptimisticScrapeBatchJob(fileIds));
+                this.setScrapeBatchJob(this.createOptimisticScrapeBatchJob(entries));
 
                 try {
-                    const result = await ScrapeAPI.scrapeBatch(fileIds);
-
-                    this.setScrapeBatchJob({
-                        id: 'scrape-batch-' + Date.now(),
-                        status: 'completed',
-                        total: fileIds.length,
-                        processed: fileIds.length,
-                        succeeded: result.success_count,
-                        failed: result.failed_count
-                    });
-
-                    // Refresh scrape list to show updated status
-                    await this.loadScrapeFiles();
+                    const job = await ScrapeAPI.createJob(fileIds);
+                    this.setScrapeBatchJob(job);
+                    this.startScrapeBatchPolling(job.id);
                 } catch (e) {
-                    this.error = '批量刮削失败: ' + e.message;
-                    if (this.scrapeBatchJob && String(this.scrapeBatchJob.id || '').startsWith('optimistic-')) {
+                    if (this.scrapeBatchJob && String(this.scrapeBatchJob.id || '').startsWith(OPTIMISTIC_BATCH_PREFIX)) {
                         this.setScrapeBatchJob(null);
                     }
-                } finally {
+                    if (e.message === '已有刮削任务正在运行，请等待当前任务完成') {
+                        await this.loadScrapeFiles();
+                    }
+                    this.error = '创建刮削任务失败: ' + e.message;
                     this.scrapeBatchSubmitting = false;
+                    this.scrapeBatchCancelling = false;
+                } finally {
                     this.scrapeSelectedFiles = {};
                 }
             },
 
-            createOptimisticScrapeBatchJob(fileIds) {
+            createOptimisticScrapeBatchJob(files) {
+                const now = new Date().toISOString();
                 return {
-                    id: 'optimistic-scrape-' + Date.now(),
-                    status: 'running',
-                    total: fileIds.length,
+                    id: `${OPTIMISTIC_BATCH_PREFIX}scrape-${Date.now()}`,
+                    status: 'queued',
+                    total: files.length,
                     processed: 0,
                     succeeded: 0,
                     failed: 0,
-                    created_at: new Date().toISOString()
+                    created_at: now,
+                    started_at: null,
+                    finished_at: null,
+                    current_file_id: null,
+                    current_file_code: null,
+                    current_stage: null,
+                    current_source: null,
+                    recent_logs: [],
+                    items: files.map(file => ({
+                        id: file.id,
+                        code: file.identified_code,
+                        target_path: file.target_path,
+                        status: 'pending',
+                        stage: null,
+                        source: null,
+                        user_message: null,
+                        technical_error: null,
+                        started_at: null,
+                        finished_at: null
+                    }))
                 };
             },
 
             async handleScrapeAction(file) {
-                const fileIds = [file.id];
-                await this.executeScrapeBatch(fileIds);
+                this.closeStatusMenu();
+                await this.executeScrapeBatch([file]);
             },
 
             async confirmScrapeSelected() {
-                const selectedFiles = [...this.scrapeSelectedEntries];
+                const selectedFiles = this.scrapeSelectedEntries.filter(file => this.canSelectScrapeFile(file));
                 if (selectedFiles.length === 0) {
                     return;
                 }
 
-                const fileIds = selectedFiles.map(f => f.id);
-                await this.executeScrapeBatch(fileIds);
+                await this.executeScrapeBatch(selectedFiles);
             },
 
-            clearScrapeSelection() {
-                this.scrapeSelectedFiles = {};
+            async cancelScrapeBatch() {
+                if (!this.scrapeBatchCancelable) {
+                    return;
+                }
+
+                this.scrapeBatchCancelling = true;
+                this.error = null;
+
+                try {
+                    const result = await ScrapeAPI.cancelJob(this.scrapeBatchJob.id);
+                    this.success = result.message;
+                } catch (e) {
+                    this.error = '取消刮削任务失败: ' + e.message;
+                    this.scrapeBatchCancelling = false;
+                }
             },
 
             init() {
@@ -744,9 +862,14 @@
 
             destroy() {
                 this.stopBatchPolling();
+                this.stopScrapeBatchPolling();
                 if (this.batchExpandTimer) {
                     clearTimeout(this.batchExpandTimer);
                     this.batchExpandTimer = null;
+                }
+                if (this.scrapeBatchExpandTimer) {
+                    clearTimeout(this.scrapeBatchExpandTimer);
+                    this.scrapeBatchExpandTimer = null;
                 }
             }
         };

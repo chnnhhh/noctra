@@ -299,7 +299,8 @@
                     return `批处理已创建，共 ${this.scrapeBatchJob.total} 项，即将开始刮削`;
                 }
                 if (this.scrapeBatchJob.status === 'running') {
-                    return `正在处理第 ${this.scrapeBatchJob.processed} / ${this.scrapeBatchJob.total} 项`;
+                    const currentIndex = Math.min(this.scrapeBatchJob.processed + 1, this.scrapeBatchJob.total);
+                    return `正在处理第 ${currentIndex} / ${this.scrapeBatchJob.total} 项`;
                 }
                 if (this.scrapeBatchJob.status === 'completed') {
                     return `刮削完成，共 ${this.scrapeBatchJob.total} 项`;
@@ -318,6 +319,9 @@
                     return '批处理已加入队列，面板会持续显示当前任务状态，开始执行后会实时同步进度。';
                 }
                 if (this.scrapeBatchRunning) {
+                    if (this.scrapeBatchJob.current_file_code) {
+                        return `当前正在处理 ${this.scrapeBatchJob.current_file_code}，阶段、数据源和最近日志会在下方实时刷新。`;
+                    }
                     return '系统正在按顺序处理选中的文件，表格中的对应行会实时同步到当前进度。';
                 }
                 if (this.scrapeBatchJob.status === 'cancelled') {

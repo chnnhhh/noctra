@@ -48,6 +48,26 @@
                 return map[status] || status || 'PENDING';
             },
 
+            getScrapeBatchItemStatusText(status) {
+                const map = {
+                    pending: '待刮削',
+                    processing: '刮削中',
+                    success: '已刮削',
+                    failed: '刮削失败'
+                };
+                return map[status] || status || '-';
+            },
+
+            getScrapeBatchBadgeClass(status) {
+                const map = {
+                    processing: 'processing',
+                    success: 'processed',
+                    failed: 'failed',
+                    pending: 'pending'
+                };
+                return map[status] || 'pending';
+            },
+
             getBatchItemStatusText(status) {
                 const map = {
                     pending: '待整理',
@@ -79,6 +99,11 @@
             },
 
             getScrapeStatusText(file) {
+                const batchItem = this.getScrapeBatchItem(file);
+                if (batchItem) {
+                    return this.getScrapeBatchItemStatusText(batchItem.status);
+                }
+
                 const map = {
                     'pending': '待刮削',
                     'success': '已刮削',
@@ -88,6 +113,11 @@
             },
 
             getScrapeBadgeClass(file) {
+                const batchItem = this.getScrapeBatchItem(file);
+                if (batchItem) {
+                    return this.getScrapeBatchBadgeClass(batchItem.status);
+                }
+
                 const map = {
                     'pending': 'pending',
                     'success': 'processed',
@@ -98,19 +128,33 @@
 
             canSelectScrapeFile(file) {
                 return this.view === 'scrape' &&
-                    file.scrape_status === 'pending';
+                    file.scrape_status === 'pending' &&
+                    !this.isScrapeBatchItemBlocking(file);
             },
 
             getScrapeStatusActions(file) {
+                const batchItem = this.getScrapeBatchItem(file);
+                if (batchItem) {
+                    if (batchItem.status === 'failed') {
+                        return [
+                            { key: 'scrape', label: '刮削', icon: 'sparkles' }
+                        ];
+                    }
+                    return [];
+                }
+
                 if (file.scrape_status === 'pending' || file.scrape_status === 'failed') {
                     return [
-                        { key: 'scrape', label: '刮削', icon: 'file_search' }
+                        { key: 'scrape', label: '刮削', icon: 'sparkles' }
                     ];
                 }
                 return [];
             },
 
             hasScrapeStatusAction(file) {
+                if (this.isScrapeBatchItemBlocking(file)) {
+                    return false;
+                }
                 return this.view === 'scrape' && this.getScrapeStatusActions(file).length > 0;
             },
 
@@ -124,35 +168,39 @@
                 return map[filter] || filter;
             },
 
+            getScrapeSourceLabel(source) {
+                const map = {
+                    javdb: 'JavDB',
+                    javtrailers: 'JavTrailers'
+                };
+                return map[source] || source || '-';
+            },
+
+            getScrapeStageLabel(stage, source) {
+                const sourceLabel = this.getScrapeSourceLabel(source);
+
+                if (stage === 'querying_source') {
+                    return `正在查询 ${sourceLabel}`;
+                }
+                if (stage === 'fetching_detail') {
+                    return `${sourceLabel} 已返回结果，正在读取详情页`;
+                }
+
+                const map = {
+                    queued: '已加入刮削队列',
+                    validating: '正在检查文件信息',
+                    parsing_metadata: '详情页读取成功，正在解析元数据',
+                    writing_nfo: '元数据解析成功，正在生成 NFO 文件',
+                    downloading_poster: 'NFO 已生成，正在下载封面图片',
+                    finalizing: '正在保存刮削结果',
+                    success: '刮削完成',
+                    failed: '刮削失败'
+                };
+                return map[stage] || stage || '-';
+            },
+
             getScrapeErrorUserMessage(file) {
-                if (!file || !file.scrape_error) {
-                    return '未知错误';
-                }
-
-                const error = file.scrape_error.toLowerCase();
-
-                // Error type mapping
-                if (error.includes('not found') || error.includes('未找到') || error.includes('no metadata')) {
-                    return '未找到对应元数据';
-                }
-                if (error.includes('timeout') || error.includes('连接失败') || error.includes('connection') || error.includes('network')) {
-                    return '远程站点请求失败';
-                }
-                if (error.includes('parse') || error.includes('解析') || error.includes('parsing')) {
-                    return '元数据解析失败';
-                }
-                if (error.includes('nfo') || error.includes('xml')) {
-                    return 'NFO 生成失败';
-                }
-                if (error.includes('image') || error.includes('poster') || error.includes('thumb') || error.includes('picture') || error.includes('图片')) {
-                    return '图片下载失败';
-                }
-                if (error.includes('write') || error.includes('file') || error.includes('写入') || error.includes('文件')) {
-                    return '本地文件写入失败';
-                }
-
-                // Default fallback
-                return '未知错误';
+                return file?.scrape_error_user_message || '刮削过程中发生未知错误';
             },
 
             isBatchItemBlocking(file) {
@@ -161,6 +209,14 @@
                     return false;
                 }
                 return this.batchRunning || batchItem.status === 'processing';
+            },
+
+            isScrapeBatchItemBlocking(file) {
+                const batchItem = this.getScrapeBatchItem(file);
+                if (!batchItem) {
+                    return false;
+                }
+                return this.scrapeBatchRunning || batchItem.status === 'processing';
             },
 
             hasStatusAction(file) {
@@ -364,6 +420,10 @@
 
             getBatchItem(file) {
                 return this.batchItemsIndex[file.id] || null;
+            },
+
+            getScrapeBatchItem(file) {
+                return this.scrapeBatchItemsIndex[file.id] || null;
             },
 
             getUiIcon(name) {
