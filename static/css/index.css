@@ -1169,7 +1169,7 @@
         }
 
         .batch-panel-body.expanded {
-            max-height: 320px;
+            max-height: 520px;
             opacity: 1;
             margin-top: 12px;
             transform: translateY(0);
@@ -1314,6 +1314,55 @@
 
         .batch-note strong {
             color: #dbe5ef;
+        }
+
+        .batch-highlight {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding: 14px 16px;
+            border-radius: 14px;
+            border: 1px solid rgba(88, 166, 255, 0.18);
+            background: linear-gradient(180deg, rgba(13, 23, 39, 0.92) 0%, rgba(10, 20, 34, 0.82) 100%);
+            box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.04);
+        }
+
+        .batch-kicker {
+            color: #7d8590;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .batch-highlight-text {
+            color: #e6edf7;
+            font-size: 15px;
+            line-height: 1.5;
+        }
+
+        .batch-focus-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .batch-focus-card {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-width: 0;
+            padding: 12px 14px;
+            border-radius: 14px;
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            background: rgba(15, 23, 42, 0.48);
+        }
+
+        .batch-focus-value {
+            color: #dbe5ef;
+            font-size: 14px;
+            line-height: 1.5;
+            word-break: break-word;
         }
 
         .batch-log-list,
@@ -2594,7 +2643,11 @@
             }
 
             .batch-panel-body.expanded {
-                max-height: 420px;
+                max-height: 620px;
+            }
+
+            .batch-focus-grid {
+                grid-template-columns: 1fr;
             }
 
             .header {

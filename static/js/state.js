@@ -284,6 +284,10 @@
                        !String(this.scrapeBatchJob.id || '').startsWith('optimistic-');
             },
 
+            get scrapeBatchTaskLabel() {
+                return '刮削任务';
+            },
+
             get scrapeBatchProgressPercent() {
                 if (!this.scrapeBatchJob || this.scrapeBatchJob.total === 0) {
                     return 0;
@@ -296,19 +300,82 @@
                     return '';
                 }
                 if (this.scrapeBatchJob.status === 'queued') {
-                    return `批处理已创建，共 ${this.scrapeBatchJob.total} 项，即将开始刮削`;
+                    return `任务已创建，共 ${this.scrapeBatchJob.total} 项，即将开始刮削`;
                 }
                 if (this.scrapeBatchJob.status === 'running') {
                     const currentIndex = Math.min(this.scrapeBatchJob.processed + 1, this.scrapeBatchJob.total);
-                    return `正在处理第 ${currentIndex} / ${this.scrapeBatchJob.total} 项`;
+                    return `正在刮削第 ${currentIndex} / ${this.scrapeBatchJob.total} 项`;
                 }
                 if (this.scrapeBatchJob.status === 'completed') {
                     return `刮削完成，共 ${this.scrapeBatchJob.total} 项`;
                 }
                 if (this.scrapeBatchJob.status === 'cancelled') {
-                    return `批处理已取消，已完成 ${this.scrapeBatchJob.processed} / ${this.scrapeBatchJob.total} 项`;
+                    return `任务已取消，已完成 ${this.scrapeBatchJob.processed} / ${this.scrapeBatchJob.total} 项`;
                 }
                 return '';
+            },
+
+            get scrapeBatchCurrentFileText() {
+                if (!this.scrapeBatchJob) {
+                    return '-';
+                }
+                if (this.scrapeBatchJob.current_file_code) {
+                    return this.scrapeBatchJob.current_file_code;
+                }
+                if (this.scrapeBatchJob.status === 'queued') {
+                    return '等待开始';
+                }
+                if (this.scrapeBatchJob.status === 'completed') {
+                    return '已全部完成';
+                }
+                if (this.scrapeBatchJob.status === 'cancelled') {
+                    return '任务已取消';
+                }
+                return '-';
+            },
+
+            get scrapeBatchCurrentStageText() {
+                if (!this.scrapeBatchJob) {
+                    return '-';
+                }
+                if (this.scrapeBatchJob.current_stage) {
+                    return this.getScrapeStageLabel(this.scrapeBatchJob.current_stage, this.scrapeBatchJob.current_source);
+                }
+                if (this.scrapeBatchJob.status === 'queued') {
+                    return '等待开始';
+                }
+                if (this.scrapeBatchJob.status === 'completed') {
+                    return '刮削完成';
+                }
+                if (this.scrapeBatchJob.status === 'cancelled') {
+                    return '任务已取消';
+                }
+                return '-';
+            },
+
+            get scrapeBatchCurrentSourceText() {
+                if (!this.scrapeBatchJob) {
+                    return '-';
+                }
+                if (this.scrapeBatchJob.current_source) {
+                    return this.getScrapeSourceLabel(this.scrapeBatchJob.current_source);
+                }
+                if (this.scrapeBatchJob.status === 'queued') {
+                    return '待分配';
+                }
+                return '-';
+            },
+
+            get scrapeBatchLatestProgressText() {
+                if (!this.scrapeBatchJob) {
+                    return '';
+                }
+                const recentLogs = this.scrapeBatchJob.recent_logs || [];
+                const latestLog = recentLogs.length > 0 ? recentLogs[recentLogs.length - 1] : null;
+                if (latestLog?.message) {
+                    return latestLog.message;
+                }
+                return this.scrapeBatchCurrentStageText;
             },
 
             get scrapeBatchInfoLine() {
@@ -316,19 +383,19 @@
                     return '';
                 }
                 if (this.scrapeBatchJob.status === 'queued') {
-                    return '批处理已加入队列，面板会持续显示当前任务状态，开始执行后会实时同步进度。';
+                    return '任务已经加入队列，开始执行后会在这里持续刷新进度。';
                 }
                 if (this.scrapeBatchRunning) {
                     if (this.scrapeBatchJob.current_file_code) {
-                        return `当前正在处理 ${this.scrapeBatchJob.current_file_code}，阶段、数据源和最近日志会在下方实时刷新。`;
+                        return `当前正在处理 ${this.scrapeBatchJob.current_file_code}，进度、阶段和结果会实时同步到列表。`;
                     }
-                    return '系统正在按顺序处理选中的文件，表格中的对应行会实时同步到当前进度。';
+                    return '系统正在按顺序处理选中的文件，表格中的对应行会实时同步。';
                 }
                 if (this.scrapeBatchJob.status === 'cancelled') {
-                    return '批处理已取消，已完成的项目会保留结果，未完成的项目保持原有状态。';
+                    return '任务已取消，已完成的项目会保留结果，未完成的项目保持原有状态。';
                 }
                 if (this.scrapeBatchJob.failed > 0) {
-                    return '批量刮削已结束，失败项仍保留在列表中，点击失败状态可查看详细错误信息。';
+                    return '本批次已结束，失败项仍保留在列表中，点击失败状态可查看详细错误信息。';
                 }
                 return '本批次已结束，刮削结果已同步到列表中。';
             },

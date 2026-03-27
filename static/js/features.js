@@ -205,6 +205,9 @@
                     this.closeStatusMenu();
                     this.view = 'scan';
                     this.distDir = '/dist';
+                    this.scrapeLoaded = false;
+                    this.scrapeSelectedFiles = {};
+                    this.scrapePage = 1;
                     this.currentFilter = hiddenAfterProcessed.includes(preservedFilter) ? 'all' : preservedFilter;
                     this.currentPage = this.currentFilter === preservedFilter ? preservedPage : 1;
                 } catch (error) {

@@ -177,72 +177,6 @@
                 </div>
             </div>
 
-            <div class="batch-panel"
-                 x-show="view === 'scrape' && scrapeBatchPanelVisible"
-                 :data-state="scrapeBatchPanelState"
-                 :class="[scrapeBatchJob ? scrapeBatchJob.status : '', scrapeBatchExpanded ? 'expanded' : 'collapsed', scrapeBatchExpanding ? 'expanding' : '']">
-                <div class="batch-rail-header">
-                    <button class="batch-rail-toggle" @click="toggleScrapeBatchExpanded()" :aria-expanded="scrapeBatchExpanded">
-                        <span class="batch-summary-line">
-                            <span class="batch-status-chip"
-                                  :class="`status-${scrapeBatchJob?.status || 'pending'}`"
-                                  x-text="getScrapeBatchJobStatusLabel(scrapeBatchJob?.status)"></span>
-                            <span>批量刮削 <span x-text="scrapeBatchJob?.processed || 0">0</span> / <span x-text="scrapeBatchJob?.total || 0">0</span></span>
-                        </span>
-                        <span class="batch-rail-caret" x-html="getUiIcon('chevron_down')"></span>
-                    </button>
-                    <div class="batch-rail-actions">
-                        <button class="rail-button"
-                                x-show="scrapeBatchCancelable"
-                                @click="cancelScrapeBatch"
-                                :disabled="scrapeBatchCancelling">
-                            <span x-text="scrapeBatchCancelling ? '取消中...' : '取消'"></span>
-                        </button>
-                    </div>
-                </div>
-
-                <div class="batch-panel-body" :class="scrapeBatchExpanded ? 'expanded' : 'collapsed'">
-                    <div class="batch-rail-summary">
-                        <span class="batch-subline">总数 <strong x-text="scrapeBatchJob?.total || 0">0</strong></span>
-                        <span class="batch-metrics">
-                            <span class="batch-metric success">成功 <strong x-text="scrapeBatchJob?.succeeded || 0">0</strong></span>
-                            <span class="batch-metric failed">失败 <strong x-text="scrapeBatchJob?.failed || 0">0</strong></span>
-                        </span>
-                    </div>
-
-                    <div class="batch-progress">
-                        <div class="batch-progress-track">
-                            <div class="batch-progress-fill" :style="`width: ${scrapeBatchProgressPercent}%`"></div>
-                        </div>
-                        <div class="batch-subline" x-text="scrapeBatchProgressText"></div>
-                    </div>
-
-                    <div class="batch-detail-panel">
-                        <div class="batch-note" x-text="scrapeBatchInfoLine"></div>
-                        <div class="batch-note">
-                            当前文件：<strong x-text="scrapeBatchJob?.current_file_code || '-'"></strong>
-                        </div>
-                        <div class="batch-note">
-                            当前阶段：<strong x-text="getScrapeStageLabel(scrapeBatchJob?.current_stage, scrapeBatchJob?.current_source)"></strong>
-                        </div>
-                        <div class="batch-note">
-                            当前数据源：<strong x-text="getScrapeSourceLabel(scrapeBatchJob?.current_source)"></strong>
-                        </div>
-                        <div class="batch-log-list" x-show="(scrapeBatchJob?.recent_logs || []).length > 0">
-                            <template x-for="entry in scrapeBatchJob?.recent_logs || []" :key="`${entry.at}-${entry.message}`">
-                                <div class="batch-log-line">
-                                    <span class="batch-log-time" x-text="formatProcessedTime(entry.at)"></span>
-                                    <span class="batch-log-message" x-text="entry.message"></span>
-                                </div>
-                            </template>
-                        </div>
-                        <div class="batch-note" x-show="scrapeBatchJob?.failed > 0">
-                            当前批次包含 <strong x-text="scrapeBatchJob?.failed"></strong> 个失败项，表格中的对应行会保留失败状态，点击失败状态可查看详细错误信息。
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             <div class="table-meta toolbar" x-show="!loading && files.length > 0">
                 <div class="toolbar-left">
                     <div class="filter filter-subtle toolbar-filter">
@@ -454,6 +388,73 @@
                     <div class="toolbar-pill" x-show="!loading && scrapeFilesCache.length > 0">
                         当前筛选
                         <span x-text="getScrapeFilterLabel(scrapeFilter)"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="batch-panel"
+                 x-show="view === 'scrape' && scrapeBatchPanelVisible"
+                 :data-state="scrapeBatchPanelState"
+                 :class="[scrapeBatchJob ? scrapeBatchJob.status : '', scrapeBatchExpanded ? 'expanded' : 'collapsed', scrapeBatchExpanding ? 'expanding' : '']">
+                <div class="batch-rail-header">
+                    <button class="batch-rail-toggle" @click="toggleScrapeBatchExpanded()" :aria-expanded="scrapeBatchExpanded">
+                        <span class="batch-summary-line">
+                            <span class="batch-status-chip"
+                                  :class="`status-${scrapeBatchJob?.status || 'pending'}`"
+                                  x-text="getScrapeBatchJobStatusLabel(scrapeBatchJob?.status)"></span>
+                            <span><span x-text="scrapeBatchTaskLabel"></span> <span x-text="scrapeBatchJob?.processed || 0">0</span> / <span x-text="scrapeBatchJob?.total || 0">0</span></span>
+                        </span>
+                        <span class="batch-rail-caret" x-html="getUiIcon('chevron_down')"></span>
+                    </button>
+                    <div class="batch-rail-actions">
+                        <button class="rail-button"
+                                x-show="scrapeBatchCancelable"
+                                @click="cancelScrapeBatch"
+                                :disabled="scrapeBatchCancelling">
+                            <span x-text="scrapeBatchCancelling ? '取消中...' : '取消'"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="batch-panel-body" :class="scrapeBatchExpanded ? 'expanded' : 'collapsed'">
+                    <div class="batch-rail-summary">
+                        <span class="batch-subline">总数 <strong x-text="scrapeBatchJob?.total || 0">0</strong></span>
+                        <span class="batch-metrics">
+                            <span class="batch-metric success">成功 <strong x-text="scrapeBatchJob?.succeeded || 0">0</strong></span>
+                            <span class="batch-metric failed">失败 <strong x-text="scrapeBatchJob?.failed || 0">0</strong></span>
+                        </span>
+                    </div>
+
+                    <div class="batch-progress">
+                        <div class="batch-progress-track">
+                            <div class="batch-progress-fill" :style="`width: ${scrapeBatchProgressPercent}%`"></div>
+                        </div>
+                        <div class="batch-subline" x-text="scrapeBatchProgressText"></div>
+                    </div>
+
+                    <div class="batch-detail-panel">
+                        <div class="batch-note" x-text="scrapeBatchInfoLine"></div>
+                        <div class="batch-highlight" x-show="scrapeBatchLatestProgressText">
+                            <span class="batch-kicker">最新进度</span>
+                            <strong class="batch-highlight-text" x-text="scrapeBatchLatestProgressText"></strong>
+                        </div>
+                        <div class="batch-focus-grid">
+                            <div class="batch-focus-card">
+                                <span class="batch-kicker">当前文件</span>
+                                <strong class="batch-focus-value" x-text="scrapeBatchCurrentFileText"></strong>
+                            </div>
+                            <div class="batch-focus-card">
+                                <span class="batch-kicker">当前阶段</span>
+                                <strong class="batch-focus-value" x-text="scrapeBatchCurrentStageText"></strong>
+                            </div>
+                            <div class="batch-focus-card">
+                                <span class="batch-kicker">当前数据源</span>
+                                <strong class="batch-focus-value" x-text="scrapeBatchCurrentSourceText"></strong>
+                            </div>
+                        </div>
+                        <div class="batch-note" x-show="scrapeBatchJob?.failed > 0">
+                            当前批次包含 <strong x-text="scrapeBatchJob?.failed"></strong> 个失败项，表格中的对应行会保留失败状态，点击失败状态可查看详细错误信息。
+                        </div>
                     </div>
                 </div>
             </div>
