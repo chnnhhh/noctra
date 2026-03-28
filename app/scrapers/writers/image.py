@@ -1,5 +1,6 @@
 """Async image download helpers for scraper artwork."""
 
+import inspect
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -69,6 +70,7 @@ async def download_additional_artwork(
     output_dir: Path,
     *,
     poster_output_path: Path | None = None,
+    progress_callback=None,
 ) -> dict[str, Path | list[Path] | None]:
     """Download fanart and preview images on a best-effort basis."""
     output_dir = Path(output_dir)
@@ -88,12 +90,31 @@ async def download_additional_artwork(
         if metadata.fanart_url:
             fanart_path = output_dir / f"{metadata.code}-fanart{_guess_image_extension(metadata.fanart_url)}"
             try:
+                if progress_callback:
+                    callback_result = progress_callback({
+                        "kind": "fanart_started",
+                    })
+                    if inspect.isawaitable(callback_result):
+                        await callback_result
                 await _download_with_session(session, metadata.fanart_url, fanart_path)
+                if progress_callback:
+                    callback_result = progress_callback({
+                        "kind": "fanart_downloaded",
+                    })
+                    if inspect.isawaitable(callback_result):
+                        await callback_result
                 if poster_output_path:
                     poster_path = crop_poster_from_fanart(fanart_path, poster_output_path)
+                    if progress_callback and poster_path:
+                        callback_result = progress_callback({
+                            "kind": "poster_cropped",
+                        })
+                        if inspect.isawaitable(callback_result):
+                            await callback_result
             except aiohttp.ClientError:
                 fanart_path = None
 
+        total_previews = len(metadata.preview_urls)
         for index, preview_url in enumerate(metadata.preview_urls, start=1):
             preview_path = output_dir / (
                 f"{metadata.code}-preview-{index:02d}{_guess_image_extension(preview_url)}"
@@ -103,6 +124,14 @@ async def download_additional_artwork(
             except aiohttp.ClientError:
                 continue
             downloaded_previews.append(preview_path)
+            if progress_callback:
+                callback_result = progress_callback({
+                    "kind": "preview_downloaded",
+                    "index": index,
+                    "total": total_previews,
+                })
+                if inspect.isawaitable(callback_result):
+                    await callback_result
 
     return {
         "fanart": fanart_path,

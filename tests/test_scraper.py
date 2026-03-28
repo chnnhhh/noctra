@@ -111,11 +111,11 @@ class TestScrapeSingle:
         mock_crawler.crawl.assert_called_once_with(code)
         mock_write_nfo.assert_called_once()
         mock_download.assert_not_called()
-        mock_download_additional.assert_called_once_with(
-            metadata,
-            Path(record["target_path"]).parent,
-            poster_output_path=Path(record["target_path"]).parent / f"{code}-poster.jpg",
-        )
+        assert mock_download_additional.await_count == 1
+        args = mock_download_additional.await_args
+        assert args.args == (metadata, Path(record["target_path"]).parent)
+        assert args.kwargs["poster_output_path"] == Path(record["target_path"]).parent / f"{code}-poster.jpg"
+        assert callable(args.kwargs["progress_callback"])
 
     @pytest.mark.asyncio
     async def test_scrape_single_records_stage_source_and_logs_on_success(self):
@@ -169,11 +169,15 @@ class TestScrapeSingle:
         assert observed_stages == [
             "validating",
             "querying_source",
+            "fetching_detail",
+            "parsing_metadata",
             "parsing_metadata",
             "writing_nfo",
             "downloading_poster",
             "finalizing",
         ]
+        observed_progress = [event.get("progress_percent") for event in observed]
+        assert observed_progress == [10, 22, 46, 58, 65, 82, 88, 99]
         assert any(event["source"] == "javdb" for event in observed)
         assert result.logs[-1].stage == "finalizing"
 

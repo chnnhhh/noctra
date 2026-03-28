@@ -661,6 +661,12 @@
             stroke-width: 1.85;
         }
 
+        .button-icon svg.scrape-icon *,
+        .icon-glyph svg.scrape-icon *,
+        .header-nav .nav-icon svg.scrape-icon * {
+            stroke-width: 2.25;
+        }
+
         button:focus-visible,
         .header-nav a:focus-visible,
         .filter-button:focus-visible {
@@ -1929,6 +1935,103 @@
             min-width: 100px;
         }
 
+        .scrape-status-progress {
+            width: 236px;
+            max-width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .scrape-progress-track {
+            position: relative;
+            height: 42px;
+            overflow: hidden;
+            border-radius: 999px;
+            border: 1px solid rgba(56, 189, 248, 0.32);
+            background: linear-gradient(135deg, rgba(10, 18, 34, 0.92) 0%, rgba(11, 22, 38, 0.94) 100%);
+            box-shadow:
+                inset 0 0 0 1px rgba(255, 255, 255, 0.03),
+                0 0 0 1px rgba(56, 189, 248, 0.06);
+        }
+
+        .scrape-progress-track::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(115deg, rgba(255, 255, 255, 0.06) 0%, transparent 34%, transparent 100%);
+            pointer-events: none;
+            opacity: 0.8;
+        }
+
+        .scrape-progress-fill {
+            position: absolute;
+            inset: 0 auto 0 0;
+            border-radius: inherit;
+            background: linear-gradient(90deg, rgba(29, 78, 216, 0.84) 0%, rgba(14, 165, 233, 0.96) 58%, rgba(34, 211, 238, 0.92) 100%);
+            box-shadow:
+                0 0 18px rgba(14, 165, 233, 0.18),
+                inset -1px 0 0 rgba(255, 255, 255, 0.22);
+            transition: width 0.24s ease;
+        }
+
+        .scrape-progress-content {
+            position: relative;
+            z-index: 1;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 0 14px;
+        }
+
+        .scrape-progress-label,
+        .scrape-progress-percent {
+            display: inline-flex;
+            align-items: center;
+            min-height: 100%;
+            color: #eefcff;
+            font-size: 12px;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+            text-shadow: 0 0 8px rgba(56, 189, 248, 0.18);
+        }
+
+        .scrape-progress-percent {
+            justify-content: flex-end;
+            min-width: 40px;
+            color: #d8fbff;
+        }
+
+        .scrape-progress-meta {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            padding: 0 4px;
+            text-align: center;
+        }
+
+        .scrape-progress-stage {
+            color: rgba(201, 241, 255, 0.88);
+            font-size: 11px;
+            font-weight: 600;
+            line-height: 1.3;
+            text-align: center;
+        }
+
+        .scrape-progress-sequence {
+            color: rgba(125, 211, 252, 0.76);
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
         .status-action {
             --status-width-collapsed: 100px;
             --status-width-expanded: 176px;
@@ -2053,13 +2156,28 @@
             align-items: center;
             gap: 6px;
             height: 100%;
-            padding: 0 8px 0 4px;
+            padding: 3px 2px 3px 0;
+            margin-right: 2px;
+            isolation: isolate;
             overflow: visible;
             opacity: 0;
             visibility: hidden;
             transform: translateX(6px) scale(0.92);
             pointer-events: none;
             transition: opacity 0.18s ease, transform 0.2s ease, visibility 0.18s ease;
+        }
+
+        .status-actions::before {
+            content: '';
+            position: absolute;
+            inset: 2px 2px 2px 0;
+            border-radius: 999px;
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.04) 0%, rgba(13, 20, 34, 0.68) 28%, rgba(8, 17, 31, 0.9) 100%);
+            box-shadow:
+                inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+                0 0 10px rgba(15, 23, 42, 0.16);
+            pointer-events: none;
+            z-index: -1;
         }
 
         .icon-action {
@@ -2071,7 +2189,7 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            border-radius: 7px;
+            border-radius: 999px;
             border: 1px solid transparent;
             background: transparent;
             color: #8b949e;
@@ -2085,7 +2203,8 @@
 
         .icon-action:hover,
         .icon-action:focus-visible {
-            background: rgba(88, 166, 255, 0.1);
+            background: rgba(148, 163, 184, 0.08);
+            box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.12);
         }
 
         .icon-action:active {
@@ -2099,7 +2218,8 @@
         .icon-action.action-organize:hover,
         .icon-action.action-organize:focus-visible {
             color: #a5f3fc;
-            box-shadow: 0 0 8px rgba(125, 211, 252, 0.35);
+            background: rgba(125, 211, 252, 0.12);
+            box-shadow: inset 0 0 0 1px rgba(125, 211, 252, 0.2);
         }
 
         .icon-action.action-scrape {
@@ -2111,7 +2231,7 @@
         .icon-action.action-scrape:focus-visible {
             color: #f0fdff;
             background: rgba(34, 211, 238, 0.18);
-            box-shadow: 0 0 12px rgba(34, 211, 238, 0.34);
+            box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.22);
         }
 
         .icon-action.action-delete {
@@ -2121,8 +2241,8 @@
         .icon-action.action-delete:hover,
         .icon-action.action-delete:focus-visible {
             color: #ffb4ae;
-            background: rgba(255, 123, 114, 0.1);
-            box-shadow: 0 0 8px rgba(255, 123, 114, 0.28);
+            background: rgba(255, 123, 114, 0.12);
+            box-shadow: inset 0 0 0 1px rgba(255, 123, 114, 0.18);
         }
 
         .icon-glyph {

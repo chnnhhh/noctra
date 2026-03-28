@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 import pytest
 
+from app.models import ScrapeResponse
 from app.scrape_jobs import cancel_scrape_job, create_scrape_job, scrape_jobs
 
 
@@ -30,6 +31,7 @@ def _scrape_job_snapshot(**overrides):
         "current_file_code": None,
         "current_stage": None,
         "current_source": None,
+        "current_progress_percent": 0,
         "recent_logs": [],
         "items": [
             {
@@ -39,6 +41,7 @@ def _scrape_job_snapshot(**overrides):
                 "status": "pending",
                 "stage": None,
                 "source": None,
+                "progress_percent": 0,
                 "user_message": None,
                 "technical_error": None,
                 "started_at": None,
@@ -131,6 +134,7 @@ def test_get_scrape_job_returns_snapshot(mock_get_scrape_job):
         current_file_code="ALDN-480",
         current_stage="querying_source",
         current_source="javdb",
+        current_progress_percent=35,
         recent_logs=[
             {
                 "at": "2026-03-27T10:00:02",
@@ -150,6 +154,7 @@ def test_get_scrape_job_returns_snapshot(mock_get_scrape_job):
     assert payload["id"] == "job123"
     assert payload["status"] == "running"
     assert payload["current_stage"] == "querying_source"
+    assert payload["current_progress_percent"] == 35
     assert payload["recent_logs"][0]["message"] == "正在查询 JavDB"
     mock_get_scrape_job.assert_awaited_once_with("job123")
 
@@ -238,3 +243,69 @@ async def test_cancel_scrape_job_keeps_terminal_job_unchanged():
     assert cancelled is not None
     assert cancelled["status"] == "completed"
     assert cancelled["cancel_requested"] is False
+
+
+@pytest.mark.asyncio
+async def test_run_scrape_job_progress_percent_never_regresses_when_source_retries():
+    job = await create_scrape_job([_scrape_row()])
+    assert job is not None
+
+    class FakeScheduler:
+        async def scrape_single(self, file_id, progress_callback=None):
+            assert file_id == 1
+            if progress_callback:
+                await progress_callback({
+                    "at": "2026-03-29T10:00:00",
+                    "level": "info",
+                    "stage": "validating",
+                    "source": None,
+                    "message": "正在检查文件信息",
+                })
+                await progress_callback({
+                    "at": "2026-03-29T10:00:01",
+                    "level": "info",
+                    "stage": "querying_source",
+                    "source": "javdb",
+                    "message": "正在查询 JavDB",
+                })
+                await progress_callback({
+                    "at": "2026-03-29T10:00:02",
+                    "level": "warning",
+                    "stage": "fetching_detail",
+                    "source": "javdb",
+                    "message": "JavDB 已返回结果，正在读取详情页",
+                })
+                await progress_callback({
+                    "at": "2026-03-29T10:00:03",
+                    "level": "warning",
+                    "stage": "querying_source",
+                    "source": "javtrailers",
+                    "message": "正在查询 JavTrailers",
+                })
+                await progress_callback({
+                    "at": "2026-03-29T10:00:04",
+                    "level": "info",
+                    "stage": "parsing_metadata",
+                    "source": "javtrailers",
+                    "message": "详情页读取成功，正在解析元数据",
+                })
+            return ScrapeResponse(
+                success=True,
+                code="ALDN-480",
+                user_message="刮削完成",
+                stage="success",
+                source="javtrailers",
+                logs=[],
+            )
+
+    with patch("app.scraper.ScraperScheduler", return_value=FakeScheduler()):
+        from app.scrape_jobs import run_scrape_job
+
+        await run_scrape_job(job["id"])
+
+    snapshot = scrape_jobs[job["id"]]
+    item = snapshot["items"][0]
+    assert snapshot["status"] == "completed"
+    assert snapshot["current_progress_percent"] == 100
+    assert item["progress_percent"] == 100
+    assert item["source"] == "javtrailers"

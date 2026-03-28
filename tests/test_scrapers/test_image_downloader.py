@@ -216,6 +216,46 @@ class TestDownloadAdditionalArtwork:
             tmp_path / "EBOD-829-poster.jpg",
         )
 
+    @pytest.mark.asyncio
+    async def test_reports_progress_events_for_fanart_crop_and_previews(self, tmp_path: Path):
+        metadata = ScrapingMetadata(
+            code="EBOD-829",
+            title="Title",
+            plot="",
+            poster_url="https://example.com/poster.jpg",
+            fanart_url="https://example.com/fanart.jpg",
+            preview_urls=[
+                "https://example.com/preview-1.jpg",
+                "https://example.com/preview-2.jpg",
+            ],
+        )
+
+        events = []
+
+        async def recorder(event):
+            events.append(event)
+
+        session_cm, _ = _build_mock_session_and_response()
+        with patch("app.scrapers.writers.image.aiohttp.ClientSession", return_value=session_cm), \
+             patch("app.scrapers.writers.image.aiofiles.open", create=True) as mock_open, \
+             patch("app.scrapers.writers.image.crop_poster_from_fanart", return_value=tmp_path / "EBOD-829-poster.jpg"):
+            mock_open.return_value = _make_async_context_manager(AsyncMock())
+
+            await download_additional_artwork(
+                metadata,
+                tmp_path,
+                poster_output_path=tmp_path / "EBOD-829-poster.jpg",
+                progress_callback=recorder,
+            )
+
+        assert events == [
+            {"kind": "fanart_started"},
+            {"kind": "fanart_downloaded"},
+            {"kind": "poster_cropped"},
+            {"kind": "preview_downloaded", "index": 1, "total": 2},
+            {"kind": "preview_downloaded", "index": 2, "total": 2},
+        ]
+
 
 class TestCropPosterFromFanart:
     def test_crops_right_cover_panel_into_portrait_poster(self, tmp_path: Path):

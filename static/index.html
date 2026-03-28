@@ -656,9 +656,24 @@
                                         </template>
                                         <template x-if="!hasScrapeStatusAction(file)">
                                             <div class="status-static">
-                                                <button class="badge clickable" :class="getScrapeBadgeClass(file)" x-text="getScrapeStatusText(file)" @click="showScrapeErrorDetails(file)" x-show="file.scrape_status === 'failed'"></button>
-                                                <button class="badge clickable" :class="getScrapeBadgeClass(file)" x-text="getScrapeStatusText(file)" @click="showScrapeDetail(file)" x-show="file.scrape_status === 'success'"></button>
-                                                <span class="badge" :class="getScrapeBadgeClass(file)" x-text="getScrapeStatusText(file)" x-show="!['failed', 'success'].includes(file.scrape_status)"></span>
+                                                <template x-if="getScrapeProgressState(file)">
+                                                    <div class="scrape-status-progress">
+                                                        <div class="scrape-progress-track">
+                                                            <div class="scrape-progress-fill" :style="`width: ${getScrapeProgressState(file).percent}%`"></div>
+                                                            <div class="scrape-progress-content">
+                                                                <span class="scrape-progress-label" x-text="getScrapeProgressState(file).label"></span>
+                                                                <span class="scrape-progress-percent" x-text="getScrapeProgressState(file).percentText"></span>
+                                                            </div>
+                                                        </div>
+                                                        <div class="scrape-progress-meta">
+                                                            <span class="scrape-progress-stage" x-text="getScrapeProgressState(file).stageText"></span>
+                                                            <span class="scrape-progress-sequence" x-show="getScrapeProgressState(file).sequenceText" x-text="getScrapeProgressState(file).sequenceText"></span>
+                                                        </div>
+                                                    </div>
+                                                </template>
+                                                <button class="badge clickable" :class="getScrapeBadgeClass(file)" x-text="getScrapeStatusText(file)" @click="showScrapeErrorDetails(file)" x-show="!getScrapeProgressState(file) && file.scrape_status === 'failed'"></button>
+                                                <button class="badge clickable" :class="getScrapeBadgeClass(file)" x-text="getScrapeStatusText(file)" @click="showScrapeDetail(file)" x-show="!getScrapeProgressState(file) && file.scrape_status === 'success'"></button>
+                                                <span class="badge" :class="getScrapeBadgeClass(file)" x-text="getScrapeStatusText(file)" x-show="!getScrapeProgressState(file) && !['failed', 'success'].includes(file.scrape_status)"></span>
                                             </div>
                                         </template>
                                     </td>

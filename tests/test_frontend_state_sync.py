@@ -203,9 +203,10 @@ def test_scrape_status_static_branch_uses_single_root_node():
     html = (PROJECT_ROOT / "static/index.html").read_text(encoding="utf-8")
 
     branch_start = html.index('<template x-if="!hasScrapeStatusAction(file)">')
-    branch = html[branch_start:branch_start + 700]
+    branch = html[branch_start:branch_start + 3000]
 
     assert '<div class="status-static">' in branch
+    assert branch.index('<div class="status-static">') < branch.index('scrape-status-progress')
     assert branch.index('<div class="status-static">') < branch.index('<button class="badge clickable"')
     assert branch.index('<div class="status-static">') < branch.index('<span class="badge"')
 
@@ -373,6 +374,79 @@ def test_scrape_success_rows_offer_rescrape_action():
     assert result["actions"] == [
         {"key": "scrape", "label": "重新刮削", "icon": "scrape"}
     ]
+
+
+def test_scrape_processing_rows_surface_progress_percent_stage_and_batch_index():
+    script = textwrap.dedent(
+        """
+        import fs from 'node:fs';
+        import vm from 'node:vm';
+
+        const context = vm.createContext({
+          console,
+          setTimeout,
+          clearTimeout,
+          setInterval,
+          clearInterval,
+          Intl,
+          URLSearchParams,
+          Date,
+        });
+        context.window = context;
+        context.globalThis = context;
+
+        for (const path of ['static/js/state.js', 'static/js/render.js']) {
+          const source = fs.readFileSync(path, 'utf8');
+          vm.runInContext(source, context, { filename: path });
+        }
+
+        function mergeSection(target, section) {
+          Object.defineProperties(target, Object.getOwnPropertyDescriptors(section));
+          return target;
+        }
+
+        const app = {};
+        mergeSection(app, context.NoctraState.createState());
+        mergeSection(app, context.NoctraRender.createRender());
+
+        app.scrapeBatchJob = {
+          id: 'job-1',
+          status: 'running',
+          total: 4,
+          processed: 1,
+          current_file_id: 13,
+          current_stage: 'parsing_metadata',
+          current_source: 'javdb',
+          current_progress_percent: 65,
+          items: [
+            { id: 7, status: 'success', progress_percent: 100 },
+            { id: 13, status: 'processing', stage: 'parsing_metadata', source: 'javdb', progress_percent: 65 },
+            { id: 18, status: 'pending' },
+            { id: 19, status: 'pending' },
+          ],
+        };
+        app.scrapeBatchItemsIndex = {
+          13: { id: 13, status: 'processing', stage: 'parsing_metadata', source: 'javdb', progress_percent: 65 },
+        };
+
+        const file = {
+          id: 13,
+          scrape_status: 'pending',
+        };
+
+        console.log(JSON.stringify(app.getScrapeProgressState(file)));
+        """
+    )
+
+    result = run_frontend_script(script)
+
+    assert result == {
+        "percent": 65,
+        "percentText": "65%",
+        "label": "刮削中",
+        "stageText": "详情页读取成功，正在解析元数据",
+        "sequenceText": "第 2 / 4 条",
+    }
 
 
 def test_show_scrape_detail_modal_loads_preview_payload():
@@ -676,6 +750,17 @@ def test_scrape_detail_modal_markup_contains_preview_sections():
     assert "&rsaquo;" not in html
 
 
+def test_scrape_status_markup_contains_processing_progress_structure():
+    html = (PROJECT_ROOT / "static/index.html").read_text(encoding="utf-8")
+
+    assert "scrape-status-progress" in html
+    assert "scrape-progress-track" in html
+    assert "scrape-progress-fill" in html
+    assert "scrape-progress-percent" in html
+    assert "scrape-progress-stage" in html
+    assert "scrape-progress-sequence" in html
+
+
 def test_scrape_detail_modal_uses_compact_layout_styles():
     css = (PROJECT_ROOT / "static/css/index.css").read_text(encoding="utf-8")
 
@@ -687,6 +772,26 @@ def test_scrape_detail_modal_uses_compact_layout_styles():
     assert "padding: 10px 18px 2px;" in css
     assert "scroll-padding: 0 18px;" in css
     assert ".scrape-preview-nav-icon" in css
+
+
+def test_scrape_processing_status_uses_dedicated_progress_styles():
+    css = (PROJECT_ROOT / "static/css/index.css").read_text(encoding="utf-8")
+
+    assert ".scrape-status-progress" in css
+    assert ".scrape-progress-track" in css
+    assert ".scrape-progress-fill" in css
+    assert ".scrape-progress-percent" in css
+    assert ".scrape-progress-stage" in css
+    assert ".scrape-progress-sequence" in css
+    assert "width: 236px;" in css
+    assert "text-align: center;" in css
+
+
+def test_scrape_batch_polling_uses_faster_200ms_interval():
+    features = (PROJECT_ROOT / "static/js/features.js").read_text(encoding="utf-8")
+
+    assert "this.scrapeBatchPollTimer = setInterval(async () => {" in features
+    assert "}, 200);" in features
 
 
 def test_scan_and_scrape_tables_use_separate_layout_classes():
@@ -745,10 +850,26 @@ def test_scrape_icon_uses_simple_magnifier_shape():
 
     result = run_frontend_script(script)
 
+    assert 'class="scrape-icon"' in result["icon"]
     assert '<circle' in result["icon"]
     assert 'cx="10.5"' in result["icon"]
     assert 'cy="10.5"' in result["icon"]
     assert 'd="M15.5 15.5L19 19"' in result["icon"]
+
+
+def test_scrape_icon_has_dedicated_thicker_stroke_rule():
+    css = (PROJECT_ROOT / "static/css/index.css").read_text(encoding="utf-8")
+
+    assert "svg.scrape-icon *" in css
+    assert "stroke-width: 2.25;" in css
+
+
+def test_status_action_uses_rounded_action_well_for_scan_row_buttons():
+    css = (PROJECT_ROOT / "static/css/index.css").read_text(encoding="utf-8")
+
+    assert ".status-actions::before" in css
+    assert "inset: 2px 2px 2px 0;" in css
+    assert "border-radius: 999px;" in css
 
 
 def test_scan_table_has_compact_column_widths_for_medium_screens():

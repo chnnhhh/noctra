@@ -21,6 +21,23 @@ MAX_SCRAPE_LOGS = 30
 SCRAPE_SOURCE_JAVDB = "javdb"
 logger = logging.getLogger("uvicorn.error")
 
+SCRAPE_PROGRESS = {
+    "validating": 10,
+    "querying_source": 22,
+    "fetching_detail": 46,
+    "parsing_metadata_summary": 58,
+    "parsing_metadata_full": 65,
+    "writing_nfo": 82,
+    "preparing_artwork": 88,
+    "fanart_started": 90,
+    "fanart_downloaded": 92,
+    "poster_cropped": 94,
+    "poster_fallback": 95,
+    "preview_floor": 93,
+    "preview_ceiling": 98,
+    "finalizing": 99,
+}
+
 
 def _utcnow_iso() -> str:
     return datetime.now().isoformat()
@@ -84,6 +101,7 @@ class ScraperScheduler:
             source: str | None = None,
             level: str = "info",
             persist: bool = True,
+            progress_percent: int | None = None,
         ) -> None:
             nonlocal current_stage, current_source
 
@@ -97,6 +115,7 @@ class ScraperScheduler:
                 "stage": stage,
                 "source": event_source,
                 "message": message,
+                "progress_percent": progress_percent,
             }
             logs.append(event)
             if len(logs) > MAX_SCRAPE_LOGS:
@@ -161,7 +180,11 @@ class ScraperScheduler:
                 scrape_error_user_message=None,
                 scrape_logs=json.dumps(logs, ensure_ascii=False),
             )
-            await emit("validating", "正在检查文件信息")
+            await emit(
+                "validating",
+                "正在检查文件信息",
+                progress_percent=SCRAPE_PROGRESS["validating"],
+            )
 
             # Step 2: Verify file has a processed-like status. We keep
             # compatibility with both the historical `processed` status and
@@ -185,6 +208,7 @@ class ScraperScheduler:
                 "querying_source",
                 "正在查询 JavDB",
                 source=SCRAPE_SOURCE_JAVDB,
+                progress_percent=SCRAPE_PROGRESS["querying_source"],
             )
             crawler = JavDBCrawler()
             metadata = await crawler.crawl(code)
@@ -203,9 +227,23 @@ class ScraperScheduler:
                 )
 
             await emit(
-                "parsing_metadata",
-                "详情页读取成功，正在解析元数据",
+                "fetching_detail",
+                "已拿到详情页，正在整理页面信息",
                 source=SCRAPE_SOURCE_JAVDB,
+                progress_percent=SCRAPE_PROGRESS["fetching_detail"],
+            )
+
+            await emit(
+                "parsing_metadata",
+                "详情页读取成功，正在解析基础信息",
+                source=SCRAPE_SOURCE_JAVDB,
+                progress_percent=SCRAPE_PROGRESS["parsing_metadata_summary"],
+            )
+            await emit(
+                "parsing_metadata",
+                "正在解析演员、标签和发行信息",
+                source=SCRAPE_SOURCE_JAVDB,
+                progress_percent=SCRAPE_PROGRESS["parsing_metadata_full"],
             )
 
             # Step 4: Derive output paths
@@ -214,7 +252,11 @@ class ScraperScheduler:
             poster_path = target_dir / f"{code}-poster.jpg"
 
             # Step 5: Write NFO file
-            await emit("writing_nfo", "元数据解析成功，正在生成 NFO 文件")
+            await emit(
+                "writing_nfo",
+                "元数据解析成功，正在生成 NFO 文件",
+                progress_percent=SCRAPE_PROGRESS["writing_nfo"],
+            )
             write_nfo(metadata, nfo_path)
 
             # Step 6: Download artwork
@@ -222,13 +264,57 @@ class ScraperScheduler:
             artwork_result = {"fanart": None, "poster": None, "previews": []}
             if has_extra_artwork:
                 if metadata.fanart_url:
-                    await emit("downloading_poster", "NFO 已生成，正在下载 fanart 并裁切海报")
+                    await emit(
+                        "downloading_poster",
+                        "NFO 已生成，正在准备下载 fanart 和预览图",
+                        progress_percent=SCRAPE_PROGRESS["preparing_artwork"],
+                    )
                 else:
-                    await emit("downloading_poster", "NFO 已生成，正在下载附加图片")
+                    await emit(
+                        "downloading_poster",
+                        "NFO 已生成，正在准备下载附加图片",
+                        progress_percent=SCRAPE_PROGRESS["preparing_artwork"],
+                    )
+
+                async def on_artwork_progress(event: dict) -> None:
+                    kind = event.get("kind")
+                    if kind == "fanart_started":
+                        await emit(
+                            "downloading_poster",
+                            "正在下载 fanart",
+                            progress_percent=SCRAPE_PROGRESS["fanart_started"],
+                        )
+                        return
+                    if kind == "fanart_downloaded":
+                        await emit(
+                            "downloading_poster",
+                            "fanart 下载完成，正在准备海报和预览图",
+                            progress_percent=SCRAPE_PROGRESS["fanart_downloaded"],
+                        )
+                        return
+                    if kind == "poster_cropped":
+                        await emit(
+                            "downloading_poster",
+                            "fanart 已处理完成，正在裁切海报",
+                            progress_percent=SCRAPE_PROGRESS["poster_cropped"],
+                        )
+                        return
+                    if kind == "preview_downloaded":
+                        total = max(int(event.get("total") or 0), 1)
+                        index = min(max(int(event.get("index") or 0), 1), total)
+                        span = SCRAPE_PROGRESS["preview_ceiling"] - SCRAPE_PROGRESS["preview_floor"]
+                        progress = SCRAPE_PROGRESS["preview_floor"] + round((index / total) * span)
+                        await emit(
+                            "downloading_poster",
+                            f"预览图下载中 ({index}/{total})",
+                            progress_percent=progress,
+                        )
+
                 artwork_result = await download_additional_artwork(
                     metadata,
                     target_dir,
                     poster_output_path=poster_path,
+                    progress_callback=on_artwork_progress,
                 )
 
             if metadata.poster_url:
@@ -236,13 +322,25 @@ class ScraperScheduler:
                     message = "NFO 已生成，正在下载高清封面"
                     if has_extra_artwork:
                         message = "fanart 裁切海报失败，正在回退下载高清封面"
-                    await emit("downloading_poster", message)
+                    await emit(
+                        "downloading_poster",
+                        message,
+                        progress_percent=SCRAPE_PROGRESS["poster_fallback"],
+                    )
                     await download_poster(metadata.poster_url, poster_path)
             else:
                 if not has_extra_artwork:
-                    await emit("downloading_poster", "未提供图片资源，跳过下载")
+                    await emit(
+                        "downloading_poster",
+                        "未提供图片资源，跳过下载",
+                        progress_percent=SCRAPE_PROGRESS["poster_fallback"],
+                    )
 
-            await emit("finalizing", "正在保存刮削结果")
+            await emit(
+                "finalizing",
+                "正在保存刮削结果",
+                progress_percent=SCRAPE_PROGRESS["finalizing"],
+            )
 
             # Step 7: Update database with success
             finished_at = _utcnow_iso()

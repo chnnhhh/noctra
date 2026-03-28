@@ -112,6 +112,76 @@
                 return map[file.scrape_status] || file.scrape_status || '-';
             },
 
+            getScrapeStageProgressPercent(stage) {
+                const map = {
+                    queued: 6,
+                    validating: 10,
+                    querying_source: 35,
+                    fetching_detail: 50,
+                    parsing_metadata: 65,
+                    writing_nfo: 82,
+                    downloading_poster: 92,
+                    finalizing: 97,
+                    success: 100,
+                    failed: 100,
+                };
+                return map[stage] || 24;
+            },
+
+            getScrapeProgressState(file) {
+                const batchItem = this.getScrapeBatchItem(file);
+                if (!batchItem || batchItem.status !== 'processing') {
+                    return null;
+                }
+
+                const job = this.scrapeBatchJob || null;
+                const isCurrentFile = job?.current_file_id === file.id;
+                const stage = batchItem.stage || (isCurrentFile ? job?.current_stage : null) || file.scrape_stage || null;
+                const source = batchItem.source || (isCurrentFile ? job?.current_source : null) || file.scrape_source || null;
+                const reportedPercents = [];
+                if (Number.isFinite(batchItem.progress_percent)) {
+                    reportedPercents.push(Number(batchItem.progress_percent));
+                }
+                if (isCurrentFile && Number.isFinite(job?.current_progress_percent)) {
+                    reportedPercents.push(Number(job.current_progress_percent));
+                }
+                const percent = reportedPercents.length > 0
+                    ? Math.max(...reportedPercents)
+                    : this.getScrapeStageProgressPercent(stage);
+
+                let currentIndex = null;
+                const total = Number(job?.total || 0);
+                if (total > 0) {
+                    if (isCurrentFile) {
+                        currentIndex = Math.min((Number(job?.processed || 0) || 0) + 1, total);
+                    }
+                    if (!currentIndex && Array.isArray(job?.items)) {
+                        const itemIndex = job.items.findIndex(item => item.id === file.id);
+                        if (itemIndex !== -1) {
+                            currentIndex = itemIndex + 1;
+                        }
+                    }
+                    if (!currentIndex) {
+                        currentIndex = 1;
+                    }
+                }
+
+                let stageText = '正在准备刮削';
+                if (isCurrentFile && Array.isArray(job?.recent_logs) && job.recent_logs.length > 0) {
+                    stageText = job.recent_logs[job.recent_logs.length - 1].message || stageText;
+                } else if (stage) {
+                    stageText = this.getScrapeStageLabel(stage, source);
+                }
+
+                return {
+                    percent,
+                    percentText: `${percent}%`,
+                    label: '刮削中',
+                    stageText,
+                    sequenceText: total > 1 ? `第 ${currentIndex} / ${total} 条` : '',
+                };
+            },
+
             getScrapeBadgeClass(file) {
                 const batchItem = this.getScrapeBatchItem(file);
                 if (batchItem) {
@@ -580,7 +650,7 @@
                         </svg>
                     `,
                     scrape: `
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <svg class="scrape-icon" viewBox="0 0 24 24" aria-hidden="true">
                             <circle cx="10.5" cy="10.5" r="4.5"/>
                             <path d="M15.5 15.5L19 19"/>
                         </svg>

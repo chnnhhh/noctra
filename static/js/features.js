@@ -257,7 +257,7 @@
                     } finally {
                         this.batchPollingBusy = false;
                     }
-                }, 400);
+                }, 200);
             },
 
             updateStats(data) {
@@ -952,6 +952,7 @@
                     current_file_code: null,
                     current_stage: null,
                     current_source: null,
+                    current_progress_percent: 0,
                     recent_logs: [],
                     items: files.map(file => ({
                         id: file.id,
@@ -960,6 +961,7 @@
                         status: 'pending',
                         stage: null,
                         source: null,
+                        progress_percent: 0,
                         user_message: null,
                         technical_error: null,
                         started_at: null,

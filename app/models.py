@@ -105,6 +105,7 @@ class ScrapeLogEntry(BaseModel):
     stage: str
     source: Optional[str] = None
     message: str
+    progress_percent: Optional[int] = None
 
 
 class ScrapeListItem(BaseModel):
@@ -136,6 +137,7 @@ class ScrapeJobItem(BaseModel):
     status: str
     stage: Optional[str] = None
     source: Optional[str] = None
+    progress_percent: int = 0
     user_message: Optional[str] = None
     technical_error: Optional[str] = None
     started_at: Optional[str] = None
@@ -156,6 +158,7 @@ class ScrapeJobSnapshot(BaseModel):
     current_file_code: Optional[str] = None
     current_stage: Optional[str] = None
     current_source: Optional[str] = None
+    current_progress_percent: int = 0
     recent_logs: list[ScrapeLogEntry] = Field(default_factory=list)
     items: list[ScrapeJobItem] = Field(default_factory=list)
 
