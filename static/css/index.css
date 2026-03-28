@@ -1487,7 +1487,15 @@
             border-collapse: separate;
             border-spacing: 0;
             table-layout: fixed;
-            min-width: 1360px;
+            min-width: 0;
+        }
+
+        .scan-table {
+            min-width: 1180px;
+        }
+
+        .scrape-table {
+            min-width: 1210px;
         }
 
         thead tr {
@@ -1619,32 +1627,50 @@
             box-shadow: none !important;
         }
 
-        th.col-code,
-        td.cell-code {
+        .scan-table th.col-code,
+        .scan-table td.cell-code {
+            width: 170px;
+            text-align: center;
+        }
+
+        .scrape-table th.col-code,
+        .scrape-table td.cell-code {
             width: 186px;
             text-align: center;
         }
 
-        th.col-name,
-        td.cell-name {
-            width: 396px;
+        .scan-table th.col-name,
+        .scan-table td.cell-name {
+            width: 300px;
             text-align: left;
         }
 
-        th.col-target,
-        td.cell-target {
+        .scan-table th.col-target,
+        .scan-table td.cell-target {
+            width: 360px;
+            text-align: left;
+        }
+
+        .scrape-table th.col-target,
+        .scrape-table td.cell-target {
             width: 470px;
             text-align: left;
         }
 
-        th.col-status,
-        td.cell-status {
+        .scan-table th.col-status,
+        .scan-table td.cell-status {
+            width: 220px;
+            text-align: center;
+        }
+
+        .scrape-table th.col-status,
+        .scrape-table td.cell-status {
             width: 300px;
             text-align: center;
         }
 
-        th.col-time,
-        td.cell-time {
+        .scrape-table th.col-time,
+        .scrape-table td.cell-time {
             width: 190px;
             text-align: left;
         }
@@ -1653,6 +1679,12 @@
             position: relative;
             overflow: visible;
             padding-right: 30px;
+        }
+
+        .scan-table th,
+        .scan-table td {
+            padding-left: 22px;
+            padding-right: 22px;
         }
 
         th.col-select {

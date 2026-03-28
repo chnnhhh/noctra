@@ -687,3 +687,21 @@ def test_scrape_detail_modal_uses_compact_layout_styles():
     assert "padding: 10px 18px 2px;" in css
     assert "scroll-padding: 0 18px;" in css
     assert ".scrape-preview-nav-icon" in css
+
+
+def test_scan_and_scrape_tables_use_separate_layout_classes():
+    html = (PROJECT_ROOT / "static/index.html").read_text(encoding="utf-8")
+
+    assert '<table class="scan-table">' in html
+    assert '<table class="scrape-table">' in html
+
+
+def test_scan_table_has_compact_column_widths_for_medium_screens():
+    css = (PROJECT_ROOT / "static/css/index.css").read_text(encoding="utf-8")
+
+    assert ".scan-table" in css
+    assert "min-width: 1180px;" in css
+    assert ".scan-table th.col-name," in css
+    assert "width: 300px;" in css
+    assert ".scan-table th.col-target," in css
+    assert "width: 360px;" in css
