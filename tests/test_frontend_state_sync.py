@@ -371,7 +371,7 @@ def test_scrape_success_rows_offer_rescrape_action():
 
     assert result["canSelect"] is False
     assert result["actions"] == [
-        {"key": "scrape", "label": "重新刮削", "icon": "sparkles"}
+        {"key": "scrape", "label": "重新刮削", "icon": "scrape"}
     ]
 
 
@@ -694,6 +694,61 @@ def test_scan_and_scrape_tables_use_separate_layout_classes():
 
     assert '<table class="scan-table">' in html
     assert '<table class="scrape-table">' in html
+
+
+def test_scrape_controls_use_dedicated_scrape_icon_classes_without_changing_organize_icon():
+    html = (PROJECT_ROOT / "static/index.html").read_text(encoding="utf-8")
+
+    assert 'class="nav-scrape"' in html
+    assert 'class="primary scrape-trigger"' in html
+    assert "getUiIcon('scrape')" in html
+    assert '<span class="button-icon" x-html="getUiIcon(\'organize\')"></span>' in html
+
+
+def test_scrape_icon_styles_have_separate_bright_treatment():
+    css = (PROJECT_ROOT / "static/css/index.css").read_text(encoding="utf-8")
+
+    assert ".header-nav a.nav-scrape" in css
+    assert "button.primary.scrape-trigger" in css
+    assert ".icon-action.action-scrape" in css
+
+
+def test_scrape_icons_force_svg_descendants_to_follow_current_color():
+    css = (PROJECT_ROOT / "static/css/index.css").read_text(encoding="utf-8")
+
+    assert ".header-nav .nav-icon svg *" in css
+    assert ".button-icon svg *" in css
+    assert ".icon-glyph svg *" in css
+    assert "stroke: currentColor;" in css
+    assert "fill: none;" in css
+
+
+def test_scrape_icon_uses_simple_magnifier_shape():
+    script = textwrap.dedent(
+        """
+        import fs from 'node:fs';
+        import vm from 'node:vm';
+
+        const context = vm.createContext({ console });
+        context.window = context;
+        context.globalThis = context;
+
+        const source = fs.readFileSync('static/js/render.js', 'utf8');
+        vm.runInContext(source, context, { filename: 'static/js/render.js' });
+
+        const render = context.NoctraRender.createRender();
+        const icon = render.getUiIcon('scrape');
+
+        console.log(JSON.stringify({ icon }));
+        """
+    )
+
+    result = run_frontend_script(script)
+
+    assert '<circle' in result["icon"]
+    assert 'cx="10.5"' in result["icon"]
+    assert 'cy="10.5"' in result["icon"]
+    assert 'd="M15.5 15.5L19 19"' in result["icon"]
 
 
 def test_scan_table_has_compact_column_widths_for_medium_screens():

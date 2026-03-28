@@ -18,8 +18,8 @@
             </div>
             <div class="header-nav">
                 <a href="#" @click.prevent="switchView('scan')" :class="{ 'active': view === 'scan' }">📂 扫描</a>
-                <a href="#" @click.prevent="switchView('scrape')" :class="{ 'active': view === 'scrape' }">
-                    <span x-html="getUiIcon('sparkles')" style="width: 16px; height: 16px; display: inline-block; vertical-align: -2px;"></span> 刮削
+                <a href="#" class="nav-scrape" @click.prevent="switchView('scrape')" :class="{ 'active': view === 'scrape' }">
+                    <span class="nav-icon" x-html="getUiIcon('scrape')"></span> 刮削
                 </a>
             </div>
         </div>
@@ -461,9 +461,9 @@
 
             <div class="actions">
                 <div class="actions-group primary">
-                    <button class="primary organize-trigger" @click="confirmBatchScrape" :disabled="!scrapeHasSelected">
+                    <button class="primary scrape-trigger" @click="confirmBatchScrape" :disabled="!scrapeHasSelected">
                         <span class="button-inline">
-                            <span class="button-icon" x-html="getUiIcon('sparkles')"></span>
+                            <span class="button-icon" x-html="getUiIcon('scrape')"></span>
                             <span>批量刮削 (<span x-text="scrapeSelectedCount"></span>)</span>
                         </span>
                     </button>

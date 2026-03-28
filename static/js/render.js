@@ -147,7 +147,7 @@
                 if (batchItem) {
                     if (batchItem.status === 'failed') {
                         return [
-                            { key: 'scrape', label: '刮削', icon: 'sparkles' }
+                            { key: 'scrape', label: '刮削', icon: 'scrape' }
                         ];
                     }
                     return [];
@@ -155,12 +155,12 @@
 
                 if (file.scrape_status === 'pending' || file.scrape_status === 'failed') {
                     return [
-                        { key: 'scrape', label: '刮削', icon: 'sparkles' }
+                        { key: 'scrape', label: '刮削', icon: 'scrape' }
                     ];
                 }
                 if (file.scrape_status === 'success') {
                     return [
-                        { key: 'scrape', label: '重新刮削', icon: 'sparkles' }
+                        { key: 'scrape', label: '重新刮削', icon: 'scrape' }
                     ];
                 }
                 return [];
@@ -577,6 +577,12 @@
                         <svg viewBox="0 0 24 24" aria-hidden="true">
                             <path d="M6 6l12 12"/>
                             <path d="M18 6L6 18"/>
+                        </svg>
+                    `,
+                    scrape: `
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <circle cx="10.5" cy="10.5" r="4.5"/>
+                            <path d="M15.5 15.5L19 19"/>
                         </svg>
                     `,
                     sparkles: `
