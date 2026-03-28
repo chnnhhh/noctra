@@ -476,6 +476,7 @@ def test_scrape_detail_groups_preview_images_into_summary():
 
         const render = context.NoctraRender.createRender();
         const grouped = render.getScrapeDetailArtifacts({
+          file_id: 13,
           files: [
             'EBOD-829.mp4',
             'EBOD-829.nfo',
@@ -500,6 +501,161 @@ def test_scrape_detail_groups_preview_images_into_summary():
         "EBOD-829-fanart.jpg",
     ]
     assert result["previewCount"] == 3
+    assert result["previewFiles"] == [
+        {
+            "name": "EBOD-829-preview-01.jpg",
+            "url": "/api/scrape/13/artifacts/EBOD-829-preview-01.jpg",
+        },
+        {
+            "name": "EBOD-829-preview-02.jpg",
+            "url": "/api/scrape/13/artifacts/EBOD-829-preview-02.jpg",
+        },
+        {
+            "name": "EBOD-829-preview-03.jpg",
+            "url": "/api/scrape/13/artifacts/EBOD-829-preview-03.jpg",
+        },
+    ]
+
+
+def test_open_scrape_preview_gallery_initializes_image_browser():
+    script = textwrap.dedent(
+        """
+        import fs from 'node:fs';
+        import vm from 'node:vm';
+
+        const context = vm.createContext({
+          console,
+          setTimeout,
+          clearTimeout,
+          setInterval,
+          clearInterval,
+          Intl,
+          URLSearchParams,
+          Date,
+        });
+        context.window = context;
+        context.globalThis = context;
+
+        for (const path of ['static/js/state.js', 'static/js/render.js', 'static/js/features.js']) {
+          const source = fs.readFileSync(path, 'utf8');
+          vm.runInContext(source, context, { filename: path });
+        }
+
+        function mergeSection(target, section) {
+          Object.defineProperties(target, Object.getOwnPropertyDescriptors(section));
+          return target;
+        }
+
+        const app = {};
+        mergeSection(app, context.NoctraState.createState());
+        mergeSection(app, context.NoctraRender.createRender());
+        mergeSection(app, context.NoctraFeatures.createFeatures());
+
+        app.openScrapePreviewGallery({
+          file_id: 13,
+          files: [
+            'EBOD-829.mp4',
+            'EBOD-829-preview-01.jpg',
+            'EBOD-829-preview-02.jpg',
+            'EBOD-829-preview-03.jpg',
+          ],
+        }, 1);
+
+        console.log(JSON.stringify({
+          visible: app.showScrapePreviewGalleryModal,
+          count: app.scrapePreviewGalleryImages.length,
+          index: app.scrapePreviewGalleryIndex,
+          currentName: app.currentScrapePreviewImage?.name || null,
+        }));
+        """
+    )
+
+    result = run_frontend_script(script)
+
+    assert result["visible"] is True
+    assert result["count"] == 3
+    assert result["index"] == 1
+    assert result["currentName"] == "EBOD-829-preview-02.jpg"
+
+
+def test_show_next_scrape_preview_scrolls_active_thumbnail_into_view():
+    script = textwrap.dedent(
+        """
+        import fs from 'node:fs';
+        import vm from 'node:vm';
+
+        const context = vm.createContext({
+          console,
+          setTimeout,
+          clearTimeout,
+          setInterval,
+          clearInterval,
+          Intl,
+          URLSearchParams,
+          Date,
+        });
+        context.window = context;
+        context.globalThis = context;
+
+        for (const path of ['static/js/state.js', 'static/js/render.js', 'static/js/features.js']) {
+          const source = fs.readFileSync(path, 'utf8');
+          vm.runInContext(source, context, { filename: path });
+        }
+
+        function mergeSection(target, section) {
+          Object.defineProperties(target, Object.getOwnPropertyDescriptors(section));
+          return target;
+        }
+
+        const calls = [];
+        const app = {};
+        mergeSection(app, context.NoctraState.createState());
+        mergeSection(app, context.NoctraRender.createRender());
+        mergeSection(app, context.NoctraFeatures.createFeatures());
+
+        app.$nextTick = (callback) => callback();
+        app.$refs = {
+          scrapePreviewStrip: {
+            querySelector(selector) {
+              calls.push({ type: 'query', selector });
+              return {
+                scrollIntoView(options) {
+                  calls.push({ type: 'scroll', options });
+                },
+              };
+            },
+          },
+        };
+
+        app.openScrapePreviewGallery({
+          file_id: 13,
+          files: [
+            'EBOD-829-preview-01.jpg',
+            'EBOD-829-preview-02.jpg',
+            'EBOD-829-preview-03.jpg',
+          ],
+        }, 1);
+
+        calls.length = 0;
+        app.showNextScrapePreview();
+
+        console.log(JSON.stringify({
+          index: app.scrapePreviewGalleryIndex,
+          calls,
+        }));
+        """
+    )
+
+    result = run_frontend_script(script)
+
+    assert result["index"] == 2
+    assert result["calls"] == [
+        {"type": "query", "selector": '[data-preview-index="2"]'},
+        {
+            "type": "scroll",
+            "options": {"behavior": "smooth", "block": "nearest", "inline": "nearest"},
+        },
+    ]
 
 
 def test_scrape_detail_modal_markup_contains_preview_sections():
@@ -510,6 +666,14 @@ def test_scrape_detail_modal_markup_contains_preview_sections():
     assert "生成文件" in html
     assert "重点文件" in html
     assert "预览图" in html
+    assert "showScrapePreviewGallery" in html
+    assert "showPreviousScrapePreview" in html
+    assert "showNextScrapePreview" in html
+    assert "scrape-preview-nav-icon" in html
+    assert 'x-ref="scrapePreviewStrip"' in html
+    assert ':data-preview-index="index"' in html
+    assert "&lsaquo;" not in html
+    assert "&rsaquo;" not in html
 
 
 def test_scrape_detail_modal_uses_compact_layout_styles():
@@ -518,3 +682,8 @@ def test_scrape_detail_modal_uses_compact_layout_styles():
     assert ".modal.scrape-detail-modal" in css
     assert "max-width: 880px;" in css
     assert "grid-template-columns: 220px minmax(0, 1fr);" in css
+    assert ".scrape-preview-gallery" in css
+    assert ".scrape-preview-thumb.active" in css
+    assert "padding: 10px 18px 2px;" in css
+    assert "scroll-padding: 0 18px;" in css
+    assert ".scrape-preview-nav-icon" in css

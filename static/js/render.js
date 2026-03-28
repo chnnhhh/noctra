@@ -232,11 +232,18 @@
             getScrapeDetailArtifacts(detail) {
                 const files = Array.isArray(detail?.files) ? detail.files : [];
                 const primaryFiles = [];
+                const previewFiles = [];
                 let previewCount = 0;
 
                 files.forEach(filename => {
                     if (filename.includes('-preview-')) {
                         previewCount += 1;
+                        previewFiles.push({
+                            name: filename,
+                            url: detail?.file_id
+                                ? `/api/scrape/${detail.file_id}/artifacts/${encodeURIComponent(filename)}`
+                                : ''
+                        });
                         return;
                     }
                     primaryFiles.push(filename);
@@ -244,7 +251,8 @@
 
                 return {
                     primaryFiles,
-                    previewCount
+                    previewCount,
+                    previewFiles
                 };
             },
 

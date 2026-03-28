@@ -65,6 +65,9 @@
             scrapeDetailFile: null,
             showScrapePosterModal: false,
             scrapeDetailPosterPreview: null,
+            showScrapePreviewGalleryModal: false,
+            scrapePreviewGalleryImages: [],
+            scrapePreviewGalleryIndex: 0,
             scrapeBatchJob: null,
             scrapeBatchItemsIndex: {},
             scrapeBatchPollTimer: null,
@@ -267,6 +270,18 @@
 
             get scrapeBatchRunning() {
                 return !!this.scrapeBatchJob && ['queued', 'running'].includes(this.scrapeBatchJob.status);
+            },
+
+            get currentScrapePreviewImage() {
+                return this.scrapePreviewGalleryImages[this.scrapePreviewGalleryIndex] || null;
+            },
+
+            get canShowPreviousScrapePreview() {
+                return this.scrapePreviewGalleryIndex > 0;
+            },
+
+            get canShowNextScrapePreview() {
+                return this.scrapePreviewGalleryIndex < (this.scrapePreviewGalleryImages.length - 1);
             },
 
             get scrapeBatchPanelVisible() {

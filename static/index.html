@@ -819,12 +819,14 @@
 
                         <div class="scrape-artifact-group-title"
                              x-show="getScrapeDetailArtifacts(scrapeDetailFile).previewCount > 0">预览图</div>
-                        <div class="scrape-artifact-summary"
+                        <button type="button"
+                             class="scrape-artifact-summary scrape-artifact-summary-button"
+                             @click="openScrapePreviewGallery(scrapeDetailFile)"
                              x-show="getScrapeDetailArtifacts(scrapeDetailFile).previewCount > 0">
                             <span class="scrape-artifact-summary-label">已生成预览图</span>
                             <span class="scrape-artifact-summary-value"
                                   x-text="`${getScrapeDetailArtifacts(scrapeDetailFile).previewCount} 张`"></span>
-                        </div>
+                        </button>
                     </div>
                 </div>
 
@@ -887,6 +889,64 @@
                  :src="scrapeDetailPosterPreview || ''"
                  alt="刮削海报大图">
             <button type="button" class="secondary scrape-poster-lightbox-close" @click="closeScrapePosterPreview()">关闭</button>
+        </div>
+    </div>
+
+    <!-- Scrape Preview Gallery -->
+    <div x-show="showScrapePreviewGalleryModal"
+         class="modal-overlay scrape-preview-overlay"
+         @click.self="closeScrapePreviewGallery()">
+        <div class="scrape-preview-gallery">
+            <div class="scrape-preview-stage">
+                <button type="button"
+                        class="scrape-preview-nav"
+                        :disabled="!canShowPreviousScrapePreview"
+                        aria-label="上一张预览图"
+                        @click="showPreviousScrapePreview()">
+                    <svg class="scrape-preview-nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M14.5 5.5L8 12l6.5 6.5" />
+                    </svg>
+                </button>
+
+                <div class="scrape-preview-canvas">
+                    <img class="scrape-preview-image"
+                         :src="currentScrapePreviewImage?.url || ''"
+                         :alt="currentScrapePreviewImage?.name || '预览图'">
+                </div>
+
+                <button type="button"
+                        class="scrape-preview-nav"
+                        :disabled="!canShowNextScrapePreview"
+                        aria-label="下一张预览图"
+                        @click="showNextScrapePreview()">
+                    <svg class="scrape-preview-nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M9.5 5.5L16 12l-6.5 6.5" />
+                    </svg>
+                </button>
+            </div>
+
+            <div class="scrape-preview-strip" x-ref="scrapePreviewStrip">
+                <template x-for="(image, index) in scrapePreviewGalleryImages" :key="image.name">
+                    <button type="button"
+                            class="scrape-preview-thumb"
+                            :data-preview-index="index"
+                            :class="{ 'active': index === scrapePreviewGalleryIndex }"
+                            :aria-label="`查看 ${image.name}`"
+                            @click="selectScrapePreview(index)">
+                        <img class="scrape-preview-thumb-image"
+                             :src="image.url"
+                             :alt="image.name">
+                    </button>
+                </template>
+            </div>
+
+            <div class="scrape-preview-toolbar">
+                <div class="scrape-preview-counter"
+                     x-text="`${scrapePreviewGalleryIndex + 1} / ${scrapePreviewGalleryImages.length}`"></div>
+                <button type="button"
+                        class="secondary scrape-preview-close"
+                        @click="closeScrapePreviewGallery()">关闭</button>
+            </div>
         </div>
     </div>
 

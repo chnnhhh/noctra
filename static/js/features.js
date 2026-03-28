@@ -560,6 +560,7 @@
                 this.scrapeDetailLoading = false;
                 this.scrapeDetailFile = null;
                 this.closeScrapePosterPreview();
+                this.closeScrapePreviewGallery();
             },
 
             openScrapePosterPreview(url) {
@@ -573,6 +574,73 @@
             closeScrapePosterPreview() {
                 this.showScrapePosterModal = false;
                 this.scrapeDetailPosterPreview = null;
+            },
+
+            openScrapePreviewGallery(detail, startIndex = 0) {
+                const previewFiles = this.getScrapeDetailArtifacts(detail).previewFiles || [];
+                if (previewFiles.length === 0) {
+                    return;
+                }
+
+                const nextIndex = Math.max(0, Math.min(startIndex, previewFiles.length - 1));
+                this.scrapePreviewGalleryImages = previewFiles;
+                this.scrapePreviewGalleryIndex = nextIndex;
+                this.showScrapePreviewGalleryModal = true;
+                this.syncCurrentScrapePreviewThumb();
+            },
+
+            closeScrapePreviewGallery() {
+                this.showScrapePreviewGalleryModal = false;
+                this.scrapePreviewGalleryImages = [];
+                this.scrapePreviewGalleryIndex = 0;
+            },
+
+            selectScrapePreview(index) {
+                if (index < 0 || index >= this.scrapePreviewGalleryImages.length) {
+                    return;
+                }
+                this.scrapePreviewGalleryIndex = index;
+                this.syncCurrentScrapePreviewThumb();
+            },
+
+            showPreviousScrapePreview() {
+                if (!this.canShowPreviousScrapePreview) {
+                    return;
+                }
+                this.scrapePreviewGalleryIndex -= 1;
+                this.syncCurrentScrapePreviewThumb();
+            },
+
+            showNextScrapePreview() {
+                if (!this.canShowNextScrapePreview) {
+                    return;
+                }
+                this.scrapePreviewGalleryIndex += 1;
+                this.syncCurrentScrapePreviewThumb();
+            },
+
+            syncCurrentScrapePreviewThumb() {
+                const runAfterRender = typeof this.$nextTick === 'function'
+                    ? this.$nextTick.bind(this)
+                    : (callback) => callback();
+
+                runAfterRender(() => {
+                    const strip = this.$refs?.scrapePreviewStrip;
+                    if (!strip || typeof strip.querySelector !== 'function') {
+                        return;
+                    }
+
+                    const thumb = strip.querySelector(`[data-preview-index="${this.scrapePreviewGalleryIndex}"]`);
+                    if (!thumb || typeof thumb.scrollIntoView !== 'function') {
+                        return;
+                    }
+
+                    thumb.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'nearest',
+                        inline: 'nearest'
+                    });
+                });
             },
 
             async executeOrganize() {
