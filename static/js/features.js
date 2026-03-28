@@ -284,6 +284,10 @@
                 this.error = null;
                 this.success = null;
 
+                if (viewName !== 'scrape') {
+                    this.closeScrapeDetail();
+                }
+
                 if (viewName === 'scrape') {
                     if (!this.scrapeLoaded) {
                         await this.loadScrapeFiles();
@@ -350,6 +354,24 @@
                     scrape_error: item.scrape_error || null,
                     scrape_error_user_message: item.scrape_error_user_message || null,
                     scrape_logs: item.scrape_logs || []
+                };
+            },
+
+            normalizeScrapeDetailPayload(detail, fallbackCode = '') {
+                const metadata = detail?.metadata || {};
+                return {
+                    file_id: detail?.file_id || null,
+                    code: detail?.code || fallbackCode || '',
+                    poster_url: detail?.poster_url || null,
+                    files: Array.isArray(detail?.files) ? detail.files : [],
+                    metadata: {
+                        code: metadata.code || detail?.code || fallbackCode || '',
+                        plot: metadata.plot || '',
+                        actors: Array.isArray(metadata.actors) ? metadata.actors : [],
+                        release_date: metadata.release_date || '',
+                        runtime: metadata.runtime || '',
+                        tags: Array.isArray(metadata.tags) ? metadata.tags : []
+                    }
                 };
             },
 
@@ -509,6 +531,48 @@
                             : [])
                 } : file;
                 this.showScrapeErrorModal = true;
+            },
+
+            async showScrapeDetail(file) {
+                if (!file?.id) {
+                    return;
+                }
+
+                this.closeStatusMenu();
+                this.scrapeDetailLoading = true;
+                this.showScrapeDetailModal = true;
+                this.scrapeDetailFile = this.normalizeScrapeDetailPayload(null, file.identified_code || '');
+
+                try {
+                    const detail = await ScrapeAPI.getDetail(file.id);
+                    this.scrapeDetailFile = this.normalizeScrapeDetailPayload(detail, file.identified_code || '');
+                } catch (error) {
+                    this.showScrapeDetailModal = false;
+                    this.scrapeDetailFile = null;
+                    this.error = '加载刮削内容失败: ' + error.message;
+                } finally {
+                    this.scrapeDetailLoading = false;
+                }
+            },
+
+            closeScrapeDetail() {
+                this.showScrapeDetailModal = false;
+                this.scrapeDetailLoading = false;
+                this.scrapeDetailFile = null;
+                this.closeScrapePosterPreview();
+            },
+
+            openScrapePosterPreview(url) {
+                if (!url) {
+                    return;
+                }
+                this.scrapeDetailPosterPreview = url;
+                this.showScrapePosterModal = true;
+            },
+
+            closeScrapePosterPreview() {
+                this.showScrapePosterModal = false;
+                this.scrapeDetailPosterPreview = null;
             },
 
             async executeOrganize() {

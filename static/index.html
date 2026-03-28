@@ -628,7 +628,15 @@
                                                         <span class="status-label" x-text="getScrapeStatusText(file)"></span>
                                                     </button>
                                                 </template>
-                                                <template x-if="!canOpenScrapeErrorDetails(file)">
+                                                <template x-if="!canOpenScrapeErrorDetails(file) && file.scrape_status === 'success'">
+                                                    <button type="button"
+                                                            class="status-trigger clickable"
+                                                            :aria-label="`${getScrapeStatusText(file)}，点击查看已刮削内容`"
+                                                            @click="showScrapeDetail(file)">
+                                                        <span class="status-label" x-text="getScrapeStatusText(file)"></span>
+                                                    </button>
+                                                </template>
+                                                <template x-if="!canOpenScrapeErrorDetails(file) && file.scrape_status !== 'success'">
                                                     <span class="status-trigger" :aria-label="getScrapeStatusText(file)">
                                                         <span class="status-label" x-text="getScrapeStatusText(file)"></span>
                                                     </span>
@@ -648,15 +656,9 @@
                                         </template>
                                         <template x-if="!hasScrapeStatusAction(file)">
                                             <div class="status-static">
-                                                <button class="badge clickable"
-                                                        :class="getScrapeBadgeClass(file)"
-                                                        x-text="getScrapeStatusText(file)"
-                                                        @click="showScrapeErrorDetails(file)"
-                                                        x-show="file.scrape_status === 'failed'"></button>
-                                                <span class="badge"
-                                                      :class="getScrapeBadgeClass(file)"
-                                                      x-text="getScrapeStatusText(file)"
-                                                      x-show="file.scrape_status !== 'failed'"></span>
+                                                <button class="badge clickable" :class="getScrapeBadgeClass(file)" x-text="getScrapeStatusText(file)" @click="showScrapeErrorDetails(file)" x-show="file.scrape_status === 'failed'"></button>
+                                                <button class="badge clickable" :class="getScrapeBadgeClass(file)" x-text="getScrapeStatusText(file)" @click="showScrapeDetail(file)" x-show="file.scrape_status === 'success'"></button>
+                                                <span class="badge" :class="getScrapeBadgeClass(file)" x-text="getScrapeStatusText(file)" x-show="!['failed', 'success'].includes(file.scrape_status)"></span>
                                             </div>
                                         </template>
                                     </td>
@@ -775,6 +777,116 @@
             <div class="modal-actions">
                 <button class="primary" @click="showScrapeErrorModal = false">关闭</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Scrape Detail Modal -->
+    <div x-show="showScrapeDetailModal" class="modal-overlay" @click.self="closeScrapeDetail()">
+        <div class="modal scrape-detail-modal">
+            <div class="modal-title">
+                🧾 刮削内容概览
+            </div>
+            <div class="modal-content scrape-detail-intro">
+                <span>番号：</span>
+                <strong x-text="scrapeDetailFile?.metadata?.code || scrapeDetailFile?.code || '-'"></strong>
+            </div>
+
+            <div class="scrape-detail-shell" x-show="!scrapeDetailLoading">
+                <div class="scrape-detail-panel">
+                    <div class="scrape-detail-section-title">封面预览</div>
+                    <template x-if="scrapeDetailFile?.poster_url">
+                        <button type="button"
+                                class="scrape-poster-button"
+                                @click="openScrapePosterPreview(scrapeDetailFile.poster_url)">
+                            <img class="scrape-poster-thumb"
+                                 :src="scrapeDetailFile.poster_url"
+                                 :alt="`${scrapeDetailFile?.metadata?.code || scrapeDetailFile?.code || '作品'} 海报`">
+                            <span class="scrape-poster-hint">点击放大查看</span>
+                        </button>
+                    </template>
+                    <template x-if="!scrapeDetailFile?.poster_url">
+                        <div class="scrape-poster-empty">暂无封面图片</div>
+                    </template>
+
+                    <div class="scrape-detail-section-title">生成文件</div>
+                    <div class="scrape-artifact-list">
+                        <div class="scrape-artifact-group-title">重点文件</div>
+                        <template x-for="filename in getScrapeDetailArtifacts(scrapeDetailFile).primaryFiles" :key="filename">
+                            <div class="scrape-artifact-item" x-text="filename"></div>
+                        </template>
+                        <div class="scrape-artifact-empty"
+                             x-show="getScrapeDetailArtifacts(scrapeDetailFile).primaryFiles.length === 0">暂无重点文件</div>
+
+                        <div class="scrape-artifact-group-title"
+                             x-show="getScrapeDetailArtifacts(scrapeDetailFile).previewCount > 0">预览图</div>
+                        <div class="scrape-artifact-summary"
+                             x-show="getScrapeDetailArtifacts(scrapeDetailFile).previewCount > 0">
+                            <span class="scrape-artifact-summary-label">已生成预览图</span>
+                            <span class="scrape-artifact-summary-value"
+                                  x-text="`${getScrapeDetailArtifacts(scrapeDetailFile).previewCount} 张`"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="scrape-detail-panel">
+                    <div class="scrape-meta-grid">
+                        <div class="scrape-meta-card">
+                            <div class="scrape-meta-label">番号</div>
+                            <div class="scrape-meta-value code-inline"
+                                 x-text="scrapeDetailFile?.metadata?.code || scrapeDetailFile?.code || '-'"></div>
+                        </div>
+                        <div class="scrape-meta-card scrape-meta-card-wide">
+                            <div class="scrape-meta-label">剧情简介</div>
+                            <div class="scrape-meta-value scrape-meta-plot"
+                                 x-text="scrapeDetailFile?.metadata?.plot || '暂无简介'"></div>
+                        </div>
+                        <div class="scrape-meta-card">
+                            <div class="scrape-meta-label">演员</div>
+                            <div class="scrape-meta-value"
+                                 x-text="(scrapeDetailFile?.metadata?.actors || []).join(' / ') || '-'"></div>
+                        </div>
+                        <div class="scrape-meta-card">
+                            <div class="scrape-meta-label">发布时间</div>
+                            <div class="scrape-meta-value"
+                                 x-text="scrapeDetailFile?.metadata?.release_date || '-'"></div>
+                        </div>
+                        <div class="scrape-meta-card">
+                            <div class="scrape-meta-label">时长</div>
+                            <div class="scrape-meta-value"
+                                 x-text="scrapeDetailFile?.metadata?.runtime ? `${scrapeDetailFile.metadata.runtime} 分钟` : '-'"></div>
+                        </div>
+                        <div class="scrape-meta-card scrape-meta-card-wide">
+                            <div class="scrape-meta-label">标签</div>
+                            <div class="scrape-tag-list">
+                                <template x-for="tag in scrapeDetailFile?.metadata?.tags || []" :key="tag">
+                                    <span class="scrape-tag-chip" x-text="tag"></span>
+                                </template>
+                                <span class="scrape-meta-value"
+                                      x-show="(scrapeDetailFile?.metadata?.tags || []).length === 0">暂无标签</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="scrape-detail-loading" x-show="scrapeDetailLoading">
+                <div class="loading-spinner"></div>
+                <div>正在读取已刮削内容...</div>
+            </div>
+
+            <div class="modal-actions">
+                <button class="primary" @click="closeScrapeDetail()">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scrape Poster Preview Modal -->
+    <div x-show="showScrapePosterModal" class="modal-overlay modal-overlay-immersive" @click.self="closeScrapePosterPreview()">
+        <div class="scrape-poster-lightbox">
+            <img class="scrape-poster-lightbox-image"
+                 :src="scrapeDetailPosterPreview || ''"
+                 alt="刮削海报大图">
+            <button type="button" class="secondary scrape-poster-lightbox-close" @click="closeScrapePosterPreview()">关闭</button>
         </div>
     </div>
 

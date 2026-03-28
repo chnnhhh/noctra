@@ -210,6 +210,24 @@ def test_scrape_status_static_branch_uses_single_root_node():
     assert branch.index('<div class="status-static">') < branch.index('<span class="badge"')
 
 
+def test_scrape_success_action_branch_keeps_direct_clickable_status_trigger():
+    html = (PROJECT_ROOT / "static/index.html").read_text(encoding="utf-8")
+
+    branch_start = html.index('<template x-if="hasScrapeStatusAction(file)">')
+    branch = html[branch_start:branch_start + 3200]
+
+    assert "file.scrape_status === 'success'" in branch
+    assert '@click="showScrapeDetail(file)"' in branch
+    assert branch.index('class="status-trigger clickable"') < branch.index('<div class="status-actions">')
+
+
+def test_status_action_mobile_layout_overrides_generic_button_width():
+    css = (PROJECT_ROOT / "static/css/index.css").read_text(encoding="utf-8")
+
+    assert ".status-action .status-trigger" in css
+    assert ".status-action .icon-action" in css
+
+
 def test_load_scrape_files_clears_stale_batch_overlay_when_no_active_job():
     script = textwrap.dedent(
         """
@@ -355,3 +373,148 @@ def test_scrape_success_rows_offer_rescrape_action():
     assert result["actions"] == [
         {"key": "scrape", "label": "重新刮削", "icon": "sparkles"}
     ]
+
+
+def test_show_scrape_detail_modal_loads_preview_payload():
+    script = textwrap.dedent(
+        """
+        import fs from 'node:fs';
+        import vm from 'node:vm';
+
+        const context = vm.createContext({
+          console,
+          setTimeout,
+          clearTimeout,
+          setInterval,
+          clearInterval,
+          Intl,
+          URLSearchParams,
+          Date,
+        });
+        context.window = context;
+        context.globalThis = context;
+
+        for (const path of ['static/js/state.js', 'static/js/features.js']) {
+          const source = fs.readFileSync(path, 'utf8');
+          vm.runInContext(source, context, { filename: path });
+        }
+
+        context.ScrapeAPI = {
+          async getDetail(fileId) {
+            return {
+              file_id: fileId,
+              code: 'EBOD-829',
+              poster_url: '/api/scrape/13/artifacts/EBOD-829-poster.jpg',
+              files: ['EBOD-829.mp4', 'EBOD-829.nfo'],
+              metadata: {
+                code: 'EBOD-829',
+                plot: '测试剧情简介',
+                actors: ['演员A'],
+                release_date: '2021-06-13',
+                runtime: '140',
+                tags: ['巨乳'],
+              },
+            };
+          },
+        };
+
+        function mergeSection(target, section) {
+          Object.defineProperties(target, Object.getOwnPropertyDescriptors(section));
+          return target;
+        }
+
+        const app = {};
+        mergeSection(app, context.NoctraState.createState());
+        mergeSection(app, context.NoctraFeatures.createFeatures());
+
+        await app.showScrapeDetail({
+          id: 13,
+          identified_code: 'EBOD-829',
+          scrape_status: 'success',
+        });
+
+        console.log(JSON.stringify({
+          showScrapeDetailModal: app.showScrapeDetailModal,
+          scrapeDetailCode: app.scrapeDetailFile?.metadata?.code || null,
+          scrapeDetailPoster: app.scrapeDetailFile?.poster_url || null,
+          fileCount: app.scrapeDetailFile?.files?.length || 0,
+        }));
+        """
+    )
+
+    result = run_frontend_script(script)
+
+    assert result["showScrapeDetailModal"] is True
+    assert result["scrapeDetailCode"] == "EBOD-829"
+    assert result["scrapeDetailPoster"] == "/api/scrape/13/artifacts/EBOD-829-poster.jpg"
+    assert result["fileCount"] == 2
+
+
+def test_scrape_detail_groups_preview_images_into_summary():
+    script = textwrap.dedent(
+        """
+        import fs from 'node:fs';
+        import vm from 'node:vm';
+
+        const context = vm.createContext({
+          console,
+          setTimeout,
+          clearTimeout,
+          setInterval,
+          clearInterval,
+          Intl,
+          URLSearchParams,
+          Date,
+        });
+        context.window = context;
+        context.globalThis = context;
+
+        for (const path of ['static/js/render.js']) {
+          const source = fs.readFileSync(path, 'utf8');
+          vm.runInContext(source, context, { filename: path });
+        }
+
+        const render = context.NoctraRender.createRender();
+        const grouped = render.getScrapeDetailArtifacts({
+          files: [
+            'EBOD-829.mp4',
+            'EBOD-829.nfo',
+            'EBOD-829-poster.jpg',
+            'EBOD-829-fanart.jpg',
+            'EBOD-829-preview-01.jpg',
+            'EBOD-829-preview-02.jpg',
+            'EBOD-829-preview-03.jpg',
+          ],
+        });
+
+        console.log(JSON.stringify(grouped));
+        """
+    )
+
+    result = run_frontend_script(script)
+
+    assert result["primaryFiles"] == [
+        "EBOD-829.mp4",
+        "EBOD-829.nfo",
+        "EBOD-829-poster.jpg",
+        "EBOD-829-fanart.jpg",
+    ]
+    assert result["previewCount"] == 3
+
+
+def test_scrape_detail_modal_markup_contains_preview_sections():
+    html = (PROJECT_ROOT / "static/index.html").read_text(encoding="utf-8")
+
+    assert "刮削内容概览" in html
+    assert "封面预览" in html
+    assert "生成文件" in html
+    assert "重点文件" in html
+    assert "预览图" in html
+
+
+def test_scrape_detail_modal_uses_compact_layout_styles():
+    css = (PROJECT_ROOT / "static/css/index.css").read_text(encoding="utf-8")
+
+    assert ".modal.scrape-detail-modal" in css
+    assert "max-width: 880px;" in css
+    assert "grid-template-columns: 220px minmax(0, 1fr);" in css

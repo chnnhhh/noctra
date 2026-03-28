@@ -137,6 +137,11 @@
                 return (batchItem && batchItem.status === 'failed') || file.scrape_status === 'failed';
             },
 
+            canOpenScrapeDetail(file) {
+                const batchItem = this.getScrapeBatchItem(file);
+                return (batchItem && batchItem.status === 'success') || file.scrape_status === 'success';
+            },
+
             getScrapeStatusActions(file) {
                 const batchItem = this.getScrapeBatchItem(file);
                 if (batchItem) {
@@ -159,6 +164,17 @@
                     ];
                 }
                 return [];
+            },
+
+            getScrapeStatusAriaLabel(file) {
+                const label = this.getScrapeStatusText(file);
+                if (this.canOpenScrapeErrorDetails(file)) {
+                    return `${label}，点击查看失败详情`;
+                }
+                if (this.canOpenScrapeDetail(file)) {
+                    return `${label}，点击查看刮削内容`;
+                }
+                return label;
             },
 
             hasScrapeStatusAction(file) {
@@ -211,6 +227,25 @@
 
             getScrapeErrorUserMessage(file) {
                 return file?.scrape_error_user_message || '刮削过程中发生未知错误';
+            },
+
+            getScrapeDetailArtifacts(detail) {
+                const files = Array.isArray(detail?.files) ? detail.files : [];
+                const primaryFiles = [];
+                let previewCount = 0;
+
+                files.forEach(filename => {
+                    if (filename.includes('-preview-')) {
+                        previewCount += 1;
+                        return;
+                    }
+                    primaryFiles.push(filename);
+                });
+
+                return {
+                    primaryFiles,
+                    previewCount
+                };
             },
 
             isBatchItemBlocking(file) {

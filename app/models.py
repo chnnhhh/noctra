@@ -177,6 +177,23 @@ class ScrapeResponse(BaseModel):
     logs: list[ScrapeLogEntry] = Field(default_factory=list)
 
 
+class ScrapeDetailMetadata(BaseModel):
+    code: str
+    plot: Optional[str] = None
+    actors: list[str] = Field(default_factory=list)
+    release_date: Optional[str] = None
+    runtime: Optional[str] = None
+    tags: list[str] = Field(default_factory=list)
+
+
+class ScrapeDetailResponse(BaseModel):
+    file_id: int
+    code: str
+    poster_url: Optional[str] = None
+    files: list[str] = Field(default_factory=list)
+    metadata: ScrapeDetailMetadata
+
+
 class ScrapeBatchResultItem(BaseModel):
     """批量刮削结果项"""
     file_id: int

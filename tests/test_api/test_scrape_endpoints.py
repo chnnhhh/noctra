@@ -5,6 +5,7 @@
 # full scraping runtime.
 
 import json
+from pathlib import Path
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -410,6 +411,89 @@ def test_get_scrape_list_db_error(mock_connect):
 
     assert response.status_code == 500
     assert 'Database error' in response.json()['detail']
+
+
+@patch('app.main.get_file_by_id', new_callable=AsyncMock)
+def test_get_scrape_detail_reads_nfo_and_directory_contents(mock_get_file_by_id, tmp_path):
+    """GET /api/scrape/{file_id}/detail should expose poster, files, and parsed NFO metadata."""
+    from app.main import app
+
+    target_dir = tmp_path / "EBOD-829"
+    target_dir.mkdir()
+    (target_dir / "EBOD-829.mp4").write_bytes(b"video")
+    (target_dir / "EBOD-829-poster.jpg").write_bytes(b"poster")
+    (target_dir / "EBOD-829-fanart.jpg").write_bytes(b"fanart")
+    (target_dir / "EBOD-829-preview-01.jpg").write_bytes(b"preview")
+    (target_dir / "EBOD-829.nfo").write_text(
+        """<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<movie>
+  <plot><![CDATA[测试剧情简介]]></plot>
+  <title>EBOD-829</title>
+  <actor><name>演员A</name><type>Actor</type></actor>
+  <actor><name>演员B</name><type>Actor</type></actor>
+  <premiered>2021-06-13</premiered>
+  <runtime>140</runtime>
+  <genre>巨乳</genre>
+  <genre>单体作品</genre>
+</movie>
+""",
+        encoding="utf-8",
+    )
+
+    mock_get_file_by_id.return_value = {
+        'id': 13,
+        'identified_code': 'EBOD-829',
+        'target_path': str(target_dir / 'EBOD-829.mp4'),
+        'status': 'processed',
+        'scrape_status': 'success',
+    }
+
+    client = TestClient(app, raise_server_exceptions=False)
+    response = client.get('/api/scrape/13/detail')
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data['file_id'] == 13
+    assert data['code'] == 'EBOD-829'
+    assert data['poster_url'] == '/api/scrape/13/artifacts/EBOD-829-poster.jpg'
+    assert data['metadata']['code'] == 'EBOD-829'
+    assert data['metadata']['plot'] == '测试剧情简介'
+    assert data['metadata']['actors'] == ['演员A', '演员B']
+    assert data['metadata']['release_date'] == '2021-06-13'
+    assert data['metadata']['runtime'] == '140'
+    assert data['metadata']['tags'] == ['巨乳', '单体作品']
+    assert data['files'] == [
+        'EBOD-829-fanart.jpg',
+        'EBOD-829-preview-01.jpg',
+        'EBOD-829-poster.jpg',
+        'EBOD-829.mp4',
+        'EBOD-829.nfo',
+    ]
+
+
+@patch('app.main.get_file_by_id', new_callable=AsyncMock)
+def test_get_scrape_artifact_returns_image_file(mock_get_file_by_id, tmp_path):
+    """GET /api/scrape/{file_id}/artifacts/{filename} should stream files from the target directory."""
+    from app.main import app
+
+    target_dir = tmp_path / "ABP-001"
+    target_dir.mkdir()
+    poster_path = target_dir / "ABP-001-poster.jpg"
+    poster_path.write_bytes(b"poster-image")
+
+    mock_get_file_by_id.return_value = {
+        'id': 7,
+        'identified_code': 'ABP-001',
+        'target_path': str(target_dir / 'ABP-001.mp4'),
+        'status': 'processed',
+        'scrape_status': 'success',
+    }
+
+    client = TestClient(app, raise_server_exceptions=False)
+    response = client.get('/api/scrape/7/artifacts/ABP-001-poster.jpg')
+
+    assert response.status_code == 200
+    assert response.content == b'poster-image'
 
 
 # ---------------------------------------------------------------------------

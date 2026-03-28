@@ -6,6 +6,8 @@ from functools import cmp_to_key
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+from urllib.parse import quote
+from xml.etree import ElementTree as ET
 
 import aiosqlite
 from fastapi import FastAPI, HTTPException, Query
@@ -25,6 +27,8 @@ from app.models import (
     OrganizeRequest,
     OrganizeResult,
     ScanResult,
+    ScrapeDetailMetadata,
+    ScrapeDetailResponse,
     ScrapeLogEntry,
     ScrapeJobCancelResult,
     ScrapeJobCreateRequest,
@@ -241,6 +245,145 @@ def _parse_scrape_logs(raw: Optional[str]) -> list[ScrapeLogEntry]:
         except (TypeError, ValueError, ValidationError):
             continue
     return parsed_logs
+
+
+def _get_scrape_output_dir(file_record: dict) -> Optional[Path]:
+    target_path = file_record.get("target_path")
+    if not target_path:
+        return None
+
+    path = Path(target_path)
+    return path if path.is_dir() else path.parent
+
+
+def _artifact_sort_key(path: Path) -> tuple[int, str]:
+    name = path.name.lower()
+    suffix = path.suffix.lower()
+
+    if "-fanart" in name:
+        bucket = 0
+    elif "-preview-" in name:
+        bucket = 1
+    elif "-poster" in name or "-cover" in name:
+        bucket = 2
+    elif suffix in {".mp4", ".mkv", ".avi", ".mov", ".wmv", ".iso"}:
+        bucket = 3
+    elif suffix == ".nfo":
+        bucket = 4
+    else:
+        bucket = 5
+
+    return bucket, name
+
+
+def _find_scrape_nfo(output_dir: Path, code: str) -> Optional[Path]:
+    if code:
+        preferred = output_dir / f"{code}.nfo"
+        if preferred.is_file():
+            return preferred
+
+    for candidate in sorted(output_dir.glob("*.nfo")):
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _find_scrape_poster(output_dir: Path, code: str) -> Optional[Path]:
+    preferred_names: list[str] = []
+    if code:
+        preferred_names.extend(
+            [
+                f"{code}-poster.jpg",
+                f"{code}-poster.jpeg",
+                f"{code}-poster.png",
+                f"{code}-poster.webp",
+            ]
+        )
+
+    for filename in preferred_names:
+        candidate = output_dir / filename
+        if candidate.is_file():
+            return candidate
+
+    for pattern in ("*-poster.*", "*-cover.*", "*-fanart.*"):
+        for candidate in sorted(output_dir.glob(pattern)):
+            if candidate.is_file():
+                return candidate
+    return None
+
+
+def _first_xml_text(node: ET.Element, *paths: str) -> Optional[str]:
+    for path in paths:
+        candidate = node.find(path)
+        if candidate is None:
+            continue
+        text = (candidate.text or "").strip()
+        if text:
+            return text
+    return None
+
+
+def _collect_xml_texts(node: ET.Element, path: str) -> list[str]:
+    values: list[str] = []
+    for element in node.findall(path):
+        text = (element.text or "").strip()
+        if text and text not in values:
+            values.append(text)
+    return values
+
+
+def _read_scrape_detail_metadata(nfo_path: Optional[Path], fallback_code: str) -> ScrapeDetailMetadata:
+    empty_metadata = ScrapeDetailMetadata(code=fallback_code or "")
+    if not nfo_path or not nfo_path.is_file():
+        return empty_metadata
+
+    try:
+        root = ET.parse(nfo_path).getroot()
+    except ET.ParseError:
+        return empty_metadata
+
+    actors: list[str] = []
+    for actor_node in root.findall("actor"):
+        actor_name = _first_xml_text(actor_node, "name")
+        if actor_name and actor_name not in actors:
+            actors.append(actor_name)
+
+    tags = _collect_xml_texts(root, "genre")
+    tags.extend(tag for tag in _collect_xml_texts(root, "tag") if tag not in tags)
+
+    code = fallback_code or _first_xml_text(root, "sorttitle", "id", "title", "originaltitle") or ""
+
+    return ScrapeDetailMetadata(
+        code=code,
+        plot=_first_xml_text(root, "plot", "outline"),
+        actors=actors,
+        release_date=_first_xml_text(root, "releasedate", "premiered"),
+        runtime=_first_xml_text(root, "runtime"),
+        tags=tags,
+    )
+
+
+def _resolve_scrape_artifact_path(file_record: dict, filename: str) -> Optional[Path]:
+    safe_name = Path(filename).name
+    if safe_name != filename:
+        return None
+
+    output_dir = _get_scrape_output_dir(file_record)
+    if not output_dir:
+        return None
+
+    try:
+        resolved_dir = output_dir.resolve(strict=True)
+    except FileNotFoundError:
+        return None
+
+    artifact_path = (resolved_dir / safe_name).resolve()
+    try:
+        artifact_path.relative_to(resolved_dir)
+    except ValueError:
+        return None
+
+    return artifact_path if artifact_path.is_file() else None
 
 
 async def get_processed_history_codes() -> set[str]:
@@ -998,6 +1141,53 @@ async def get_scrape_list(
 
     active_job = await get_active_scrape_job()
     return {"total": total, "items": items, "stats": stats, "active_job": active_job}
+
+
+@app.get("/api/scrape/{file_id}/detail", response_model=ScrapeDetailResponse)
+async def get_scrape_detail(file_id: int):
+    file_record = await get_file_by_id(file_id)
+    if not file_record:
+        raise HTTPException(status_code=404, detail="文件不存在")
+
+    output_dir = _get_scrape_output_dir(file_record)
+    if not output_dir or not output_dir.exists():
+        raise HTTPException(status_code=404, detail="刮削产物不存在")
+
+    code = file_record.get("identified_code") or Path(file_record.get("target_path") or "").stem
+    files = [
+        path.name
+        for path in sorted(
+            (candidate for candidate in output_dir.iterdir() if candidate.is_file()),
+            key=_artifact_sort_key,
+        )
+    ]
+    metadata = _read_scrape_detail_metadata(_find_scrape_nfo(output_dir, code), code)
+    poster_path = _find_scrape_poster(output_dir, code)
+
+    return ScrapeDetailResponse(
+        file_id=file_id,
+        code=code or "",
+        poster_url=(
+            f"/api/scrape/{file_id}/artifacts/{quote(poster_path.name)}"
+            if poster_path
+            else None
+        ),
+        files=files,
+        metadata=metadata,
+    )
+
+
+@app.get("/api/scrape/{file_id}/artifacts/{filename}")
+async def get_scrape_artifact(file_id: int, filename: str):
+    file_record = await get_file_by_id(file_id)
+    if not file_record:
+        raise HTTPException(status_code=404, detail="文件不存在")
+
+    artifact_path = _resolve_scrape_artifact_path(file_record, filename)
+    if not artifact_path:
+        raise HTTPException(status_code=404, detail="刮削产物不存在")
+
+    return FileResponse(path=str(artifact_path), filename=artifact_path.name)
 
 
 @app.post("/api/scrape/jobs", response_model=ScrapeJobSnapshot)

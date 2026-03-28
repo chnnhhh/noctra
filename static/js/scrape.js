@@ -33,6 +33,15 @@ const ScrapeAPI = {
         return data;
     },
 
+    async getDetail(fileId) {
+        const response = await fetch(`/api/scrape/${fileId}/detail`);
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.detail || '获取刮削详情失败');
+        }
+        return data;
+    },
+
     async getJob(jobId) {
         const response = await fetch(`/api/scrape/jobs/${jobId}`);
         const data = await response.json();
