@@ -1,6 +1,7 @@
-from pydantic import BaseModel
-from typing import Optional
 from datetime import datetime
+from typing import Optional
+
+from pydantic import BaseModel, Field
 
 
 class FileRecord(BaseModel):
@@ -21,6 +22,8 @@ class StatsSummary(BaseModel):
     unidentified: int
     pending: int
     processed: int
+    scraped: int = 0
+    scrape_failed: int = 0
 
 
 class ScanResult(StatsSummary):
@@ -93,3 +96,118 @@ class DeleteFileResult(BaseModel):
 class HistoryResult(StatsSummary):
     skipped: int
     files: list[FileRecord]
+
+
+# ===== Scraping Models (MVP) =====
+
+
+class ScrapeLogEntry(BaseModel):
+    at: str
+    level: str
+    stage: str
+    source: Optional[str] = None
+    message: str
+    progress_percent: Optional[int] = None
+
+
+class ScrapeListItem(BaseModel):
+    """刮削列表项"""
+    file_id: int
+    code: str
+    target_path: str
+    original_path: str
+    status: str
+    scrape_status: str  # pending, success, failed
+    last_scrape_at: Optional[str] = None
+    scrape_started_at: Optional[str] = None
+    scrape_finished_at: Optional[str] = None
+    scrape_stage: Optional[str] = None
+    scrape_source: Optional[str] = None
+    scrape_error: Optional[str] = None
+    scrape_error_user_message: Optional[str] = None
+    scrape_logs: list[ScrapeLogEntry] = Field(default_factory=list)
+
+
+class ScrapeJobCreateRequest(BaseModel):
+    file_ids: list[int]
+
+
+class ScrapeJobItem(BaseModel):
+    id: int
+    code: Optional[str] = None
+    target_path: Optional[str] = None
+    status: str
+    stage: Optional[str] = None
+    source: Optional[str] = None
+    progress_percent: int = 0
+    user_message: Optional[str] = None
+    technical_error: Optional[str] = None
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+
+
+class ScrapeJobSnapshot(BaseModel):
+    id: str
+    status: str
+    total: int
+    processed: int
+    succeeded: int
+    failed: int
+    created_at: str
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+    current_file_id: Optional[int] = None
+    current_file_code: Optional[str] = None
+    current_stage: Optional[str] = None
+    current_source: Optional[str] = None
+    current_progress_percent: int = 0
+    recent_logs: list[ScrapeLogEntry] = Field(default_factory=list)
+    items: list[ScrapeJobItem] = Field(default_factory=list)
+
+
+class ScrapeJobCancelResult(BaseModel):
+    id: str
+    status: str
+    message: str
+
+
+class ScrapeResponse(BaseModel):
+    """单条刮削响应"""
+    success: bool
+    code: Optional[str] = None
+    error: Optional[str] = None
+    user_message: Optional[str] = None
+    stage: Optional[str] = None
+    source: Optional[str] = None
+    logs: list[ScrapeLogEntry] = Field(default_factory=list)
+
+
+class ScrapeDetailMetadata(BaseModel):
+    code: str
+    plot: Optional[str] = None
+    actors: list[str] = Field(default_factory=list)
+    release_date: Optional[str] = None
+    runtime: Optional[str] = None
+    tags: list[str] = Field(default_factory=list)
+
+
+class ScrapeDetailResponse(BaseModel):
+    file_id: int
+    code: str
+    poster_url: Optional[str] = None
+    files: list[str] = Field(default_factory=list)
+    metadata: ScrapeDetailMetadata
+
+
+class ScrapeBatchResultItem(BaseModel):
+    """批量刮削结果项"""
+    file_id: int
+    success: bool
+    error: Optional[str] = None
+
+
+class ScrapeBatchResult(BaseModel):
+    """批量刮削响应"""
+    success_count: int
+    failed_count: int
+    results: list[ScrapeBatchResultItem]

@@ -18,60 +18,49 @@
             </div>
             <div class="header-nav">
                 <a href="#" @click.prevent="switchView('scan')" :class="{ 'active': view === 'scan' }">📂 扫描</a>
-                <a href="#" @click.prevent="switchView('history')" :class="{ 'active': view === 'history' }">📋 历史</a>
+                <a href="#" class="nav-scrape" @click.prevent="switchView('scrape')" :class="{ 'active': view === 'scrape' }">
+                    <span class="nav-icon" x-html="getUiIcon('scrape')"></span> 刮削
+                </a>
             </div>
         </div>
 
-        <div class="stats">
-            <div class="stat-card total" @mousemove="updateStatGlow($event)">
-                <div class="stat-card__meta">
-                    <span class="stat-card__meta-dot"></span>
-                    <span>SCAN / TOTAL</span>
-                </div>
-                <div class="stat-card__id">M-01</div>
-                <div class="stat-value" x-text="stats.total_files">0</div>
-                <div class="stat-label">总文件数</div>
-                <div class="stat-subtext">当前扫描结果</div>
-            </div>
-            <div class="stat-card identified" @mousemove="updateStatGlow($event)">
-                <div class="stat-card__meta">
-                    <span class="stat-card__meta-dot"></span>
-                    <span>RECOGNITION</span>
-                </div>
-                <div class="stat-card__id">M-02</div>
-                <div class="stat-value" x-text="stats.identified">0</div>
-                <div class="stat-label">已识别</div>
-                <div class="stat-subtext">已完成番号解析</div>
-            </div>
-            <div class="stat-card unidentified" @mousemove="updateStatGlow($event)">
-                <div class="stat-card__meta">
-                    <span class="stat-card__meta-dot"></span>
-                    <span>UNRESOLVED</span>
-                </div>
-                <div class="stat-card__id">M-03</div>
-                <div class="stat-value" x-text="stats.unidentified">0</div>
-                <div class="stat-label">未识别</div>
-                <div class="stat-subtext">需要人工确认</div>
-            </div>
-            <div class="stat-card pending" @mousemove="updateStatGlow($event)">
-                <div class="stat-card__meta">
-                    <span class="stat-card__meta-dot"></span>
-                    <span>QUEUE / PENDING</span>
-                </div>
-                <div class="stat-card__id">M-04</div>
-                <div class="stat-value" x-text="stats.pending">0</div>
-                <div class="stat-label">待处理</div>
-                <div class="stat-subtext">等待整理执行</div>
-            </div>
-            <div class="stat-card processed" @mousemove="updateStatGlow($event)">
-                <div class="stat-card__meta">
-                    <span class="stat-card__meta-dot"></span>
-                    <span>ARCHIVE / DONE</span>
-                </div>
-                <div class="stat-card__id">M-05</div>
-                <div class="stat-value" x-text="stats.processed">0</div>
-                <div class="stat-label">已处理</div>
-                <div class="stat-subtext">已完成落盘</div>
+        <div class="stats-pipeline">
+            <div class="stats-flow-row stats-flow-row--main">
+                <template x-for="card in summaryMainFlow" :key="card.key">
+                    <div class="summary-flow-slot summary-flow-slot--main"
+                         :style="getSummaryFlowPlacement(card)">
+                        <div class="summary-link summary-link--main" x-show="card.column > 1" aria-hidden="true">
+                            <span class="summary-link__line"></span>
+                            <span class="summary-link__arrow"></span>
+                        </div>
+                        <div class="stat-card summary-card"
+                             :class="card.variant"
+                             @mousemove="updateStatGlow($event)">
+                            <div class="summary-card__content">
+                                <div class="stat-card__meta">
+                                    <span class="stat-card__meta-dot"></span>
+                                    <span x-text="card.meta"></span>
+                                </div>
+                                <div class="stat-card__id" x-text="card.id"></div>
+                                <div class="stat-value" x-text="card.value">0</div>
+                                <div class="stat-label" x-text="card.label"></div>
+                                <div class="stat-subtext" x-text="card.subtext"></div>
+                            </div>
+                            <div class="summary-card__footer"
+                                 :class="[card.footerVariant || '', !card.footerLabel ? 'summary-card__footer--empty' : '']">
+                                <template x-if="card.footerLabel">
+                                    <span class="summary-card__footer-dot" aria-hidden="true"></span>
+                                </template>
+                                <template x-if="card.footerLabel">
+                                    <span class="summary-card__footer-label" x-text="card.footerLabel"></span>
+                                </template>
+                                <template x-if="card.footerLabel">
+                                    <span class="summary-card__footer-value" x-text="card.footerValue">0</span>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                </template>
             </div>
         </div>
 
@@ -111,21 +100,16 @@
             </div>
         </div>
 
-        <div class="panel-surface">
+        <div class="panel-surface" x-show="view === 'scan'">
             <div class="table-header">
                 <div>
-                    <div class="table-title" x-text="view === 'scan' ? '扫描结果' : '整理历史'"></div>
-                    <div class="table-subtitle" x-text="view === 'scan'
-                        ? '扫描后会按番号整理到目标目录，未识别文件保留原样，已存在文件不会重复处理。'
-                        : '这里只展示已处理的记录，方便快速回看最近整理结果。'"></div>
+                    <div class="table-title">扫描结果</div>
+                    <div class="table-subtitle">扫描后会按番号整理到目标目录，未识别文件保留原样，已存在文件不会重复处理。</div>
                 </div>
                 <div class="table-toolbar">
-                    <div class="toolbar-pill" x-show="view === 'scan' && !loading && files.length > 0">
+                    <div class="toolbar-pill" x-show="!loading && files.length > 0">
                         当前筛选
                         <span x-text="getFilterLabel(currentFilter)"></span>
-                    </div>
-                    <div class="toolbar-pill" x-show="view === 'history'">
-                        仅显示已处理记录
                     </div>
                 </div>
             </div>
@@ -134,22 +118,36 @@
                  x-show="view === 'scan' && batchPanelVisible"
                  :data-state="batchPanelState"
                  :class="[batchJob ? batchJob.status : '', batchExpanded ? 'expanded' : 'collapsed', batchExpanding ? 'expanding' : '']">
-                <div class="batch-rail-header">
-                    <button class="batch-rail-toggle" @click="toggleBatchExpanded()" :aria-expanded="batchExpanded">
+                <div class="batch-rail-header"
+                     role="button"
+                     tabindex="0"
+                     @click="toggleBatchExpanded()"
+                     @keydown.enter.prevent="toggleBatchExpanded()"
+                     @keydown.space.prevent="toggleBatchExpanded()"
+                     :aria-expanded="batchExpanded"
+                     :aria-label="batchExpanded ? '收起整理执行状态' : '展开整理执行状态'">
+                    <div class="batch-rail-toggle">
                         <span class="batch-summary-line">
                             <span class="batch-status-chip"
                                   :class="`status-${batchJob.status}`"
                                   x-text="getBatchJobStatusLabel(batchJob.status)"></span>
                             <span>批量整理 <span x-text="batchJob.processed">0</span> / <span x-text="batchJob.total">0</span></span>
                         </span>
-                        <span class="batch-rail-caret" x-html="getUiIcon('chevron_down')"></span>
-                    </button>
+                    </div>
                     <div class="batch-rail-actions">
                         <button class="rail-button"
                                 x-show="batchCancelable"
-                                @click="cancelBatch"
+                                @click.stop="cancelBatch"
                                 :disabled="batchCancelling">
                             <span x-text="batchCancelling ? '取消中...' : '取消'"></span>
+                        </button>
+                        <button class="rail-button batch-panel-corner-toggle"
+                                type="button"
+                                @click.stop="toggleBatchExpanded()"
+                                :aria-expanded="batchExpanded"
+                                :aria-label="batchExpanded ? '收起整理执行状态' : '展开整理执行状态'">
+                            <span class="batch-panel-corner-toggle-icon"
+                                  x-html="getUiIcon(batchExpanded ? 'chevron_up' : 'chevron_down')"></span>
                         </button>
                     </div>
                 </div>
@@ -182,19 +180,19 @@
 
             <div class="table-meta toolbar" x-show="!loading && files.length > 0">
                 <div class="toolbar-left">
-                    <div x-show="view === 'scan'" class="filter filter-subtle toolbar-filter">
+                    <div class="filter filter-subtle toolbar-filter">
                         <span class="filter-label">筛选</span>
                         <button class="filter-button" :class="{ 'active': currentFilter === 'all' }" @click="setFilter('all')">全部</button>
                         <button class="filter-button" :class="{ 'active': currentFilter === 'identified' }" @click="setFilter('identified')">已识别</button>
                         <button class="filter-button" :class="{ 'active': currentFilter === 'unidentified' }" @click="setFilter('unidentified')">未识别</button>
-                        <button class="filter-button" :class="{ 'active': currentFilter === 'pending' }" @click="setFilter('pending')">待处理</button>
+                        <button class="filter-button" :class="{ 'active': currentFilter === 'pending' }" @click="setFilter('pending')">待整理</button>
                         <button class="filter-button" :class="{ 'active': currentFilter === 'duplicate' }" @click="setFilter('duplicate')">重复</button>
                         <button class="filter-button" :class="{ 'active': currentFilter === 'target_exists' }" @click="setFilter('target_exists')">已存在</button>
                     </div>
                 </div>
 
                 <div class="toolbar-right" x-show="filteredFiles.length > 0">
-                    <div class="page-inline-status" x-show="view === 'scan' && hasSelected">
+                    <div class="page-inline-status" x-show="hasSelected">
                         <span class="selection-inline-count">已选 <span x-text="selectedCount">0</span> 项</span>
                         <span class="selection-inline-divider">·</span>
                         <div class="selection-inline-actions">
@@ -205,16 +203,36 @@
                     </div>
                     <div class="control-rail">
                         <span class="control-label">排序</span>
-                        <div class="sort-composer">
-                            <span class="sort-icon" x-html="getSortFieldIcon(sortField)"></span>
-                            <select class="sort-select" :value="sortField" @change="setSortField($event.target.value)">
+                        <div class="sort-composer" x-data="{ open: false }" @keydown.escape.prevent.stop="open = false">
+                            <button class="sort-menu-button"
+                                    type="button"
+                                    @click="open = !open"
+                                    :aria-expanded="open"
+                                    aria-haspopup="menu">
+                                <span class="sort-icon" x-html="getSortFieldIcon(sortField)"></span>
+                                <span class="sort-menu-label" x-text="getSortFieldLabel(sortFieldOptions, sortField)"></span>
+                                <span class="sort-menu-caret" x-html="getUiIcon(open ? 'chevron_up' : 'chevron_down')"></span>
+                            </button>
+                            <div class="sort-menu-panel"
+                                 x-show="open"
+                                 x-transition.origin.top.left
+                                 @click.outside="open = false"
+                                 style="display: none;">
                                 <template x-for="option in sortFieldOptions" :key="option.value">
-                                    <option :value="option.value" x-text="option.label"></option>
+                                    <button class="sort-menu-item"
+                                            type="button"
+                                            :class="{ 'active': sortField === option.value }"
+                                            @click="setSortField(option.value); open = false">
+                                        <span class="sort-menu-check" aria-hidden="true">
+                                            <span x-show="sortField === option.value" x-html="getUiIcon('check')"></span>
+                                        </span>
+                                        <span class="sort-menu-item-label" x-text="option.label"></span>
+                                    </button>
                                 </template>
-                            </select>
+                            </div>
                             <button class="rail-button sort-direction-button"
                                     @click="toggleSortDirection()"
-                                    :disabled="view === 'scan' && sortField === 'default'"
+                                    :disabled="sortField === 'default'"
                                     :title="sortDirection === 'desc' ? '降序' : '升序'">
                                 <span class="icon-glyph" x-html="sortDirection === 'desc' ? getUiIcon('sort_desc') : getUiIcon('sort_asc')"></span>
                             </button>
@@ -244,11 +262,11 @@
             </div>
 
             <div x-show="!loading && filteredFiles.length > 0">
-                <div class="table-container" :class="{ 'history-mode': view === 'history' }">
-                    <table>
+                <div class="table-container">
+                    <table class="scan-table">
                         <thead>
                             <tr>
-                                <th class="col-select" x-show="view === 'scan'">
+                                <th class="col-select">
                                     <label class="checkbox-hit"
                                            :class="{ 'disabled': currentPageSelectableFiles.length === 0 }">
                                         <input type="checkbox"
@@ -283,20 +301,14 @@
                                         <span class="th-sub">Status</span>
                                     </span>
                                 </th>
-                                <th class="col-time" x-show="view === 'history'">
-                                    <span class="th-flow">
-                                        <span class="th-main">整理时间</span>
-                                        <span class="th-sub">Processed</span>
-                                    </span>
-                                </th>
                             </tr>
                         </thead>
                         <tbody>
                             <template x-for="file in paginatedFiles" :key="file.id">
                                 <tr class="row"
-                                    :class="{ 'row-active': activeStatusMenuId === file.id, 'selected': !!selectedFiles[file.id], 'history-row': view === 'history' }"
+                                    :class="{ 'row-active': activeStatusMenuId === file.id, 'selected': !!selectedFiles[file.id] }"
                                     @mousemove="updateRowGlow($event)">
-                                    <td class="cell-select" x-show="view === 'scan'">
+                                    <td class="cell-select">
                                         <label class="checkbox-hit"
                                                :class="{ 'disabled': !canSelectFile(file) }">
                                             <input type="checkbox"
@@ -367,10 +379,364 @@
                                             <span class="badge" :class="getBadgeClass(file)" x-text="getDisplayStatusText(file)"></span>
                                         </template>
                                     </td>
-                                    <td class="cell-time" x-show="view === 'history'">
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div x-show="!loading && filteredFiles.length === 0" class="empty">
+                <div class="empty-icon">📂</div>
+                <div style="margin-bottom: 8px;">暂无文件数据</div>
+                <div style="color: #718096; font-size: 14px;">点击上方"扫描目录"开始整理</div>
+            </div>
+
+            <div x-show="loading" class="loading">
+                <div class="loading-spinner"></div>
+                <div style="margin-top: 16px;" x-text="loadingText">正在加载...</div>
+            </div>
+        </div>
+
+        <!-- Scrape Tab -->
+        <div x-show="view === 'scrape'" class="panel-surface">
+            <div class="table-header">
+                <div>
+                    <div class="table-title">刮削管理</div>
+                    <div class="table-subtitle">对已整理的文件进行元数据刮削，补全影片信息。</div>
+                </div>
+                <div class="table-toolbar">
+                    <div class="toolbar-pill" x-show="!loading && scrapeFilesCache.length > 0">
+                        当前筛选
+                        <span x-text="getScrapeFilterLabel(scrapeFilter)"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="batch-panel"
+                 x-show="view === 'scrape' && scrapeBatchPanelVisible"
+                 :data-state="scrapeBatchPanelState"
+                 :class="[scrapeBatchJob ? scrapeBatchJob.status : '', scrapeBatchExpanded ? 'expanded' : 'collapsed', scrapeBatchExpanding ? 'expanding' : '']">
+                <div class="batch-rail-header"
+                     role="button"
+                     tabindex="0"
+                     @click="toggleScrapeBatchExpanded()"
+                     @keydown.enter.prevent="toggleScrapeBatchExpanded()"
+                     @keydown.space.prevent="toggleScrapeBatchExpanded()"
+                     :aria-expanded="scrapeBatchExpanded"
+                     :aria-label="scrapeBatchExpanded ? '收起刮削执行状态' : '展开刮削执行状态'">
+                    <div class="batch-rail-toggle">
+                        <span class="batch-summary-line">
+                            <span class="batch-status-chip"
+                                  :class="`status-${scrapeBatchJob?.status || 'pending'}`"
+                                  x-text="getScrapeBatchJobStatusLabel(scrapeBatchJob?.status)"></span>
+                            <span><span x-text="scrapeBatchTaskLabel"></span> <span x-text="scrapeBatchJob?.processed || 0">0</span> / <span x-text="scrapeBatchJob?.total || 0">0</span></span>
+                        </span>
+                    </div>
+                    <div class="batch-rail-actions">
+                        <button class="rail-button"
+                                x-show="scrapeBatchCancelable"
+                                @click.stop="cancelScrapeBatch"
+                                :disabled="scrapeBatchCancelling">
+                            <span x-text="scrapeBatchCancelling ? '取消中...' : '取消'"></span>
+                        </button>
+                        <button class="rail-button batch-panel-corner-toggle"
+                                type="button"
+                                @click.stop="toggleScrapeBatchExpanded()"
+                                :aria-expanded="scrapeBatchExpanded"
+                                :aria-label="scrapeBatchExpanded ? '收起刮削执行状态' : '展开刮削执行状态'">
+                            <span class="batch-panel-corner-toggle-icon"
+                                  x-html="getUiIcon(scrapeBatchExpanded ? 'chevron_up' : 'chevron_down')"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="batch-panel-body" :class="scrapeBatchExpanded ? 'expanded' : 'collapsed'">
+                    <div class="batch-rail-summary">
+                        <span class="batch-subline">总数 <strong x-text="scrapeBatchJob?.total || 0">0</strong></span>
+                        <span class="batch-metrics">
+                            <span class="batch-metric success">成功 <strong x-text="scrapeBatchJob?.succeeded || 0">0</strong></span>
+                            <span class="batch-metric failed">失败 <strong x-text="scrapeBatchJob?.failed || 0">0</strong></span>
+                        </span>
+                    </div>
+
+                    <div class="batch-progress">
+                        <div class="batch-progress-track">
+                            <div class="batch-progress-fill" :style="`width: ${scrapeBatchProgressPercent}%`"></div>
+                        </div>
+                        <div class="batch-subline" x-text="scrapeBatchProgressText"></div>
+                    </div>
+
+                    <div class="batch-detail-panel">
+                        <div class="batch-note" x-text="scrapeBatchInfoLine"></div>
+                        <div class="batch-highlight" x-show="scrapeBatchLatestProgressText">
+                            <span class="batch-kicker">最新进度</span>
+                            <strong class="batch-highlight-text" x-text="scrapeBatchLatestProgressText"></strong>
+                        </div>
+                        <div class="batch-focus-grid">
+                            <div class="batch-focus-card">
+                                <span class="batch-kicker">当前文件</span>
+                                <strong class="batch-focus-value" x-text="scrapeBatchCurrentFileText"></strong>
+                            </div>
+                            <div class="batch-focus-card">
+                                <span class="batch-kicker">当前阶段</span>
+                                <strong class="batch-focus-value" x-text="scrapeBatchCurrentStageText"></strong>
+                            </div>
+                            <div class="batch-focus-card">
+                                <span class="batch-kicker">当前数据源</span>
+                                <strong class="batch-focus-value" x-text="scrapeBatchCurrentSourceText"></strong>
+                            </div>
+                        </div>
+                        <div class="batch-note" x-show="scrapeBatchJob?.failed > 0">
+                            当前批次包含 <strong x-text="scrapeBatchJob?.failed"></strong> 个失败项，表格中的对应行会保留失败状态，点击失败状态可查看详细错误信息。
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="actions">
+                <div class="actions-group primary">
+                    <button class="primary scrape-trigger" @click="confirmBatchScrape" :disabled="!scrapeHasSelected">
+                        <span class="button-inline">
+                            <span class="button-icon" x-html="getUiIcon('scrape')"></span>
+                            <span>批量刮削 (<span x-text="scrapeSelectedCount"></span>)</span>
+                        </span>
+                    </button>
+                </div>
+                <div class="actions-group secondary" x-show="!loading && scrapeFilesCache.length > 0">
+                    <button class="secondary" @click="toggleScrapeCurrentPageSelection(true)" :disabled="scrapeCurrentPageSelectableFiles.length === 0">选中本页</button>
+                    <button class="secondary" @click="toggleScrapeCurrentPageSelection(false)" :disabled="scrapePageSelectedCount === 0">取消本页</button>
+                </div>
+            </div>
+
+            <div class="table-meta toolbar" x-show="!loading && scrapeFilesCache.length > 0">
+                <div class="toolbar-left">
+                    <div class="filter filter-subtle toolbar-filter">
+                        <span class="filter-label">筛选</span>
+                        <button class="filter-button" :class="{ 'active': scrapeFilter === 'all' }" @click="setScrapeFilter('all')">全部</button>
+                        <button class="filter-button" :class="{ 'active': scrapeFilter === 'pending' }" @click="setScrapeFilter('pending')">已整理</button>
+                        <button class="filter-button" :class="{ 'active': scrapeFilter === 'success' }" @click="setScrapeFilter('success')">已刮削</button>
+                        <button class="filter-button" :class="{ 'active': scrapeFilter === 'failed' }" @click="setScrapeFilter('failed')">刮削失败</button>
+                    </div>
+                </div>
+
+                <div class="toolbar-right" x-show="scrapeFilteredFiles.length > 0">
+                    <div class="page-inline-status" x-show="scrapeHasSelected">
+                        <span class="selection-inline-count">已选 <span x-text="scrapeSelectedCount">0</span> 项</span>
+                        <span class="selection-inline-divider">·</span>
+                        <div class="selection-inline-actions">
+                            <button class="selection-inline-action" @click="confirmScrapeSelected" :disabled="!scrapeHasSelected">刮削选中</button>
+                            <span class="selection-inline-divider">·</span>
+                            <button class="selection-clear" @click="clearScrapeSelection" :disabled="!scrapeHasSelected" aria-label="清空选择" title="清空选择">×</button>
+                        </div>
+                    </div>
+                    <div class="control-rail">
+                        <span class="control-label">排序</span>
+                        <div class="sort-composer" x-data="{ open: false }" @keydown.escape.prevent.stop="open = false">
+                            <button class="sort-menu-button"
+                                    type="button"
+                                    @click="open = !open"
+                                    :aria-expanded="open"
+                                    aria-haspopup="menu">
+                                <span class="sort-icon" x-html="getSortFieldIcon(scrapeSortField)"></span>
+                                <span class="sort-menu-label" x-text="getSortFieldLabel(scrapeSortFieldOptions, scrapeSortField)"></span>
+                                <span class="sort-menu-caret" x-html="getUiIcon(open ? 'chevron_up' : 'chevron_down')"></span>
+                            </button>
+                            <div class="sort-menu-panel"
+                                 x-show="open"
+                                 x-transition.origin.top.left
+                                 @click.outside="open = false"
+                                 style="display: none;">
+                                <template x-for="option in scrapeSortFieldOptions" :key="option.value">
+                                    <button class="sort-menu-item"
+                                            type="button"
+                                            :class="{ 'active': scrapeSortField === option.value }"
+                                            @click="setScrapeSortField(option.value); open = false">
+                                        <span class="sort-menu-check" aria-hidden="true">
+                                            <span x-show="scrapeSortField === option.value" x-html="getUiIcon('check')"></span>
+                                        </span>
+                                        <span class="sort-menu-item-label" x-text="option.label"></span>
+                                    </button>
+                                </template>
+                            </div>
+                            <button class="rail-button sort-direction-button"
+                                    @click="toggleScrapeSortDirection()"
+                                    :disabled="scrapeSortField === 'default'"
+                                    :title="scrapeSortDirection === 'desc' ? '降序' : '升序'">
+                                <span class="icon-glyph" x-html="scrapeSortDirection === 'desc' ? getUiIcon('sort_desc') : getUiIcon('sort_asc')"></span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="control-rail">
+                        <span class="control-label">每页</span>
+                        <template x-for="size in pageSizeOptions" :key="size">
+                            <button class="rail-button"
+                                    :class="{ 'active': pageSize === size }"
+                                    @click="setPageSize(size)"
+                                    x-text="size"></button>
+                        </template>
+                    </div>
+                    <div class="control-rail" x-show="scrapeTotalPages > 1">
+                        <span class="control-label">分页</span>
+                        <span class="toolbar-range">
+                            <span x-text="scrapePageRangeStart">0</span>-<span x-text="scrapePageRangeEnd">0</span> / <span x-text="scrapeSortedFiles.length">0</span>
+                        </span>
+                        <div class="mini-pager">
+                            <button class="rail-button" @click="goToScrapePage(scrapeCurrentPageValue - 1)" :disabled="scrapeCurrentPageValue <= 1">‹ Prev</button>
+                            <span class="mini-page-status">Page <span x-text="scrapeCurrentPageValue">1</span> / <span x-text="scrapeTotalPages">1</span></span>
+                            <button class="rail-button" @click="goToScrapePage(scrapeCurrentPageValue + 1)" :disabled="scrapeCurrentPageValue >= scrapeTotalPages">Next ›</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div x-show="!loading && scrapeFilteredFiles.length > 0">
+                <div class="table-container">
+                    <table class="scrape-table">
+                        <thead>
+                            <tr>
+                                <th class="col-select">
+                                    <label class="checkbox-hit"
+                                           :class="{ 'disabled': scrapeCurrentPageSelectableFiles.length === 0 }">
+                                        <input type="checkbox"
+                                               class="checkbox"
+                                               @change="toggleScrapeCurrentPageSelection($event.target.checked)"
+                                               :checked="scrapeAllSelected"
+                                               :disabled="scrapeCurrentPageSelectableFiles.length === 0"
+                                               x-effect="$el.indeterminate = scrapePageSelectionState === 'partial'">
+                                    </label>
+                                </th>
+                                <th class="col-code">
+                                    <span class="th-flow">
+                                        <span class="th-main">番号</span>
+                                        <span class="th-sub">Code</span>
+                                    </span>
+                                </th>
+                                <th class="col-target">
+                                    <span class="th-flow">
+                                        <span class="th-main">整理后路径</span>
+                                        <span class="th-sub">Output</span>
+                                    </span>
+                                </th>
+                                <th class="col-status">
+                                    <span class="th-flow">
+                                        <span class="th-main">刮削状态</span>
+                                        <span class="th-sub">Scrape</span>
+                                    </span>
+                                </th>
+                                <th class="col-time">
+                                    <span class="th-flow">
+                                        <span class="th-main">上次刮削</span>
+                                        <span class="th-sub">Scraped</span>
+                                    </span>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="file in scrapePaginatedFiles" :key="file.id">
+                                <tr class="row"
+                                    :class="{ 'row-active': activeStatusMenuId === file.id, 'selected': !!scrapeSelectedFiles[file.id] }"
+                                    @mousemove="updateRowGlow($event)">
+                                    <td class="cell-select">
+                                        <label class="checkbox-hit"
+                                               :class="{ 'disabled': !canSelectScrapeFile(file) }">
+                                            <input type="checkbox"
+                                                   class="checkbox"
+                                                   :checked="!!scrapeSelectedFiles[file.id]"
+                                                   @change="setScrapeFileSelected(file, $event.target.checked)"
+                                                   :disabled="!canSelectScrapeFile(file)"
+                                                   :title="canSelectScrapeFile(file) ? '' : '仅待刮削项可勾选'">
+                                        </label>
+                                    </td>
+                                    <td class="cell-code">
+                                        <template x-if="file.identified_code">
+                                            <span class="code"
+                                                  :class="{ 'selectable': canSelectScrapeFile(file) }"
+                                                  @click="toggleScrapeFileSelection(file)"
+                                                  x-text="file.identified_code"></span>
+                                        </template>
+                                        <template x-if="!file.identified_code">
+                                            <span class="code empty">-</span>
+                                        </template>
+                                    </td>
+                                    <td class="cell-target">
+                                        <template x-if="file.target_path">
+                                            <div class="path-cell"
+                                                 x-text="file.target_path"
+                                                 @click="copyToClipboard(file.target_path, $event)"></div>
+                                        </template>
+                                        <template x-if="!file.target_path">
+                                            <span style="color: #cbd5e0;">-</span>
+                                        </template>
+                                    </td>
+                                    <td class="cell-status">
+                                        <template x-if="hasScrapeStatusAction(file)">
+                                            <div class="status-action"
+                                                 :class="[`status-${getScrapeBadgeClass(file)}`, { 'visible': activeStatusMenuId === file.id }]"
+                                                 :style="getScrapeStatusRailStyle(file)"
+                                                 @mouseenter="showStatusMenu(file.id)"
+                                                 @mouseleave="scheduleStatusMenuHide(file.id)">
+                                                <template x-if="canOpenScrapeErrorDetails(file)">
+                                                    <button type="button"
+                                                            class="status-trigger clickable"
+                                                            :aria-label="`${getScrapeStatusText(file)}，点击查看失败详情`"
+                                                            @click="showScrapeErrorDetails(file)">
+                                                        <span class="status-label" x-text="getScrapeStatusText(file)"></span>
+                                                    </button>
+                                                </template>
+                                                <template x-if="!canOpenScrapeErrorDetails(file) && file.scrape_status === 'success'">
+                                                    <button type="button"
+                                                            class="status-trigger clickable"
+                                                            :aria-label="`${getScrapeStatusText(file)}，点击查看已刮削内容`"
+                                                            @click="showScrapeDetail(file)">
+                                                        <span class="status-label" x-text="getScrapeStatusText(file)"></span>
+                                                    </button>
+                                                </template>
+                                                <template x-if="!canOpenScrapeErrorDetails(file) && file.scrape_status !== 'success'">
+                                                    <span class="status-trigger" :aria-label="getScrapeStatusText(file)">
+                                                        <span class="status-label" x-text="getScrapeStatusText(file)"></span>
+                                                    </span>
+                                                </template>
+                                                <div class="status-actions">
+                                                    <template x-for="action in getScrapeStatusActions(file)" :key="action.key">
+                                                        <button :class="['icon-action', `action-${action.key}`]"
+                                                                type="button"
+                                                                :data-tooltip="action.label"
+                                                                :aria-label="action.label"
+                                                                @click="handleScrapeAction(file)">
+                                                            <span class="icon-glyph" x-html="getUiIcon(action.icon)"></span>
+                                                        </button>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                        </template>
+                                        <template x-if="!hasScrapeStatusAction(file)">
+                                            <div class="status-static">
+                                                <template x-if="getScrapeProgressState(file)">
+                                                    <div class="scrape-status-progress">
+                                                        <div class="scrape-progress-track">
+                                                            <div class="scrape-progress-fill" :style="`width: ${getScrapeProgressState(file).percent}%`"></div>
+                                                            <div class="scrape-progress-content">
+                                                                <span class="scrape-progress-label" x-text="getScrapeProgressState(file).label"></span>
+                                                                <span class="scrape-progress-percent" x-text="getScrapeProgressState(file).percentText"></span>
+                                                            </div>
+                                                        </div>
+                                                        <div class="scrape-progress-meta">
+                                                            <span class="scrape-progress-stage" x-text="getScrapeProgressState(file).stageText"></span>
+                                                            <span class="scrape-progress-sequence" x-show="getScrapeProgressState(file).sequenceText" x-text="getScrapeProgressState(file).sequenceText"></span>
+                                                        </div>
+                                                    </div>
+                                                </template>
+                                                <button class="badge clickable" :class="getScrapeBadgeClass(file)" x-text="getScrapeStatusText(file)" @click="showScrapeErrorDetails(file)" x-show="!getScrapeProgressState(file) && file.scrape_status === 'failed'"></button>
+                                                <button class="badge clickable" :class="getScrapeBadgeClass(file)" x-text="getScrapeStatusText(file)" @click="showScrapeDetail(file)" x-show="!getScrapeProgressState(file) && file.scrape_status === 'success'"></button>
+                                                <span class="badge" :class="getScrapeBadgeClass(file)" x-text="getScrapeStatusText(file)" x-show="!getScrapeProgressState(file) && !['failed', 'success'].includes(file.scrape_status)"></span>
+                                            </div>
+                                        </template>
+                                    </td>
+                                    <td class="cell-time">
                                         <div class="history-time">
-                                            <span class="history-time-main" x-text="formatProcessedDate(file.updated_at)"></span>
-                                            <span class="history-time-sub" x-text="formatProcessedTime(file.updated_at)"></span>
+                                            <span class="history-time-main" x-text="formatProcessedDate(file.last_scrape_at)"></span>
+                                            <span class="history-time-sub" x-text="formatProcessedTime(file.last_scrape_at)"></span>
                                         </div>
                                     </td>
                                 </tr>
@@ -380,11 +746,10 @@
                 </div>
             </div>
 
-            <div x-show="!loading && filteredFiles.length === 0" class="empty">
-                <div class="empty-icon" x-text="view === 'scan' ? '📂' : '📋'"></div>
-                <div x-show="view === 'scan'" style="margin-bottom: 8px;">暂无文件数据</div>
-                <div x-show="view === 'scan'" style="color: #718096; font-size: 14px;">点击上方“扫描目录”开始整理</div>
-                <div x-show="view === 'history'" style="margin-bottom: 8px;">暂无历史记录</div>
+            <div x-show="!loading && scrapeFilteredFiles.length === 0" class="empty">
+                <div class="empty-icon">✨</div>
+                <div style="margin-bottom: 8px;">暂无已整理文件</div>
+                <div style="color: #718096; font-size: 14px;">完成扫描和整理后，可以在此进行刮削</div>
             </div>
 
             <div x-show="loading" class="loading">
@@ -447,11 +812,221 @@
         </div>
     </div>
 
+    <!-- Scrape Error Modal -->
+    <div x-show="showScrapeErrorModal" class="modal-overlay" @click.self="showScrapeErrorModal = false">
+        <div class="modal">
+            <div class="modal-title">
+                ⚠️ 刮削失败
+            </div>
+            <div class="modal-content">
+                <div>番号：<strong x-text="scrapeErrorFile?.identified_code || '未知'"></strong></div>
+            </div>
+            <div class="modal-info">
+                <div class="modal-info-label">失败原因：</div>
+                <div class="modal-info-value" x-text="getScrapeErrorUserMessage(scrapeErrorFile)"></div>
+            </div>
+            <div class="modal-info">
+                <div class="modal-info-label">失败阶段：</div>
+                <div class="modal-info-value" x-text="getScrapeStageLabel(scrapeErrorFile?.scrape_stage, scrapeErrorFile?.scrape_source)"></div>
+            </div>
+            <div class="modal-info">
+                <div class="modal-info-label">数据源：</div>
+                <div class="modal-info-value" x-text="getScrapeSourceLabel(scrapeErrorFile?.scrape_source)"></div>
+            </div>
+            <div class="modal-info" x-show="(scrapeErrorFile?.scrape_logs || []).length > 0">
+                <div class="modal-info-label">最近日志：</div>
+                <div class="modal-info-value modal-log-list">
+                    <template x-for="entry in scrapeErrorFile?.scrape_logs || []" :key="`${entry.at}-${entry.message}`">
+                        <div class="modal-log-line" x-text="entry.message"></div>
+                    </template>
+                </div>
+            </div>
+            <div class="modal-info" x-show="scrapeErrorFile?.scrape_error">
+                <div class="modal-info-label">技术详情：</div>
+                <div class="modal-info-value" x-text="scrapeErrorFile?.scrape_error"></div>
+            </div>
+            <div class="modal-actions">
+                <button class="primary" @click="showScrapeErrorModal = false">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scrape Detail Modal -->
+    <div x-show="showScrapeDetailModal" class="modal-overlay" @click.self="closeScrapeDetail()">
+        <div class="modal scrape-detail-modal">
+            <div class="modal-title">
+                🧾 刮削内容概览
+            </div>
+            <div class="modal-content scrape-detail-intro">
+                <span>番号：</span>
+                <strong x-text="scrapeDetailFile?.metadata?.code || scrapeDetailFile?.code || '-'"></strong>
+            </div>
+
+            <div class="scrape-detail-shell" x-show="!scrapeDetailLoading">
+                <div class="scrape-detail-panel">
+                    <div class="scrape-detail-section-title">封面预览</div>
+                    <template x-if="scrapeDetailFile?.poster_url">
+                        <button type="button"
+                                class="scrape-poster-button"
+                                @click="openScrapePosterPreview(scrapeDetailFile.poster_url)">
+                            <img class="scrape-poster-thumb"
+                                 :src="scrapeDetailFile.poster_url"
+                                 :alt="`${scrapeDetailFile?.metadata?.code || scrapeDetailFile?.code || '作品'} 海报`">
+                            <span class="scrape-poster-hint">点击放大查看</span>
+                        </button>
+                    </template>
+                    <template x-if="!scrapeDetailFile?.poster_url">
+                        <div class="scrape-poster-empty">暂无封面图片</div>
+                    </template>
+
+                    <div class="scrape-detail-section-title">生成文件</div>
+                    <div class="scrape-artifact-list">
+                        <div class="scrape-artifact-group-title">重点文件</div>
+                        <template x-for="filename in getScrapeDetailArtifacts(scrapeDetailFile).primaryFiles" :key="filename">
+                            <div class="scrape-artifact-item" x-text="filename"></div>
+                        </template>
+                        <div class="scrape-artifact-empty"
+                             x-show="getScrapeDetailArtifacts(scrapeDetailFile).primaryFiles.length === 0">暂无重点文件</div>
+
+                        <div class="scrape-artifact-group-title"
+                             x-show="getScrapeDetailArtifacts(scrapeDetailFile).previewCount > 0">预览图</div>
+                        <button type="button"
+                             class="scrape-artifact-summary scrape-artifact-summary-button"
+                             @click="openScrapePreviewGallery(scrapeDetailFile)"
+                             x-show="getScrapeDetailArtifacts(scrapeDetailFile).previewCount > 0">
+                            <span class="scrape-artifact-summary-label">已生成预览图</span>
+                            <span class="scrape-artifact-summary-value"
+                                  x-text="`${getScrapeDetailArtifacts(scrapeDetailFile).previewCount} 张`"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="scrape-detail-panel">
+                    <div class="scrape-meta-grid">
+                        <div class="scrape-meta-card">
+                            <div class="scrape-meta-label">番号</div>
+                            <div class="scrape-meta-value code-inline"
+                                 x-text="scrapeDetailFile?.metadata?.code || scrapeDetailFile?.code || '-'"></div>
+                        </div>
+                        <div class="scrape-meta-card scrape-meta-card-wide">
+                            <div class="scrape-meta-label">剧情简介</div>
+                            <div class="scrape-meta-value scrape-meta-plot"
+                                 x-text="scrapeDetailFile?.metadata?.plot || '暂无简介'"></div>
+                        </div>
+                        <div class="scrape-meta-card">
+                            <div class="scrape-meta-label">演员</div>
+                            <div class="scrape-meta-value"
+                                 x-text="(scrapeDetailFile?.metadata?.actors || []).join(' / ') || '-'"></div>
+                        </div>
+                        <div class="scrape-meta-card">
+                            <div class="scrape-meta-label">发布时间</div>
+                            <div class="scrape-meta-value"
+                                 x-text="scrapeDetailFile?.metadata?.release_date || '-'"></div>
+                        </div>
+                        <div class="scrape-meta-card">
+                            <div class="scrape-meta-label">时长</div>
+                            <div class="scrape-meta-value"
+                                 x-text="scrapeDetailFile?.metadata?.runtime ? `${scrapeDetailFile.metadata.runtime} 分钟` : '-'"></div>
+                        </div>
+                        <div class="scrape-meta-card scrape-meta-card-wide">
+                            <div class="scrape-meta-label">标签</div>
+                            <div class="scrape-tag-list">
+                                <template x-for="tag in scrapeDetailFile?.metadata?.tags || []" :key="tag">
+                                    <span class="scrape-tag-chip" x-text="tag"></span>
+                                </template>
+                                <span class="scrape-meta-value"
+                                      x-show="(scrapeDetailFile?.metadata?.tags || []).length === 0">暂无标签</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="scrape-detail-loading" x-show="scrapeDetailLoading">
+                <div class="loading-spinner"></div>
+                <div>正在读取已刮削内容...</div>
+            </div>
+
+            <div class="modal-actions">
+                <button class="primary" @click="closeScrapeDetail()">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scrape Poster Preview Modal -->
+    <div x-show="showScrapePosterModal" class="modal-overlay modal-overlay-immersive" @click.self="closeScrapePosterPreview()">
+        <div class="scrape-poster-lightbox">
+            <img class="scrape-poster-lightbox-image"
+                 :src="scrapeDetailPosterPreview || ''"
+                 alt="刮削海报大图">
+            <button type="button" class="secondary scrape-poster-lightbox-close" @click="closeScrapePosterPreview()">关闭</button>
+        </div>
+    </div>
+
+    <!-- Scrape Preview Gallery -->
+    <div x-show="showScrapePreviewGalleryModal"
+         class="modal-overlay scrape-preview-overlay"
+         @click.self="closeScrapePreviewGallery()">
+        <div class="scrape-preview-gallery">
+            <div class="scrape-preview-stage">
+                <button type="button"
+                        class="scrape-preview-nav"
+                        :disabled="!canShowPreviousScrapePreview"
+                        aria-label="上一张预览图"
+                        @click="showPreviousScrapePreview()">
+                    <svg class="scrape-preview-nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M14.5 5.5L8 12l6.5 6.5" />
+                    </svg>
+                </button>
+
+                <div class="scrape-preview-canvas">
+                    <img class="scrape-preview-image"
+                         :src="currentScrapePreviewImage?.url || ''"
+                         :alt="currentScrapePreviewImage?.name || '预览图'">
+                </div>
+
+                <button type="button"
+                        class="scrape-preview-nav"
+                        :disabled="!canShowNextScrapePreview"
+                        aria-label="下一张预览图"
+                        @click="showNextScrapePreview()">
+                    <svg class="scrape-preview-nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M9.5 5.5L16 12l-6.5 6.5" />
+                    </svg>
+                </button>
+            </div>
+
+            <div class="scrape-preview-strip" x-ref="scrapePreviewStrip">
+                <template x-for="(image, index) in scrapePreviewGalleryImages" :key="image.name">
+                    <button type="button"
+                            class="scrape-preview-thumb"
+                            :data-preview-index="index"
+                            :class="{ 'active': index === scrapePreviewGalleryIndex }"
+                            :aria-label="`查看 ${image.name}`"
+                            @click="selectScrapePreview(index)">
+                        <img class="scrape-preview-thumb-image"
+                             :src="image.url"
+                             :alt="image.name">
+                    </button>
+                </template>
+            </div>
+
+            <div class="scrape-preview-toolbar">
+                <div class="scrape-preview-counter"
+                     x-text="`${scrapePreviewGalleryIndex + 1} / ${scrapePreviewGalleryImages.length}`"></div>
+                <button type="button"
+                        class="secondary scrape-preview-close"
+                        @click="closeScrapePreviewGallery()">关闭</button>
+            </div>
+        </div>
+    </div>
+
 
     <script src="/static/js/state.js"></script>
     <script src="/static/js/utils.js"></script>
     <script src="/static/js/render.js"></script>
     <script src="/static/js/features.js"></script>
+    <script src="/static/js/scrape.js"></script>
     <script src="/static/js/app.js"></script>
 </body>
 </html>

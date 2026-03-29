@@ -93,14 +93,47 @@ docker run -d \
   acyua/noctra:latest
 ```
 
+如果刮削数据源需要代理，请额外传入代理环境变量：
+
+```bash
+docker run -d \
+  --name noctra \
+  -p 4020:8000 \
+  -v /path/to/source:/source \
+  -v /path/to/dist:/dist \
+  -v /path/to/data:/app/data \
+  -e SOURCE_DIR=/source \
+  -e DIST_DIR=/dist \
+  -e DB_PATH=/app/data/noctra.db \
+  -e HTTP_PROXY=http://192.168.7.2:7890 \
+  -e HTTPS_PROXY=http://192.168.7.2:7890 \
+  -e ALL_PROXY=http://192.168.7.2:7890 \
+  -e NO_PROXY=127.0.0.1,localhost \
+  acyua/noctra:latest
+```
+
+注意：
+
+- 代理地址建议显式带上协议头，例如 `http://192.168.7.2:7890`
+- 当前版本会让元数据请求和图片下载都跟随这些代理变量
+- `JavDB` 这类站点对出口节点比较敏感，不要使用日本节点
+- 代理节点优先选择香港或台湾，通常比日本节点更稳定
+- 如果你配置了 `NO_PROXY`，命中的域名会跳过代理
+
 或者使用 Compose：
 
 ```bash
 export NOCTRA_SOURCE_DIR=/path/to/source
 export NOCTRA_DIST_DIR=/path/to/dist
 export NOCTRA_DATA_DIR=/path/to/data
+export HTTP_PROXY=http://192.168.7.2:7890
+export HTTPS_PROXY=http://192.168.7.2:7890
+export ALL_PROXY=http://192.168.7.2:7890
+export NO_PROXY=127.0.0.1,localhost
 docker compose up --build
 ```
+
+如果只是使用 Docker Hub 预构建镜像而不是本地 build，也同样可以在运行容器时传入这些变量。
 
 ### 4. NAS 部署
 

@@ -46,6 +46,25 @@ docker run -d \
   acyua/noctra:latest
 ```
 
+### Proxy support for scraping
+
+If your network can only reach metadata sources through a proxy, pass proxy
+environment variables into the container:
+
+```bash
+-e HTTP_PROXY=http://192.168.7.2:7890 \
+-e HTTPS_PROXY=http://192.168.7.2:7890 \
+-e ALL_PROXY=http://192.168.7.2:7890 \
+-e NO_PROXY=127.0.0.1,localhost
+```
+
+Notes:
+
+- Include the URL scheme when possible, for example `http://192.168.7.2:7890`
+- Proxy settings are used by both metadata requests and artwork downloads
+- Avoid Japan exit nodes for JavDB-like sites because they are more likely to be blocked
+- Hong Kong and Taiwan nodes are usually safer choices
+
 Open:
 
 ```text
@@ -97,6 +116,24 @@ docker run -d \
   -e DB_PATH=/app/data/noctra.db \
   acyua/noctra:latest
 ```
+
+### 刮削代理支持
+
+如果你的网络访问元数据源必须走代理，可以把代理环境变量一起传进容器：
+
+```bash
+-e HTTP_PROXY=http://192.168.7.2:7890 \
+-e HTTPS_PROXY=http://192.168.7.2:7890 \
+-e ALL_PROXY=http://192.168.7.2:7890 \
+-e NO_PROXY=127.0.0.1,localhost
+```
+
+注意：
+
+- 建议代理地址带上协议头，例如 `http://192.168.7.2:7890`
+- 这些代理变量会同时用于元数据请求和图片下载
+- 不要使用日本节点，`JavDB` 这类站点更容易直接封禁或触发风控
+- 优先选择香港或台湾节点，通常更稳定
 
 访问地址：
 

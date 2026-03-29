@@ -15,10 +15,11 @@
 
             getStatusText(status) {
                 const map = {
-                    'pending': '待处理',
+                    'pending': '待整理',
                     'duplicate': '重复',
                     'target_exists': '已存在',
-                    'processed': '已处理',
+                    'processed': '已整理',
+                    'scraped': '已刮削',
                     'skipped': '未识别',
                     'failed': '失败'
                 };
@@ -36,11 +37,42 @@
                 return map[status] || status;
             },
 
+            getScrapeBatchJobStatusLabel(status) {
+                const map = {
+                    queued: 'QUEUED',
+                    running: 'RUNNING',
+                    completed: 'COMPLETED',
+                    failed: 'FAILED',
+                    cancelled: 'CANCELLED'
+                };
+                return map[status] || status || 'PENDING';
+            },
+
+            getScrapeBatchItemStatusText(status) {
+                const map = {
+                    pending: '待刮削',
+                    processing: '刮削中',
+                    success: '已刮削',
+                    failed: '刮削失败'
+                };
+                return map[status] || status || '-';
+            },
+
+            getScrapeBatchBadgeClass(status) {
+                const map = {
+                    processing: 'processing',
+                    success: 'processed',
+                    failed: 'failed',
+                    pending: 'pending'
+                };
+                return map[status] || 'pending';
+            },
+
             getBatchItemStatusText(status) {
                 const map = {
-                    pending: '待处理',
+                    pending: '待整理',
                     processing: '处理中',
-                    success: '已处理',
+                    success: '已整理',
                     skipped: '已跳过',
                     failed: '失败'
                 };
@@ -66,12 +98,248 @@
                 return this.getStatusText(file.status);
             },
 
+            getScrapeStatusText(file) {
+                const batchItem = this.getScrapeBatchItem(file);
+                if (batchItem) {
+                    return this.getScrapeBatchItemStatusText(batchItem.status);
+                }
+
+                const map = {
+                    'pending': '待刮削',
+                    'success': '已刮削',
+                    'failed': '刮削失败'
+                };
+                return map[file.scrape_status] || file.scrape_status || '-';
+            },
+
+            getScrapeStageProgressPercent(stage) {
+                const map = {
+                    queued: 6,
+                    validating: 10,
+                    querying_source: 35,
+                    fetching_detail: 50,
+                    parsing_metadata: 65,
+                    writing_nfo: 82,
+                    downloading_poster: 92,
+                    finalizing: 97,
+                    success: 100,
+                    failed: 100,
+                };
+                return map[stage] || 24;
+            },
+
+            getScrapeProgressState(file) {
+                const batchItem = this.getScrapeBatchItem(file);
+                if (!batchItem || batchItem.status !== 'processing') {
+                    return null;
+                }
+
+                const job = this.scrapeBatchJob || null;
+                const isCurrentFile = job?.current_file_id === file.id;
+                const stage = batchItem.stage || (isCurrentFile ? job?.current_stage : null) || file.scrape_stage || null;
+                const source = batchItem.source || (isCurrentFile ? job?.current_source : null) || file.scrape_source || null;
+                const reportedPercents = [];
+                if (Number.isFinite(batchItem.progress_percent)) {
+                    reportedPercents.push(Number(batchItem.progress_percent));
+                }
+                if (isCurrentFile && Number.isFinite(job?.current_progress_percent)) {
+                    reportedPercents.push(Number(job.current_progress_percent));
+                }
+                const percent = reportedPercents.length > 0
+                    ? Math.max(...reportedPercents)
+                    : this.getScrapeStageProgressPercent(stage);
+
+                let currentIndex = null;
+                const total = Number(job?.total || 0);
+                if (total > 0) {
+                    if (isCurrentFile) {
+                        currentIndex = Math.min((Number(job?.processed || 0) || 0) + 1, total);
+                    }
+                    if (!currentIndex && Array.isArray(job?.items)) {
+                        const itemIndex = job.items.findIndex(item => item.id === file.id);
+                        if (itemIndex !== -1) {
+                            currentIndex = itemIndex + 1;
+                        }
+                    }
+                    if (!currentIndex) {
+                        currentIndex = 1;
+                    }
+                }
+
+                let stageText = '正在准备刮削';
+                if (isCurrentFile && Array.isArray(job?.recent_logs) && job.recent_logs.length > 0) {
+                    stageText = job.recent_logs[job.recent_logs.length - 1].message || stageText;
+                } else if (stage) {
+                    stageText = this.getScrapeStageLabel(stage, source);
+                }
+
+                return {
+                    percent,
+                    percentText: `${percent}%`,
+                    label: '刮削中',
+                    stageText,
+                    sequenceText: total > 1 ? `第 ${currentIndex} / ${total} 条` : '',
+                };
+            },
+
+            getScrapeBadgeClass(file) {
+                const batchItem = this.getScrapeBatchItem(file);
+                if (batchItem) {
+                    return this.getScrapeBatchBadgeClass(batchItem.status);
+                }
+
+                const map = {
+                    'pending': 'pending',
+                    'success': 'processed',
+                    'failed': 'failed'
+                };
+                return map[file.scrape_status] || 'pending';
+            },
+
+            canSelectScrapeFile(file) {
+                return this.view === 'scrape' &&
+                    file.scrape_status === 'pending' &&
+                    !this.isScrapeBatchItemBlocking(file);
+            },
+
+            canOpenScrapeErrorDetails(file) {
+                const batchItem = this.getScrapeBatchItem(file);
+                return (batchItem && batchItem.status === 'failed') || file.scrape_status === 'failed';
+            },
+
+            canOpenScrapeDetail(file) {
+                const batchItem = this.getScrapeBatchItem(file);
+                return (batchItem && batchItem.status === 'success') || file.scrape_status === 'success';
+            },
+
+            getScrapeStatusActions(file) {
+                const batchItem = this.getScrapeBatchItem(file);
+                if (batchItem) {
+                    if (batchItem.status === 'failed') {
+                        return [
+                            { key: 'scrape', label: '刮削', icon: 'scrape' }
+                        ];
+                    }
+                    return [];
+                }
+
+                if (file.scrape_status === 'pending' || file.scrape_status === 'failed') {
+                    return [
+                        { key: 'scrape', label: '刮削', icon: 'scrape' }
+                    ];
+                }
+                if (file.scrape_status === 'success') {
+                    return [
+                        { key: 'scrape', label: '重新刮削', icon: 'scrape' }
+                    ];
+                }
+                return [];
+            },
+
+            getScrapeStatusAriaLabel(file) {
+                const label = this.getScrapeStatusText(file);
+                if (this.canOpenScrapeErrorDetails(file)) {
+                    return `${label}，点击查看失败详情`;
+                }
+                if (this.canOpenScrapeDetail(file)) {
+                    return `${label}，点击查看刮削内容`;
+                }
+                return label;
+            },
+
+            hasScrapeStatusAction(file) {
+                if (this.isScrapeBatchItemBlocking(file)) {
+                    return false;
+                }
+                return this.view === 'scrape' && this.getScrapeStatusActions(file).length > 0;
+            },
+
+            getScrapeFilterLabel(filter) {
+                const map = {
+                    all: '全部',
+                    pending: '已整理',
+                    success: '已刮削',
+                    failed: '刮削失败'
+                };
+                return map[filter] || filter;
+            },
+
+            getScrapeSourceLabel(source) {
+                const map = {
+                    javdb: 'JavDB',
+                    javtrailers: 'JavTrailers'
+                };
+                return map[source] || source || '-';
+            },
+
+            getScrapeStageLabel(stage, source) {
+                const sourceLabel = this.getScrapeSourceLabel(source);
+
+                if (stage === 'querying_source') {
+                    return `正在查询 ${sourceLabel}`;
+                }
+                if (stage === 'fetching_detail') {
+                    return `${sourceLabel} 已返回结果，正在读取详情页`;
+                }
+
+                const map = {
+                    queued: '已加入刮削队列',
+                    validating: '正在检查文件信息',
+                    parsing_metadata: '详情页读取成功，正在解析元数据',
+                    writing_nfo: '元数据解析成功，正在生成 NFO 文件',
+                    downloading_poster: 'NFO 已生成，正在下载封面图片',
+                    finalizing: '正在保存刮削结果',
+                    success: '刮削完成',
+                    failed: '刮削失败'
+                };
+                return map[stage] || stage || '-';
+            },
+
+            getScrapeErrorUserMessage(file) {
+                return file?.scrape_error_user_message || '刮削过程中发生未知错误';
+            },
+
+            getScrapeDetailArtifacts(detail) {
+                const files = Array.isArray(detail?.files) ? detail.files : [];
+                const primaryFiles = [];
+                const previewFiles = [];
+                let previewCount = 0;
+
+                files.forEach(filename => {
+                    if (filename.includes('-preview-')) {
+                        previewCount += 1;
+                        previewFiles.push({
+                            name: filename,
+                            url: detail?.file_id
+                                ? `/api/scrape/${detail.file_id}/artifacts/${encodeURIComponent(filename)}`
+                                : ''
+                        });
+                        return;
+                    }
+                    primaryFiles.push(filename);
+                });
+
+                return {
+                    primaryFiles,
+                    previewCount,
+                    previewFiles
+                };
+            },
+
             isBatchItemBlocking(file) {
                 const batchItem = this.getBatchItem(file);
                 if (!batchItem) {
                     return false;
                 }
                 return this.batchRunning || batchItem.status === 'processing';
+            },
+
+            isScrapeBatchItemBlocking(file) {
+                const batchItem = this.getScrapeBatchItem(file);
+                if (!batchItem) {
+                    return false;
+                }
+                return this.scrapeBatchRunning || batchItem.status === 'processing';
             },
 
             hasStatusAction(file) {
@@ -87,6 +355,16 @@
 
             getStatusRailStyle(file) {
                 const actionCount = this.getStatusActions(file).length;
+                const collapsedWidth = 100;
+                const slotWidth = 34;
+                const gap = 6;
+                const actionsPadding = actionCount > 0 ? 12 : 0;
+                const expandedWidth = collapsedWidth + actionsPadding + (actionCount * slotWidth) + (Math.max(actionCount - 1, 0) * gap);
+                return `--status-width-collapsed: ${collapsedWidth}px; --status-width-expanded: ${expandedWidth}px;`;
+            },
+
+            getScrapeStatusRailStyle(file) {
+                const actionCount = this.getScrapeStatusActions(file).length;
                 const collapsedWidth = 100;
                 const slotWidth = 34;
                 const gap = 6;
@@ -111,7 +389,7 @@
                 if (this.canSelectFile(file)) {
                     return '';
                 }
-                return '仅待处理项可加入整理集合';
+                return '仅待整理项可加入整理集合';
             },
 
             getStatusSortWeight(file) {
@@ -135,6 +413,11 @@
                     status: 'circle_status'
                 };
                 return this.getUiIcon(iconMap[field] || 'sort_default');
+            },
+
+            getSortFieldLabel(options, field) {
+                const match = (options || []).find(option => option.value === field);
+                return match?.label || '默认排序';
             },
 
             compareNatural(left, right) {
@@ -174,9 +457,6 @@
                 const diff = (this.getStatusSortWeight(a) - this.getStatusSortWeight(b)) * multiplier;
                 if (diff !== 0) {
                     return diff;
-                }
-                if (this.view === 'history') {
-                    return this.compareTimeSort(a, b, 'desc');
                 }
                 return this.compareCodeSort(a, b, 1);
             },
@@ -249,6 +529,12 @@
                 card.style.setProperty('--y', `${event.clientY - rect.top}px`);
             },
 
+            getSummaryFlowPlacement(card) {
+                const column = Number(card?.column || 1);
+                const span = Number(card?.span || 1);
+                return `grid-column: ${column} / span ${span};`;
+            },
+
             getStatusActions(file) {
                 if (['pending', 'duplicate'].includes(file.status)) {
                     return [
@@ -268,6 +554,10 @@
 
             getBatchItem(file) {
                 return this.batchItemsIndex[file.id] || null;
+            },
+
+            getScrapeBatchItem(file) {
+                return this.scrapeBatchItemsIndex[file.id] || null;
             },
 
             getUiIcon(name) {
@@ -352,7 +642,17 @@
                     `,
                     chevron_down: `
                         <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="M6.5 9.5L12 15l5.5-5.5"/>
+                            <polygon points="7 9 17 9 12 16"/>
+                        </svg>
+                    `,
+                    chevron_up: `
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <polygon points="12 8 17 15 7 15"/>
+                        </svg>
+                    `,
+                    check: `
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M6.5 12.5l3.2 3.2 7.8-8.2"/>
                         </svg>
                     `,
                     delete: `
@@ -369,7 +669,29 @@
                             <path d="M6 6l12 12"/>
                             <path d="M18 6L6 18"/>
                         </svg>
+                    `,
+                    scrape: `
+                        <svg class="scrape-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <circle cx="10.5" cy="10.5" r="4.5"/>
+                            <path d="M15.5 15.5L19 19"/>
+                        </svg>
+                    `,
+                    sparkles: `
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 2l1.1 3.4L16.5 7l-3.4 1.6L12 12l-1.1-3.4L7.5 7l3.4-1.6z"/>
+                            <path d="M5 14l.6 1.8L7.5 17l-1.9.7L5 19.5l-.6-1.8L2.5 17l1.9-.7z"/>
+                            <path d="M17 13l.7 2.2L20 16.5l-2.3.8L17 19.5l-.7-2.2L14.5 16.5l2.3-.8z"/>
+                        </svg>
+                    `,
+                    file_search: `
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                            <circle cx="12" cy="14" r="3"/>
+                            <path d="m16.5 16.5-2.5-2.5"/>
+                        </svg>
                     `
+
                 };
                 return icons[name] || '';
             },
@@ -379,17 +701,16 @@
                     all: '全部',
                     identified: '已识别',
                     unidentified: '未识别',
-                    pending: '待处理',
+                    pending: '待整理',
                     duplicate: '重复',
                     target_exists: '已存在',
-                    processed: '已处理'
+                    processed: '已整理'
                 };
                 return map[filter] || filter;
             },
 
             getResultLabel(result) {
-                const match = this.scanFilesCache.find(file => file.id === result.file_id)
-                    || this.historyFilesCache.find(file => file.id === result.file_id);
+                const match = this.scanFilesCache.find(file => file.id === result.file_id);
                 return match?.identified_code || this.getFilename(result.original_path);
             },
         };

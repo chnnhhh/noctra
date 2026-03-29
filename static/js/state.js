@@ -7,21 +7,28 @@
             success: null,
             files: [],
             scanFilesCache: [],
-            historyFilesCache: [],
+            scrapeFilesCache: [],
             selectedFiles: {},
             stats: {
                 total_files: 0,
                 identified: 0,
                 unidentified: 0,
                 pending: 0,
-                processed: 0
+                processed: 0,
+                scraped: 0,
+                scrape_failed: 0
             },
             scanLoaded: false,
-            historyLoaded: false,
-            view: 'scan', // 'scan' or 'history'
+            scrapeLoaded: false,
+            view: 'scan', // 'scan' or 'scrape'
             currentFilter: 'all',
             sortField: 'default',
             sortDirection: 'asc',
+            scrapeFilter: 'all',
+            scrapeSortField: 'default',
+            scrapeSortDirection: 'asc',
+            scrapeSelectedFiles: {},
+            scrapePage: 1,
             pageSize: 50,
             pageSizeOptions: [20, 50, 100],
             currentPage: 1,
@@ -53,7 +60,107 @@
             confirmFiles: [],
             showDeleteModal: false,
             deleteTargetFile: null,
+            showScrapeErrorModal: false,
+            scrapeErrorFile: null,
+            showScrapeDetailModal: false,
+            scrapeDetailLoading: false,
+            scrapeDetailFile: null,
+            showScrapePosterModal: false,
+            scrapeDetailPosterPreview: null,
+            showScrapePreviewGalleryModal: false,
+            scrapePreviewGalleryImages: [],
+            scrapePreviewGalleryIndex: 0,
+            scrapeBatchJob: null,
+            scrapeBatchItemsIndex: {},
+            scrapeBatchPollTimer: null,
+            scrapeBatchPollingBusy: false,
+            scrapeBatchExpanded: false,
+            scrapeBatchSubmitting: false,
+            scrapeBatchCancelling: false,
+            scrapeBatchVisibleSince: 0,
+            scrapeBatchExpandTimer: null,
+            scrapeBatchExpanding: false,
             distDir: '/dist',
+
+            get overviewStats() {
+                const stats = this.stats || {};
+                const readCount = (value) => {
+                    const count = Number(value);
+                    return Number.isFinite(count) ? Math.max(0, count) : 0;
+                };
+
+                return {
+                    total: readCount(stats.total_files),
+                    recognized: readCount(stats.identified),
+                    unresolved: readCount(stats.unidentified),
+                    pending: readCount(stats.pending),
+                    done: readCount(stats.processed),
+                    scraped: readCount(stats.scraped),
+                    scrapeFailed: readCount(stats.scrape_failed),
+                };
+            },
+
+            get summaryMainFlow() {
+                const stats = this.overviewStats;
+                return [
+                    {
+                        key: 'total',
+                        column: 1,
+                        variant: 'total',
+                        meta: 'SCAN / TOTAL',
+                        id: 'M-01',
+                        value: stats.total,
+                        label: '总文件数',
+                        subtext: '当前扫描基线',
+                    },
+                    {
+                        key: 'recognized',
+                        column: 2,
+                        variant: 'recognized',
+                        meta: 'RECOGNITION',
+                        id: 'M-02',
+                        value: stats.recognized,
+                        label: '已识别',
+                        subtext: '已完成番号解析',
+                        footerLabel: '未识别',
+                        footerValue: stats.unresolved,
+                        footerVariant: 'unresolved',
+                    },
+                    {
+                        key: 'pending',
+                        column: 3,
+                        variant: 'pending',
+                        meta: 'QUEUE / PENDING',
+                        id: 'M-03',
+                        value: stats.pending,
+                        label: '待整理',
+                        subtext: '等待整理执行',
+                    },
+                    {
+                        key: 'done',
+                        column: 4,
+                        variant: 'done',
+                        meta: 'ARCHIVE / DONE',
+                        id: 'M-04',
+                        value: stats.done,
+                        label: '已整理',
+                        subtext: '已完成移动 / 落盘',
+                    },
+                    {
+                        key: 'scraped',
+                        column: 5,
+                        variant: 'scraped',
+                        meta: 'SCRAPED / COMPLETE',
+                        id: 'M-05',
+                        value: stats.scraped,
+                        label: '已刮削',
+                        subtext: '元数据 / NFO / 图片已生成',
+                        footerLabel: '刮削失败',
+                        footerValue: stats.scrapeFailed,
+                        footerVariant: 'scrape-failed',
+                    },
+                ];
+            },
 
             get allSelected() {
                 return this.currentPageSelectableFiles.length > 0 &&
@@ -70,6 +177,101 @@
 
             get selectedEntries() {
                 return this.scanFilesCache.filter(file => this.selectedFiles[file.id]);
+            },
+
+            get scrapeHasSelected() {
+                return Object.values(this.scrapeSelectedFiles).some(v => v);
+            },
+
+            get scrapeSelectedCount() {
+                return Object.values(this.scrapeSelectedFiles).filter(v => v).length;
+            },
+
+            get scrapeSelectedEntries() {
+                return this.scrapeFilesCache.filter(file => this.scrapeSelectedFiles[file.id]);
+            },
+
+            get scrapeFilteredFiles() {
+                if (this.scrapeFilter === 'all') {
+                    return this.scrapeFilesCache;
+                }
+                return this.scrapeFilesCache.filter(f => f.scrape_status === this.scrapeFilter);
+            },
+
+            get scrapeSortFieldOptions() {
+                return [
+                    { value: 'default', label: '默认排序' },
+                    { value: 'code', label: '番号' },
+                    { value: 'scrape_time', label: '刮削时间' },
+                    { value: 'status', label: '状态' }
+                ];
+            },
+
+            get scrapeSortedFiles() {
+                const files = [...this.scrapeFilteredFiles];
+                const dir = this.scrapeSortDirection === 'asc' ? 1 : -1;
+
+                return files.sort((a, b) => {
+                    if (this.scrapeSortField === 'code') {
+                        return this.compareNatural(a.identified_code || '', b.identified_code || '') * dir;
+                    }
+                    if (this.scrapeSortField === 'scrape_time') {
+                        const aTime = Date.parse(a.last_scrape_at || '') || 0;
+                        const bTime = Date.parse(b.last_scrape_at || '') || 0;
+                        const diff = (aTime - bTime) * dir;
+                        if (diff !== 0) return diff;
+                        return this.compareNatural(a.identified_code || '', b.identified_code || '');
+                    }
+                    if (this.scrapeSortField === 'default' || this.scrapeSortField === 'status') {
+                        const statusOrder = { failed: 0, pending: 1, success: 2 };
+                        const diff = ((statusOrder[a.scrape_status] ?? 9) - (statusOrder[b.scrape_status] ?? 9)) * dir;
+                        if (diff !== 0) return diff;
+                        return this.compareNatural(a.identified_code || '', b.identified_code || '');
+                    }
+                    return 0;
+                });
+            },
+
+            get scrapeTotalPages() {
+                return Math.max(1, Math.ceil(this.scrapeSortedFiles.length / this.pageSize));
+            },
+
+            get scrapeCurrentPageValue() {
+                return Math.min(this.scrapePage, this.scrapeTotalPages);
+            },
+
+            get scrapePageRangeStart() {
+                if (this.scrapeSortedFiles.length === 0) return 0;
+                return ((this.scrapeCurrentPageValue - 1) * this.pageSize) + 1;
+            },
+
+            get scrapePageRangeEnd() {
+                if (this.scrapeSortedFiles.length === 0) return 0;
+                return Math.min(this.scrapePageRangeStart + this.pageSize - 1, this.scrapeSortedFiles.length);
+            },
+
+            get scrapePaginatedFiles() {
+                const start = (this.scrapeCurrentPageValue - 1) * this.pageSize;
+                return this.scrapeSortedFiles.slice(start, start + this.pageSize);
+            },
+
+            get scrapeCurrentPageSelectableFiles() {
+                return this.scrapePaginatedFiles.filter(file => this.canSelectScrapeFile(file));
+            },
+
+            get scrapePageSelectedCount() {
+                return this.scrapeCurrentPageSelectableFiles.filter(file => this.scrapeSelectedFiles[file.id]).length;
+            },
+
+            get scrapeAllSelected() {
+                return this.scrapeCurrentPageSelectableFiles.length > 0 &&
+                       this.scrapePageSelectedCount === this.scrapeCurrentPageSelectableFiles.length;
+            },
+
+            get scrapePageSelectionState() {
+                if (this.scrapePageSelectedCount === 0) return 'none';
+                if (this.scrapePageSelectedCount === this.scrapeCurrentPageSelectableFiles.length) return 'all';
+                return 'partial';
             },
 
             get batchRunning() {
@@ -146,7 +348,159 @@
                 if (this.batchJob.failed > 0) {
                     return '批量整理已结束，失败项仍保留在列表中，方便你继续筛选和处理。';
                 }
-                return '本批次已结束，整理结果已同步到列表和历史记录中。';
+                return '本批次已结束，整理结果已同步到列表中。';
+            },
+
+            get scrapeBatchRunning() {
+                return !!this.scrapeBatchJob && ['queued', 'running'].includes(this.scrapeBatchJob.status);
+            },
+
+            get currentScrapePreviewImage() {
+                return this.scrapePreviewGalleryImages[this.scrapePreviewGalleryIndex] || null;
+            },
+
+            get canShowPreviousScrapePreview() {
+                return this.scrapePreviewGalleryIndex > 0;
+            },
+
+            get canShowNextScrapePreview() {
+                return this.scrapePreviewGalleryIndex < (this.scrapePreviewGalleryImages.length - 1);
+            },
+
+            get scrapeBatchPanelVisible() {
+                return !!this.scrapeBatchJob;
+            },
+
+            get scrapeBatchPanelState() {
+                if (!this.scrapeBatchJob) {
+                    return 'idle';
+                }
+                if (this.scrapeBatchRunning || this.scrapeBatchSubmitting) {
+                    return 'running';
+                }
+                return 'completed';
+            },
+
+            get scrapeBatchCancelable() {
+                return this.scrapeBatchRunning &&
+                       !!this.scrapeBatchJob &&
+                       !String(this.scrapeBatchJob.id || '').startsWith('optimistic-');
+            },
+
+            get scrapeBatchTaskLabel() {
+                return '刮削任务';
+            },
+
+            get scrapeBatchProgressPercent() {
+                if (!this.scrapeBatchJob || this.scrapeBatchJob.total === 0) {
+                    return 0;
+                }
+                return Math.max(0, Math.min(100, Math.round((this.scrapeBatchJob.processed / this.scrapeBatchJob.total) * 100)));
+            },
+
+            get scrapeBatchProgressText() {
+                if (!this.scrapeBatchJob) {
+                    return '';
+                }
+                if (this.scrapeBatchJob.status === 'queued') {
+                    return `任务已创建，共 ${this.scrapeBatchJob.total} 项，即将开始刮削`;
+                }
+                if (this.scrapeBatchJob.status === 'running') {
+                    const currentIndex = Math.min(this.scrapeBatchJob.processed + 1, this.scrapeBatchJob.total);
+                    return `正在刮削第 ${currentIndex} / ${this.scrapeBatchJob.total} 项`;
+                }
+                if (this.scrapeBatchJob.status === 'completed') {
+                    return `刮削完成，共 ${this.scrapeBatchJob.total} 项`;
+                }
+                if (this.scrapeBatchJob.status === 'cancelled') {
+                    return `任务已取消，已完成 ${this.scrapeBatchJob.processed} / ${this.scrapeBatchJob.total} 项`;
+                }
+                return '';
+            },
+
+            get scrapeBatchCurrentFileText() {
+                if (!this.scrapeBatchJob) {
+                    return '-';
+                }
+                if (this.scrapeBatchJob.current_file_code) {
+                    return this.scrapeBatchJob.current_file_code;
+                }
+                if (this.scrapeBatchJob.status === 'queued') {
+                    return '等待开始';
+                }
+                if (this.scrapeBatchJob.status === 'completed') {
+                    return '已全部完成';
+                }
+                if (this.scrapeBatchJob.status === 'cancelled') {
+                    return '任务已取消';
+                }
+                return '-';
+            },
+
+            get scrapeBatchCurrentStageText() {
+                if (!this.scrapeBatchJob) {
+                    return '-';
+                }
+                if (this.scrapeBatchJob.current_stage) {
+                    return this.getScrapeStageLabel(this.scrapeBatchJob.current_stage, this.scrapeBatchJob.current_source);
+                }
+                if (this.scrapeBatchJob.status === 'queued') {
+                    return '等待开始';
+                }
+                if (this.scrapeBatchJob.status === 'completed') {
+                    return '刮削完成';
+                }
+                if (this.scrapeBatchJob.status === 'cancelled') {
+                    return '任务已取消';
+                }
+                return '-';
+            },
+
+            get scrapeBatchCurrentSourceText() {
+                if (!this.scrapeBatchJob) {
+                    return '-';
+                }
+                if (this.scrapeBatchJob.current_source) {
+                    return this.getScrapeSourceLabel(this.scrapeBatchJob.current_source);
+                }
+                if (this.scrapeBatchJob.status === 'queued') {
+                    return '待分配';
+                }
+                return '-';
+            },
+
+            get scrapeBatchLatestProgressText() {
+                if (!this.scrapeBatchJob) {
+                    return '';
+                }
+                const recentLogs = this.scrapeBatchJob.recent_logs || [];
+                const latestLog = recentLogs.length > 0 ? recentLogs[recentLogs.length - 1] : null;
+                if (latestLog?.message) {
+                    return latestLog.message;
+                }
+                return this.scrapeBatchCurrentStageText;
+            },
+
+            get scrapeBatchInfoLine() {
+                if (!this.scrapeBatchJob) {
+                    return '';
+                }
+                if (this.scrapeBatchJob.status === 'queued') {
+                    return '任务已经加入队列，开始执行后会在这里持续刷新进度。';
+                }
+                if (this.scrapeBatchRunning) {
+                    if (this.scrapeBatchJob.current_file_code) {
+                        return `当前正在处理 ${this.scrapeBatchJob.current_file_code}，进度、阶段和结果会实时同步到列表。`;
+                    }
+                    return '系统正在按顺序处理选中的文件，表格中的对应行会实时同步。';
+                }
+                if (this.scrapeBatchJob.status === 'cancelled') {
+                    return '任务已取消，已完成的项目会保留结果，未完成的项目保持原有状态。';
+                }
+                if (this.scrapeBatchJob.failed > 0) {
+                    return '本批次已结束，失败项仍保留在列表中，点击失败状态可查看详细错误信息。';
+                }
+                return '本批次已结束，刮削结果已同步到列表中。';
             },
 
             get confirmCodes() {
@@ -188,14 +542,6 @@
             },
 
             get sortFieldOptions() {
-                if (this.view === 'history') {
-                    return [
-                        { value: 'time', label: '时间' },
-                        { value: 'code', label: '番号' },
-                        { value: 'status', label: '状态' }
-                    ];
-                }
-
                 return [
                     { value: 'default', label: '默认排序' },
                     { value: 'code', label: '番号' },

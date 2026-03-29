@@ -43,6 +43,42 @@ def build_scan_candidate(
 
 
 class TestJAVScanner:
+    def test_build_global_stats_includes_scrape_success_and_failure_counts(self):
+        stats = main_mod.build_global_stats([
+            {
+                'status': 'pending',
+                'identified_code': 'SSIS-101',
+                'scrape_status': 'pending',
+            },
+            {
+                'status': 'processed',
+                'identified_code': 'SSIS-102',
+                'original_path': '/tmp/missing-processed.mp4',
+                'scrape_status': 'success',
+            },
+            {
+                'status': 'organized',
+                'identified_code': None,
+                'original_path': '/tmp/missing-organized.mp4',
+                'scrape_status': 'failed',
+            },
+            {
+                'status': 'ignored',
+                'identified_code': 'SSIS-999',
+                'scrape_status': 'success',
+            },
+        ])
+
+        assert stats == {
+            'total_files': 3,
+            'identified': 2,
+            'unidentified': 1,
+            'pending': 1,
+            'processed': 2,
+            'scraped': 1,
+            'scrape_failed': 1,
+        }
+
     def test_identify_code(self):
         """测试番号识别"""
         scanner = JAVScanner('/tmp/source', '/tmp/dist')

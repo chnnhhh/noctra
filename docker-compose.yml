@@ -18,4 +18,8 @@ services:
       DIST_DIR: /dist
       DB_PATH: /app/data/noctra.db
       NOCTRA_PROFILE: ${NOCTRA_PROFILE:-docker}
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      ALL_PROXY: ${ALL_PROXY:-}
+      NO_PROXY: ${NO_PROXY:-}
     restart: unless-stopped

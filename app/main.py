@@ -1,15 +1,19 @@
 import asyncio
+import json
 import os
 import uuid
 from functools import cmp_to_key
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+from urllib.parse import quote
+from xml.etree import ElementTree as ET
 
 import aiosqlite
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import ValidationError
 
 from app.models import (
     BatchCancelResult,
@@ -23,9 +27,26 @@ from app.models import (
     OrganizeRequest,
     OrganizeResult,
     ScanResult,
+    ScrapeDetailMetadata,
+    ScrapeDetailResponse,
+    ScrapeLogEntry,
+    ScrapeJobCancelResult,
+    ScrapeJobCreateRequest,
+    ScrapeJobSnapshot,
+    ScrapeListItem,
+    ScrapeBatchResult,
+    ScrapeResponse,
 )
 from app.scanner import JAVScanner
 from app.organizer import JAVOrganizer
+from app.scrape_jobs import (
+    cancel_scrape_job,
+    create_scrape_job,
+    get_active_scrape_job,
+    get_scrape_job,
+    run_scrape_job,
+)
+from app.scraper import ScraperScheduler
 from app.statuses import (
     SELECTABLE_SCAN_STATUSES,
     assign_batch_duplicate_statuses,
@@ -39,6 +60,7 @@ app = FastAPI(title="Noctra JAV Organizer", version="1.0.0")
 SOURCE_DIR = os.getenv('SOURCE_DIR', '/source')
 DIST_DIR = os.getenv('DIST_DIR', '/dist')
 DB_PATH = os.getenv('DB_PATH', '/app/data/noctra.db')
+PROCESSED_LIKE_STATUSES = ('processed', 'organized')
 
 # 初始化组件
 scanner = JAVScanner(SOURCE_DIR, DIST_DIR)
@@ -69,7 +91,34 @@ async def init_db():
                 updated_at TEXT NOT NULL
             )
         ''')
+        await ensure_scrape_schema(db)
         await db.commit()
+
+
+async def ensure_scrape_schema(db: aiosqlite.Connection):
+    """为已有数据库补齐刮削字段，避免新版本启动时依赖手工迁移。"""
+    cursor = await db.execute('PRAGMA table_info(files)')
+    rows = await cursor.fetchall()
+    existing_columns = {row[1] for row in rows}
+
+    columns_to_add = [
+        ('scrape_status', "ALTER TABLE files ADD COLUMN scrape_status TEXT DEFAULT 'pending'"),
+        ('last_scrape_at', "ALTER TABLE files ADD COLUMN last_scrape_at TEXT"),
+        ('scrape_started_at', "ALTER TABLE files ADD COLUMN scrape_started_at TEXT"),
+        ('scrape_finished_at', "ALTER TABLE files ADD COLUMN scrape_finished_at TEXT"),
+        ('scrape_stage', "ALTER TABLE files ADD COLUMN scrape_stage TEXT"),
+        ('scrape_source', "ALTER TABLE files ADD COLUMN scrape_source TEXT"),
+        ('scrape_error', "ALTER TABLE files ADD COLUMN scrape_error TEXT"),
+        ('scrape_error_user_message', "ALTER TABLE files ADD COLUMN scrape_error_user_message TEXT"),
+        ('scrape_logs', "ALTER TABLE files ADD COLUMN scrape_logs TEXT"),
+    ]
+
+    for column_name, alter_sql in columns_to_add:
+        if column_name not in existing_columns:
+            await db.execute(alter_sql)
+
+    await db.execute("UPDATE files SET scrape_status = 'pending' WHERE scrape_status IS NULL")
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_files_scrape_status ON files(scrape_status)')
 
 
 @app.on_event("startup")
@@ -178,6 +227,165 @@ async def get_all_files() -> list[dict]:
         return [dict(row) for row in rows]
 
 
+def _parse_scrape_logs(raw: Optional[str]) -> list[ScrapeLogEntry]:
+    if not raw:
+        return []
+    try:
+        value = json.loads(raw)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return []
+
+    if not isinstance(value, list):
+        return []
+
+    parsed_logs: list[ScrapeLogEntry] = []
+    for item in value:
+        try:
+            parsed_logs.append(ScrapeLogEntry.model_validate(item))
+        except (TypeError, ValueError, ValidationError):
+            continue
+    return parsed_logs
+
+
+def _get_scrape_output_dir(file_record: dict) -> Optional[Path]:
+    target_path = file_record.get("target_path")
+    if not target_path:
+        return None
+
+    path = Path(target_path)
+    return path if path.is_dir() else path.parent
+
+
+def _artifact_sort_key(path: Path) -> tuple[int, str]:
+    name = path.name.lower()
+    suffix = path.suffix.lower()
+
+    if "-fanart" in name:
+        bucket = 0
+    elif "-preview-" in name:
+        bucket = 1
+    elif "-poster" in name or "-cover" in name:
+        bucket = 2
+    elif suffix in {".mp4", ".mkv", ".avi", ".mov", ".wmv", ".iso"}:
+        bucket = 3
+    elif suffix == ".nfo":
+        bucket = 4
+    else:
+        bucket = 5
+
+    return bucket, name
+
+
+def _find_scrape_nfo(output_dir: Path, code: str) -> Optional[Path]:
+    if code:
+        preferred = output_dir / f"{code}.nfo"
+        if preferred.is_file():
+            return preferred
+
+    for candidate in sorted(output_dir.glob("*.nfo")):
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _find_scrape_poster(output_dir: Path, code: str) -> Optional[Path]:
+    preferred_names: list[str] = []
+    if code:
+        preferred_names.extend(
+            [
+                f"{code}-poster.jpg",
+                f"{code}-poster.jpeg",
+                f"{code}-poster.png",
+                f"{code}-poster.webp",
+            ]
+        )
+
+    for filename in preferred_names:
+        candidate = output_dir / filename
+        if candidate.is_file():
+            return candidate
+
+    for pattern in ("*-poster.*", "*-cover.*", "*-fanart.*"):
+        for candidate in sorted(output_dir.glob(pattern)):
+            if candidate.is_file():
+                return candidate
+    return None
+
+
+def _first_xml_text(node: ET.Element, *paths: str) -> Optional[str]:
+    for path in paths:
+        candidate = node.find(path)
+        if candidate is None:
+            continue
+        text = (candidate.text or "").strip()
+        if text:
+            return text
+    return None
+
+
+def _collect_xml_texts(node: ET.Element, path: str) -> list[str]:
+    values: list[str] = []
+    for element in node.findall(path):
+        text = (element.text or "").strip()
+        if text and text not in values:
+            values.append(text)
+    return values
+
+
+def _read_scrape_detail_metadata(nfo_path: Optional[Path], fallback_code: str) -> ScrapeDetailMetadata:
+    empty_metadata = ScrapeDetailMetadata(code=fallback_code or "")
+    if not nfo_path or not nfo_path.is_file():
+        return empty_metadata
+
+    try:
+        root = ET.parse(nfo_path).getroot()
+    except ET.ParseError:
+        return empty_metadata
+
+    actors: list[str] = []
+    for actor_node in root.findall("actor"):
+        actor_name = _first_xml_text(actor_node, "name")
+        if actor_name and actor_name not in actors:
+            actors.append(actor_name)
+
+    tags = _collect_xml_texts(root, "genre")
+    tags.extend(tag for tag in _collect_xml_texts(root, "tag") if tag not in tags)
+
+    code = fallback_code or _first_xml_text(root, "sorttitle", "id", "title", "originaltitle") or ""
+
+    return ScrapeDetailMetadata(
+        code=code,
+        plot=_first_xml_text(root, "plot", "outline"),
+        actors=actors,
+        release_date=_first_xml_text(root, "releasedate", "premiered"),
+        runtime=_first_xml_text(root, "runtime"),
+        tags=tags,
+    )
+
+
+def _resolve_scrape_artifact_path(file_record: dict, filename: str) -> Optional[Path]:
+    safe_name = Path(filename).name
+    if safe_name != filename:
+        return None
+
+    output_dir = _get_scrape_output_dir(file_record)
+    if not output_dir:
+        return None
+
+    try:
+        resolved_dir = output_dir.resolve(strict=True)
+    except FileNotFoundError:
+        return None
+
+    artifact_path = (resolved_dir / safe_name).resolve()
+    try:
+        artifact_path.relative_to(resolved_dir)
+    except ValueError:
+        return None
+
+    return artifact_path if artifact_path.is_file() else None
+
+
 async def get_processed_history_codes() -> set[str]:
     """获取历史上已处理且源文件已不存在的番号集合。"""
     all_files = await get_all_files()
@@ -210,6 +418,33 @@ async def get_file_by_id(file_id: int) -> Optional[dict]:
         )
         row = await cursor.fetchone()
         return dict(row) if row else None
+
+
+async def get_scrape_candidates_for_job(file_ids: list[int]) -> list[dict]:
+    """Return organized files that are eligible for a scrape job."""
+    if not file_ids:
+        return []
+
+    allowed_scrape_statuses = ("pending", "failed", "success") if len(file_ids) == 1 else ("pending",)
+    placeholders = ",".join("?" * len(file_ids))
+    status_placeholders = ",".join("?" * len(PROCESSED_LIKE_STATUSES))
+    scrape_placeholders = ",".join("?" * len(allowed_scrape_statuses))
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            f"""
+            SELECT *
+            FROM files
+            WHERE id IN ({placeholders})
+              AND status IN ({status_placeholders})
+              AND COALESCE(scrape_status, 'pending') IN ({scrape_placeholders})
+            ORDER BY id ASC
+            """,
+            (*file_ids, *PROCESSED_LIKE_STATUSES, *allowed_scrape_statuses),
+        )
+        rows = await cursor.fetchall()
+    return [dict(row) for row in rows]
 
 
 async def delete_file_record(file_id: int):
@@ -371,14 +606,18 @@ def build_global_stats(files: list[object]) -> dict[str, int]:
     unidentified = 0
     pending = 0
     processed = 0
+    scraped = 0
+    scrape_failed = 0
 
     for file in files:
         if isinstance(file, dict):
             identified_code = file.get('identified_code')
             status = file.get('status')
+            scrape_status = file.get('scrape_status')
         else:
             identified_code = getattr(file, 'identified_code', None)
             status = getattr(file, 'status', None)
+            scrape_status = getattr(file, 'scrape_status', None)
 
         if status == 'ignored':
             continue
@@ -392,8 +631,13 @@ def build_global_stats(files: list[object]) -> dict[str, int]:
 
         if status == 'pending':
             pending += 1
-        elif status == 'processed' and _is_processed_history_like(file):
+        elif status in PROCESSED_LIKE_STATUSES and _is_processed_history_like(file):
             processed += 1
+
+        if scrape_status == 'success':
+            scraped += 1
+        elif scrape_status == 'failed':
+            scrape_failed += 1
 
     return {
         'total_files': total_files,
@@ -401,12 +645,14 @@ def build_global_stats(files: list[object]) -> dict[str, int]:
         'unidentified': unidentified,
         'pending': pending,
         'processed': processed,
+        'scraped': scraped,
+        'scrape_failed': scrape_failed,
     }
 
 
 def is_history_processed_record(file: dict) -> bool:
-    """历史记录只展示真正已移动走源文件的 processed 项。"""
-    if file.get('status') != 'processed':
+    """历史记录只展示真正已移动走源文件的已处理项。"""
+    if file.get('status') not in PROCESSED_LIKE_STATUSES:
         return False
     original_path = file.get('original_path')
     return bool(original_path) and not Path(original_path).exists()
@@ -418,7 +664,7 @@ def _is_processed_history_like(file: object) -> bool:
 
     status = getattr(file, 'status', None)
     original_path = getattr(file, 'original_path', None)
-    return status == 'processed' and bool(original_path) and not Path(original_path).exists()
+    return status in PROCESSED_LIKE_STATUSES and bool(original_path) and not Path(original_path).exists()
 
 
 @app.get("/")
@@ -570,6 +816,8 @@ async def scan_files(force_rescan: bool = False):
         unidentified=stats['unidentified'],
         pending=stats['pending'],
         processed=stats['processed'],
+        scraped=stats['scraped'],
+        scrape_failed=stats['scrape_failed'],
         files=file_records
     )
 
@@ -761,7 +1009,7 @@ async def get_history():
             original_path=f['original_path'],
             identified_code=f['identified_code'],
             target_path=f['target_path'],
-            status=f['status'],
+            status='processed',
             file_size=f['file_size'],
             file_mtime=f['file_mtime'],
             created_at=f['created_at'],
@@ -776,9 +1024,286 @@ async def get_history():
         unidentified=stats['unidentified'],
         pending=stats['pending'],
         processed=len(processed_files),
+        scraped=stats['scraped'],
+        scrape_failed=stats['scrape_failed'],
         skipped=skipped,
         files=file_records
     )
+
+
+@app.get("/api/scrape")
+async def get_scrape_list(
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=50, ge=1, le=200),
+    filter: str = Query(default='all'),
+    sort: str = Query(default='code'),
+):
+    """
+    获取刮削列表 (兼容 processed / organized 两种已整理状态)
+
+    参数:
+    - page: 页码 (默认 1)
+    - per_page: 每页条数 (默认 50)
+    - filter: 过滤 scrape_status (all/pending/success/failed)
+    - sort: 排序方式 (code/scrape_time)
+    """
+    # Validate filter
+    valid_filters = {'all', 'pending', 'success', 'failed'}
+    if filter not in valid_filters:
+        raise HTTPException(status_code=400, detail=f'Invalid filter: {filter}')
+
+    # Validate sort
+    valid_sorts = {'code', 'scrape_time'}
+    if sort not in valid_sorts:
+        raise HTTPException(status_code=400, detail=f'Invalid sort: {sort}')
+
+    # Build WHERE clauses
+    processed_placeholders = ','.join('?' * len(PROCESSED_LIKE_STATUSES))
+    where_clauses = [f"status IN ({processed_placeholders})"]
+    params: list = list(PROCESSED_LIKE_STATUSES)
+
+    if filter != 'all':
+        where_clauses.append("COALESCE(scrape_status, 'pending') = ?")
+        params.append(filter)
+
+    where_sql = " AND ".join(where_clauses)
+
+    # Build ORDER BY
+    if sort == 'code':
+        order_sql = "ORDER BY identified_code ASC"
+    else:  # scrape_time
+        order_sql = "ORDER BY last_scrape_at DESC, identified_code ASC"
+
+    # Count total
+    count_sql = f"SELECT COUNT(*) FROM files WHERE {where_sql}"
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(count_sql, tuple(params))
+            row = await cursor.fetchone()
+            total = row[0] if row else 0
+
+            stats_cursor = await db.execute(
+                f"""
+                SELECT
+                    COUNT(*) AS organized,
+                    SUM(CASE WHEN COALESCE(scrape_status, 'pending') = 'pending' THEN 1 ELSE 0 END) AS pending,
+                    SUM(CASE WHEN COALESCE(scrape_status, 'pending') = 'success' THEN 1 ELSE 0 END) AS scraped,
+                    SUM(CASE WHEN COALESCE(scrape_status, 'pending') = 'failed' THEN 1 ELSE 0 END) AS failed
+                FROM files
+                WHERE status IN ({processed_placeholders})
+                """,
+                tuple(PROCESSED_LIKE_STATUSES)
+            )
+            stats_row = await stats_cursor.fetchone()
+
+            # Query items
+            offset = (page - 1) * per_page
+            data_sql = f"""
+                SELECT
+                    id,
+                    original_path,
+                    identified_code,
+                    target_path,
+                    status,
+                    COALESCE(scrape_status, 'pending') AS scrape_status,
+                    last_scrape_at,
+                    scrape_started_at,
+                    scrape_finished_at,
+                    scrape_stage,
+                    scrape_source,
+                    scrape_error,
+                    scrape_error_user_message,
+                    scrape_logs
+                FROM files
+                WHERE {where_sql}
+                {order_sql}
+                LIMIT ? OFFSET ?
+            """
+            cursor = await db.execute(data_sql, (*tuple(params), per_page, offset))
+            rows = await cursor.fetchall()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f'Database error: {str(e)}')
+
+    items = []
+    for row in rows:
+        row_data = dict(row)
+        items.append(
+            ScrapeListItem(
+                file_id=row_data['id'],
+                code=row_data.get('identified_code') or '',
+                target_path=row_data.get('target_path') or '',
+                original_path=row_data.get('original_path') or '',
+                status=row_data.get('status') or 'processed',
+                scrape_status=row_data.get('scrape_status') or 'pending',
+                last_scrape_at=row_data.get('last_scrape_at'),
+                scrape_started_at=row_data.get('scrape_started_at'),
+                scrape_finished_at=row_data.get('scrape_finished_at'),
+                scrape_stage=row_data.get('scrape_stage'),
+                scrape_source=row_data.get('scrape_source'),
+                scrape_error=row_data.get('scrape_error'),
+                scrape_error_user_message=row_data.get('scrape_error_user_message'),
+                scrape_logs=_parse_scrape_logs(row_data.get('scrape_logs')),
+            )
+        )
+
+    stats = {
+        'organized': int(stats_row['organized'] or 0) if stats_row else 0,
+        'pending': int(stats_row['pending'] or 0) if stats_row else 0,
+        'scraped': int(stats_row['scraped'] or 0) if stats_row else 0,
+        'failed': int(stats_row['failed'] or 0) if stats_row else 0,
+    }
+
+    active_job = await get_active_scrape_job()
+    return {"total": total, "items": items, "stats": stats, "active_job": active_job}
+
+
+@app.get("/api/scrape/{file_id}/detail", response_model=ScrapeDetailResponse)
+async def get_scrape_detail(file_id: int):
+    file_record = await get_file_by_id(file_id)
+    if not file_record:
+        raise HTTPException(status_code=404, detail="文件不存在")
+
+    output_dir = _get_scrape_output_dir(file_record)
+    if not output_dir or not output_dir.exists():
+        raise HTTPException(status_code=404, detail="刮削产物不存在")
+
+    code = file_record.get("identified_code") or Path(file_record.get("target_path") or "").stem
+    files = [
+        path.name
+        for path in sorted(
+            (candidate for candidate in output_dir.iterdir() if candidate.is_file()),
+            key=_artifact_sort_key,
+        )
+    ]
+    metadata = _read_scrape_detail_metadata(_find_scrape_nfo(output_dir, code), code)
+    poster_path = _find_scrape_poster(output_dir, code)
+
+    return ScrapeDetailResponse(
+        file_id=file_id,
+        code=code or "",
+        poster_url=(
+            f"/api/scrape/{file_id}/artifacts/{quote(poster_path.name)}"
+            if poster_path
+            else None
+        ),
+        files=files,
+        metadata=metadata,
+    )
+
+
+@app.get("/api/scrape/{file_id}/artifacts/{filename}")
+async def get_scrape_artifact(file_id: int, filename: str):
+    file_record = await get_file_by_id(file_id)
+    if not file_record:
+        raise HTTPException(status_code=404, detail="文件不存在")
+
+    artifact_path = _resolve_scrape_artifact_path(file_record, filename)
+    if not artifact_path:
+        raise HTTPException(status_code=404, detail="刮削产物不存在")
+
+    return FileResponse(path=str(artifact_path), filename=artifact_path.name)
+
+
+@app.post("/api/scrape/jobs", response_model=ScrapeJobSnapshot)
+async def create_scrape_job_route(request: ScrapeJobCreateRequest):
+    active_job = await get_active_scrape_job()
+    if active_job:
+        raise HTTPException(status_code=409, detail="已有刮削任务正在运行，请等待当前任务完成")
+
+    rows = await get_scrape_candidates_for_job(request.file_ids)
+    if not rows:
+        raise HTTPException(status_code=400, detail="没有可刮削的文件")
+
+    job = await create_scrape_job(rows)
+    if not job:
+        raise HTTPException(status_code=409, detail="已有刮削任务正在运行，请等待当前任务完成")
+    asyncio.create_task(run_scrape_job(job["id"]))
+    return job
+
+
+@app.get("/api/scrape/jobs/{job_id}", response_model=ScrapeJobSnapshot)
+async def get_scrape_job_route(job_id: str):
+    job = await get_scrape_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="刮削任务不存在")
+    return job
+
+
+@app.post("/api/scrape/jobs/{job_id}/cancel", response_model=ScrapeJobCancelResult)
+async def cancel_scrape_job_route(job_id: str):
+    job = await cancel_scrape_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="刮削任务不存在")
+    if job["status"] not in {"queued", "running"}:
+        return {
+            "id": job_id,
+            "status": job["status"],
+            "message": "刮削任务当前不可取消",
+        }
+    return {
+        "id": job_id,
+        "status": "cancel_requested",
+        "message": "已请求取消当前刮削任务",
+    }
+
+
+@app.post("/api/scrape/batch", response_model=ScrapeBatchResult)
+async def scrape_files_batch(request: OrganizeRequest):
+    """
+    批量刮削文件元数据
+
+    请求：
+    {
+        "file_ids": [1, 2, 3]
+    }
+    """
+    scheduler = ScraperScheduler()
+    results = []
+    success_count = 0
+    failed_count = 0
+
+    for file_id in request.file_ids:
+        try:
+            result = await scheduler.scrape_single(file_id)
+            results.append({
+                'file_id': file_id,
+                'success': result.success,
+                'error': result.error
+            })
+            if result.success:
+                success_count += 1
+            else:
+                failed_count += 1
+        except Exception as e:
+            results.append({
+                'file_id': file_id,
+                'success': False,
+                'error': str(e)
+            })
+            failed_count += 1
+
+    return ScrapeBatchResult(
+        success_count=success_count,
+        failed_count=failed_count,
+        results=results
+    )
+
+
+@app.post("/api/scrape/{file_id}", response_model=ScrapeResponse)
+async def scrape_file(file_id: int):
+    """
+    刮削单个文件元数据
+
+    参数:
+    - file_id: 文件数据库 ID
+    """
+    scheduler = ScraperScheduler()
+    try:
+        result = await scheduler.scrape_single(file_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return result
 
 
 @app.get("/api/health")

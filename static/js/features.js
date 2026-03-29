@@ -2,6 +2,7 @@
     const MIN_VISIBLE = 800;
     const BATCH_PANEL_ANIMATION_MS = 280;
     const OPTIMISTIC_BATCH_PREFIX = 'optimistic-';
+    const SCRAPE_LIST_FETCH_SIZE = 200;
 
     function createFeatures() {
         return {
@@ -70,19 +71,20 @@
             },
 
             resetSortForView(viewName = this.view) {
-                if (viewName === 'history') {
-                    this.sortField = 'time';
-                    this.sortDirection = 'desc';
+                if (viewName === 'scrape') {
                     return;
                 }
-
                 this.sortField = 'default';
                 this.sortDirection = 'asc';
             },
 
             setPageSize(size) {
                 this.pageSize = Number(size);
-                this.currentPage = 1;
+                if (this.view === 'scrape') {
+                    this.scrapePage = 1;
+                } else {
+                    this.currentPage = 1;
+                }
                 this.closeStatusMenu();
             },
 
@@ -203,9 +205,11 @@
                     this.closeStatusMenu();
                     this.view = 'scan';
                     this.distDir = '/dist';
+                    this.scrapeLoaded = false;
+                    this.scrapeSelectedFiles = {};
+                    this.scrapePage = 1;
                     this.currentFilter = hiddenAfterProcessed.includes(preservedFilter) ? 'all' : preservedFilter;
                     this.currentPage = this.currentFilter === preservedFilter ? preservedPage : 1;
-                    this.historyLoaded = false;
                 } catch (error) {
                     this.error = '刷新扫描结果失败：' + error.message;
                 }
@@ -253,7 +257,7 @@
                     } finally {
                         this.batchPollingBusy = false;
                     }
-                }, 400);
+                }, 200);
             },
 
             updateStats(data) {
@@ -262,12 +266,27 @@
                     identified: data.identified,
                     unidentified: data.unidentified,
                     pending: data.pending,
-                    processed: data.processed
+                    processed: data.processed,
+                    scraped: Number.isFinite(Number(data.scraped)) ? Number(data.scraped) : 0,
+                    scrape_failed: Number.isFinite(Number(data.scrape_failed)) ? Number(data.scrape_failed) : 0,
+                };
+            },
+
+            syncScrapeOverviewStats(scrapeStats = {}) {
+                const organized = Number(scrapeStats.organized);
+                const scraped = Number(scrapeStats.scraped);
+                const scrapeFailed = Number(scrapeStats.failed ?? scrapeStats.scrape_failed);
+
+                this.stats = {
+                    ...this.stats,
+                    processed: Number.isFinite(organized) ? organized : this.stats.processed,
+                    scraped: Number.isFinite(scraped) ? scraped : this.stats.scraped,
+                    scrape_failed: Number.isFinite(scrapeFailed) ? scrapeFailed : this.stats.scrape_failed,
                 };
             },
 
             switchVisibleFiles() {
-                this.files = this.view === 'history' ? this.historyFilesCache : this.scanFilesCache;
+                this.files = this.scanFilesCache;
                 this.selectedFiles = {};
                 this.currentPage = 1;
                 this.closeStatusMenu();
@@ -276,22 +295,31 @@
             async switchView(viewName) {
                 this.view = viewName;
                 this.resetSortForView(viewName);
-
                 this.currentFilter = 'all';
                 this.error = null;
                 this.success = null;
 
-                if (viewName === 'scan') {
-                    if (!this.scanLoaded) {
-                        await this.scanFiles();
+                if (viewName !== 'scrape') {
+                    this.closeScrapeDetail();
+                }
+
+                if (viewName === 'scrape') {
+                    if (!this.scrapeLoaded) {
+                        await this.loadScrapeFiles();
                         return;
                     }
-                } else if (!this.historyLoaded) {
-                    await this.loadHistory();
                     return;
                 }
 
-                this.switchVisibleFiles();
+                if (!this.scanLoaded) {
+                    await this.scanFiles();
+                    return;
+                }
+
+                this.files = this.scanFilesCache;
+                this.selectedFiles = {};
+                this.currentPage = 1;
+                this.closeStatusMenu();
             },
 
             async scanFiles(forceRescan = false) {
@@ -325,31 +353,161 @@
                 }
             },
 
-            async loadHistory() {
+            normalizeScrapeFile(item) {
+                return {
+                    id: item.file_id,
+                    identified_code: item.code,
+                    target_path: item.target_path || '',
+                    scrape_status: item.scrape_status || 'pending',
+                    last_scrape_at: item.last_scrape_at || null,
+                    original_path: item.original_path || '',
+                    status: item.status || 'processed',
+                    scrape_started_at: item.scrape_started_at || null,
+                    scrape_finished_at: item.scrape_finished_at || null,
+                    scrape_stage: item.scrape_stage || null,
+                    scrape_source: item.scrape_source || null,
+                    scrape_error: item.scrape_error || null,
+                    scrape_error_user_message: item.scrape_error_user_message || null,
+                    scrape_logs: item.scrape_logs || []
+                };
+            },
+
+            normalizeScrapeDetailPayload(detail, fallbackCode = '') {
+                const metadata = detail?.metadata || {};
+                return {
+                    file_id: detail?.file_id || null,
+                    code: detail?.code || fallbackCode || '',
+                    poster_url: detail?.poster_url || null,
+                    files: Array.isArray(detail?.files) ? detail.files : [],
+                    metadata: {
+                        code: metadata.code || detail?.code || fallbackCode || '',
+                        plot: metadata.plot || '',
+                        actors: Array.isArray(metadata.actors) ? metadata.actors : [],
+                        release_date: metadata.release_date || '',
+                        runtime: metadata.runtime || '',
+                        tags: Array.isArray(metadata.tags) ? metadata.tags : []
+                    }
+                };
+            },
+
+            async fetchAllScrapeListData() {
+                const firstPage = await ScrapeAPI.getList({
+                    page: 1,
+                    perPage: SCRAPE_LIST_FETCH_SIZE
+                });
+                const items = [...(firstPage.items || [])];
+                const total = Number(firstPage.total || items.length);
+                const totalPages = Math.max(1, Math.ceil(total / SCRAPE_LIST_FETCH_SIZE));
+
+                for (let page = 2; page <= totalPages; page += 1) {
+                    const nextPage = await ScrapeAPI.getList({
+                        page,
+                        perPage: SCRAPE_LIST_FETCH_SIZE
+                    });
+                    items.push(...(nextPage.items || []));
+                }
+
+                return {
+                    ...firstPage,
+                    items
+                };
+            },
+
+            async loadScrapeFiles() {
                 this.loading = true;
-                this.loadingText = '正在加载历史记录...';
+                this.loadingText = '正在加载刮削列表...';
                 this.error = null;
                 this.success = null;
-                this.currentFilter = 'all';
 
                 try {
-                    const response = await fetch('/api/history');
-                    const data = await response.json();
+                    const data = await this.fetchAllScrapeListData();
 
-                    this.updateStats(data);
-                    this.historyFilesCache = data.files.filter(file => file.status === 'processed');
-                    this.files = this.historyFilesCache;
-                    this.historyLoaded = true;
-                    this.selectedFiles = {};
-                    this.confirmFiles = [];
-                    this.currentPage = 1;
+                    this.scrapeFilesCache = (data.items || []).map(item => this.normalizeScrapeFile(item));
+                    this.syncScrapeOverviewStats(data.stats || {});
+
+                    const activeJob = data.active_job || null;
+                    if (activeJob) {
+                        this.setScrapeBatchJob(activeJob);
+                        this.scrapeBatchExpanded = true;
+                        if (['queued', 'running'].includes(activeJob.status)) {
+                            this.startScrapeBatchPolling(activeJob.id);
+                        }
+                    } else {
+                        this.stopScrapeBatchPolling();
+                        this.setScrapeBatchJob(null);
+                        this.scrapeBatchExpanded = false;
+                        this.scrapeBatchCancelling = false;
+                    }
+
+                    this.scrapeLoaded = true;
+                    this.scrapeSelectedFiles = {};
+                    this.scrapePage = 1;
                     this.closeStatusMenu();
-                    this.view = 'history';
                 } catch (e) {
-                    this.error = '加载历史失败: ' + e.message;
+                    this.error = '加载刮削列表失败: ' + e.message;
                 } finally {
                     this.loading = false;
                 }
+            },
+
+            setScrapeFilter(filter) {
+                this.scrapeFilter = filter;
+                this.scrapePage = 1;
+                this.closeStatusMenu();
+            },
+
+            setScrapeSortField(field) {
+                this.scrapeSortField = field;
+                this.scrapePage = 1;
+                this.closeStatusMenu();
+            },
+
+            toggleScrapeSortDirection() {
+                if (this.view === 'scrape' && this.scrapeSortField === 'default') {
+                    return;
+                }
+                this.scrapeSortDirection = this.scrapeSortDirection === 'desc' ? 'asc' : 'desc';
+                this.scrapePage = 1;
+                this.closeStatusMenu();
+            },
+
+            setScrapeFileSelected(file, checked) {
+                if (!this.canSelectScrapeFile(file)) return;
+                const next = { ...this.scrapeSelectedFiles };
+                if (checked) { next[file.id] = true; } else { delete next[file.id]; }
+                this.scrapeSelectedFiles = next;
+            },
+
+            toggleScrapeFileSelection(file) {
+                if (!this.canSelectScrapeFile(file)) return;
+                this.setScrapeFileSelected(file, !this.scrapeSelectedFiles[file.id]);
+            },
+
+            toggleScrapeCurrentPageSelection(forceChecked = null) {
+                const shouldSelect = forceChecked === null ? this.scrapePageSelectionState !== 'all' : forceChecked;
+                const next = { ...this.scrapeSelectedFiles };
+                this.scrapeCurrentPageSelectableFiles.forEach(file => {
+                    if (shouldSelect) { next[file.id] = true; } else { delete next[file.id]; }
+                });
+                this.scrapeSelectedFiles = next;
+            },
+
+            clearScrapeSelection() {
+                this.scrapeSelectedFiles = {};
+            },
+
+            async confirmBatchScrape() {
+                const entries = this.scrapeSelectedEntries.filter(file => this.canSelectScrapeFile(file));
+                if (entries.length === 0) {
+                    return;
+                }
+                await this.executeScrapeBatch(entries);
+            },
+
+            goToScrapePage(page) {
+                const nextPage = Math.max(1, Math.min(this.scrapeTotalPages, page));
+                this.scrapePage = nextPage;
+                this.closeStatusMenu();
             },
 
             confirmOrganize() {
@@ -375,6 +533,133 @@
             closeDeleteModal() {
                 this.showDeleteModal = false;
                 this.deleteTargetFile = null;
+            },
+
+            showScrapeErrorDetails(file) {
+                const liveItem = this.scrapeBatchItemsIndex[file.id] || null;
+                this.scrapeErrorFile = liveItem ? {
+                    ...file,
+                    scrape_stage: liveItem.stage || file.scrape_stage || null,
+                    scrape_source: liveItem.source || file.scrape_source || null,
+                    scrape_error: liveItem.technical_error || file.scrape_error || null,
+                    scrape_error_user_message: liveItem.user_message || file.scrape_error_user_message || null,
+                    scrape_logs: (file.scrape_logs && file.scrape_logs.length > 0)
+                        ? file.scrape_logs
+                        : ((this.scrapeBatchJob?.current_file_id === file.id)
+                            ? (this.scrapeBatchJob?.recent_logs || [])
+                            : [])
+                } : file;
+                this.showScrapeErrorModal = true;
+            },
+
+            async showScrapeDetail(file) {
+                if (!file?.id) {
+                    return;
+                }
+
+                this.closeStatusMenu();
+                this.scrapeDetailLoading = true;
+                this.showScrapeDetailModal = true;
+                this.scrapeDetailFile = this.normalizeScrapeDetailPayload(null, file.identified_code || '');
+
+                try {
+                    const detail = await ScrapeAPI.getDetail(file.id);
+                    this.scrapeDetailFile = this.normalizeScrapeDetailPayload(detail, file.identified_code || '');
+                } catch (error) {
+                    this.showScrapeDetailModal = false;
+                    this.scrapeDetailFile = null;
+                    this.error = '加载刮削内容失败: ' + error.message;
+                } finally {
+                    this.scrapeDetailLoading = false;
+                }
+            },
+
+            closeScrapeDetail() {
+                this.showScrapeDetailModal = false;
+                this.scrapeDetailLoading = false;
+                this.scrapeDetailFile = null;
+                this.closeScrapePosterPreview();
+                this.closeScrapePreviewGallery();
+            },
+
+            openScrapePosterPreview(url) {
+                if (!url) {
+                    return;
+                }
+                this.scrapeDetailPosterPreview = url;
+                this.showScrapePosterModal = true;
+            },
+
+            closeScrapePosterPreview() {
+                this.showScrapePosterModal = false;
+                this.scrapeDetailPosterPreview = null;
+            },
+
+            openScrapePreviewGallery(detail, startIndex = 0) {
+                const previewFiles = this.getScrapeDetailArtifacts(detail).previewFiles || [];
+                if (previewFiles.length === 0) {
+                    return;
+                }
+
+                const nextIndex = Math.max(0, Math.min(startIndex, previewFiles.length - 1));
+                this.scrapePreviewGalleryImages = previewFiles;
+                this.scrapePreviewGalleryIndex = nextIndex;
+                this.showScrapePreviewGalleryModal = true;
+                this.syncCurrentScrapePreviewThumb();
+            },
+
+            closeScrapePreviewGallery() {
+                this.showScrapePreviewGalleryModal = false;
+                this.scrapePreviewGalleryImages = [];
+                this.scrapePreviewGalleryIndex = 0;
+            },
+
+            selectScrapePreview(index) {
+                if (index < 0 || index >= this.scrapePreviewGalleryImages.length) {
+                    return;
+                }
+                this.scrapePreviewGalleryIndex = index;
+                this.syncCurrentScrapePreviewThumb();
+            },
+
+            showPreviousScrapePreview() {
+                if (!this.canShowPreviousScrapePreview) {
+                    return;
+                }
+                this.scrapePreviewGalleryIndex -= 1;
+                this.syncCurrentScrapePreviewThumb();
+            },
+
+            showNextScrapePreview() {
+                if (!this.canShowNextScrapePreview) {
+                    return;
+                }
+                this.scrapePreviewGalleryIndex += 1;
+                this.syncCurrentScrapePreviewThumb();
+            },
+
+            syncCurrentScrapePreviewThumb() {
+                const runAfterRender = typeof this.$nextTick === 'function'
+                    ? this.$nextTick.bind(this)
+                    : (callback) => callback();
+
+                runAfterRender(() => {
+                    const strip = this.$refs?.scrapePreviewStrip;
+                    if (!strip || typeof strip.querySelector !== 'function') {
+                        return;
+                    }
+
+                    const thumb = strip.querySelector(`[data-preview-index="${this.scrapePreviewGalleryIndex}"]`);
+                    if (!thumb || typeof thumb.scrollIntoView !== 'function') {
+                        return;
+                    }
+
+                    thumb.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'nearest',
+                        inline: 'nearest'
+                    });
+                });
             },
 
             async executeOrganize() {
@@ -476,7 +761,6 @@
                     }
 
                     this.success = data.message;
-                    this.historyLoaded = false;
                     await this.scanFiles();
                 } catch (e) {
                     this.error = '删除失败: ' + e.message;
@@ -542,15 +826,214 @@
                 this.selectedFiles = {};
             },
 
+            // ========== Scrape Batch Methods ==========
+
+            toggleScrapeBatchExpanded() {
+                if (!this.scrapeBatchJob) {
+                    return;
+                }
+                this.scrapeBatchExpanded = !this.scrapeBatchExpanded;
+            },
+
+            animateScrapeBatchPanelExpand() {
+                if (this.scrapeBatchExpandTimer) {
+                    clearTimeout(this.scrapeBatchExpandTimer);
+                }
+
+                this.scrapeBatchExpanding = true;
+                this.scrapeBatchExpandTimer = setTimeout(() => {
+                    this.scrapeBatchExpanding = false;
+                    this.scrapeBatchExpandTimer = null;
+                }, BATCH_PANEL_ANIMATION_MS);
+            },
+
+            async ensureScrapeBatchMinimumVisibility() {
+                if (!this.scrapeBatchVisibleSince) {
+                    return;
+                }
+
+                const elapsed = Date.now() - this.scrapeBatchVisibleSince;
+                if (elapsed < MIN_VISIBLE) {
+                    await new Promise(resolve => setTimeout(resolve, MIN_VISIBLE - elapsed));
+                }
+            },
+
+            setScrapeBatchJob(job) {
+                this.scrapeBatchJob = job;
+                const index = {};
+                (job?.items || []).forEach(item => {
+                    index[item.id] = item;
+                });
+                this.scrapeBatchItemsIndex = index;
+                if (job) {
+                    this.scrapeBatchVisibleSince = Date.now();
+                } else {
+                    this.scrapeBatchItemsIndex = {};
+                    this.scrapeBatchPollingBusy = false;
+                }
+            },
+
+            stopScrapeBatchPolling() {
+                if (this.scrapeBatchPollTimer) {
+                    clearInterval(this.scrapeBatchPollTimer);
+                    this.scrapeBatchPollTimer = null;
+                }
+                this.scrapeBatchPollingBusy = false;
+            },
+
+            async fetchScrapeBatchJob(jobId, { syncAfterDone = false } = {}) {
+                const job = await ScrapeAPI.getJob(jobId);
+
+                if (['completed', 'failed', 'cancelled'].includes(job.status)) {
+                    await this.ensureScrapeBatchMinimumVisibility();
+                }
+
+                this.setScrapeBatchJob(job);
+
+                if (['completed', 'failed', 'cancelled'].includes(job.status)) {
+                    this.stopScrapeBatchPolling();
+                    this.scrapeBatchSubmitting = false;
+                    this.scrapeBatchCancelling = false;
+                    if (syncAfterDone) {
+                        await this.loadScrapeFiles();
+                    }
+                }
+            },
+
+            startScrapeBatchPolling(jobId) {
+                this.stopScrapeBatchPolling();
+                this.scrapeBatchPollTimer = setInterval(async () => {
+                    if (this.scrapeBatchPollingBusy) {
+                        return;
+                    }
+
+                    this.scrapeBatchPollingBusy = true;
+                    try {
+                        await this.fetchScrapeBatchJob(jobId, { syncAfterDone: true });
+                    } catch (error) {
+                        this.stopScrapeBatchPolling();
+                        this.scrapeBatchSubmitting = false;
+                        this.scrapeBatchCancelling = false;
+                        this.error = '刮削任务状态获取失败: ' + error.message;
+                    } finally {
+                        this.scrapeBatchPollingBusy = false;
+                    }
+                }, 400);
+            },
+
+            async executeScrapeBatch(files) {
+                const entries = (files || []).filter(Boolean);
+                if (entries.length === 0) {
+                    return;
+                }
+
+                const fileIds = entries.map(file => file.id);
+                this.scrapeBatchSubmitting = true;
+                this.error = null;
+                this.success = null;
+                this.scrapeBatchVisibleSince = Date.now();
+                this.scrapeBatchExpanded = true;
+                this.animateScrapeBatchPanelExpand();
+                this.setScrapeBatchJob(this.createOptimisticScrapeBatchJob(entries));
+
+                try {
+                    const job = await ScrapeAPI.createJob(fileIds);
+                    this.setScrapeBatchJob(job);
+                    this.startScrapeBatchPolling(job.id);
+                } catch (e) {
+                    if (this.scrapeBatchJob && String(this.scrapeBatchJob.id || '').startsWith(OPTIMISTIC_BATCH_PREFIX)) {
+                        this.setScrapeBatchJob(null);
+                    }
+                    if (e.message === '已有刮削任务正在运行，请等待当前任务完成') {
+                        await this.loadScrapeFiles();
+                    }
+                    this.error = '创建刮削任务失败: ' + e.message;
+                    this.scrapeBatchSubmitting = false;
+                    this.scrapeBatchCancelling = false;
+                } finally {
+                    this.scrapeSelectedFiles = {};
+                }
+            },
+
+            createOptimisticScrapeBatchJob(files) {
+                const now = new Date().toISOString();
+                return {
+                    id: `${OPTIMISTIC_BATCH_PREFIX}scrape-${Date.now()}`,
+                    status: 'queued',
+                    total: files.length,
+                    processed: 0,
+                    succeeded: 0,
+                    failed: 0,
+                    created_at: now,
+                    started_at: null,
+                    finished_at: null,
+                    current_file_id: null,
+                    current_file_code: null,
+                    current_stage: null,
+                    current_source: null,
+                    current_progress_percent: 0,
+                    recent_logs: [],
+                    items: files.map(file => ({
+                        id: file.id,
+                        code: file.identified_code,
+                        target_path: file.target_path,
+                        status: 'pending',
+                        stage: null,
+                        source: null,
+                        progress_percent: 0,
+                        user_message: null,
+                        technical_error: null,
+                        started_at: null,
+                        finished_at: null
+                    }))
+                };
+            },
+
+            async handleScrapeAction(file) {
+                this.closeStatusMenu();
+                await this.executeScrapeBatch([file]);
+            },
+
+            async confirmScrapeSelected() {
+                const selectedFiles = this.scrapeSelectedEntries.filter(file => this.canSelectScrapeFile(file));
+                if (selectedFiles.length === 0) {
+                    return;
+                }
+
+                await this.executeScrapeBatch(selectedFiles);
+            },
+
+            async cancelScrapeBatch() {
+                if (!this.scrapeBatchCancelable) {
+                    return;
+                }
+
+                this.scrapeBatchCancelling = true;
+                this.error = null;
+
+                try {
+                    const result = await ScrapeAPI.cancelJob(this.scrapeBatchJob.id);
+                    this.success = result.message;
+                } catch (e) {
+                    this.error = '取消刮削任务失败: ' + e.message;
+                    this.scrapeBatchCancelling = false;
+                }
+            },
+
             init() {
                 this.scanFiles();
             },
 
             destroy() {
                 this.stopBatchPolling();
+                this.stopScrapeBatchPolling();
                 if (this.batchExpandTimer) {
                     clearTimeout(this.batchExpandTimer);
                     this.batchExpandTimer = null;
+                }
+                if (this.scrapeBatchExpandTimer) {
+                    clearTimeout(this.scrapeBatchExpandTimer);
+                    this.scrapeBatchExpandTimer = null;
                 }
             }
         };
