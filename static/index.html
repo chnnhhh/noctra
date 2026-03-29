@@ -118,22 +118,36 @@
                  x-show="view === 'scan' && batchPanelVisible"
                  :data-state="batchPanelState"
                  :class="[batchJob ? batchJob.status : '', batchExpanded ? 'expanded' : 'collapsed', batchExpanding ? 'expanding' : '']">
-                <div class="batch-rail-header">
-                    <button class="batch-rail-toggle" @click="toggleBatchExpanded()" :aria-expanded="batchExpanded">
+                <div class="batch-rail-header"
+                     role="button"
+                     tabindex="0"
+                     @click="toggleBatchExpanded()"
+                     @keydown.enter.prevent="toggleBatchExpanded()"
+                     @keydown.space.prevent="toggleBatchExpanded()"
+                     :aria-expanded="batchExpanded"
+                     :aria-label="batchExpanded ? '收起整理执行状态' : '展开整理执行状态'">
+                    <div class="batch-rail-toggle">
                         <span class="batch-summary-line">
                             <span class="batch-status-chip"
                                   :class="`status-${batchJob.status}`"
                                   x-text="getBatchJobStatusLabel(batchJob.status)"></span>
                             <span>批量整理 <span x-text="batchJob.processed">0</span> / <span x-text="batchJob.total">0</span></span>
                         </span>
-                        <span class="batch-rail-caret" x-html="getUiIcon('chevron_down')"></span>
-                    </button>
+                    </div>
                     <div class="batch-rail-actions">
                         <button class="rail-button"
                                 x-show="batchCancelable"
-                                @click="cancelBatch"
+                                @click.stop="cancelBatch"
                                 :disabled="batchCancelling">
                             <span x-text="batchCancelling ? '取消中...' : '取消'"></span>
+                        </button>
+                        <button class="rail-button batch-panel-corner-toggle"
+                                type="button"
+                                @click.stop="toggleBatchExpanded()"
+                                :aria-expanded="batchExpanded"
+                                :aria-label="batchExpanded ? '收起整理执行状态' : '展开整理执行状态'">
+                            <span class="batch-panel-corner-toggle-icon"
+                                  x-html="getUiIcon(batchExpanded ? 'chevron_up' : 'chevron_down')"></span>
                         </button>
                     </div>
                 </div>
@@ -383,22 +397,36 @@
                  x-show="view === 'scrape' && scrapeBatchPanelVisible"
                  :data-state="scrapeBatchPanelState"
                  :class="[scrapeBatchJob ? scrapeBatchJob.status : '', scrapeBatchExpanded ? 'expanded' : 'collapsed', scrapeBatchExpanding ? 'expanding' : '']">
-                <div class="batch-rail-header">
-                    <button class="batch-rail-toggle" @click="toggleScrapeBatchExpanded()" :aria-expanded="scrapeBatchExpanded">
+                <div class="batch-rail-header"
+                     role="button"
+                     tabindex="0"
+                     @click="toggleScrapeBatchExpanded()"
+                     @keydown.enter.prevent="toggleScrapeBatchExpanded()"
+                     @keydown.space.prevent="toggleScrapeBatchExpanded()"
+                     :aria-expanded="scrapeBatchExpanded"
+                     :aria-label="scrapeBatchExpanded ? '收起刮削执行状态' : '展开刮削执行状态'">
+                    <div class="batch-rail-toggle">
                         <span class="batch-summary-line">
                             <span class="batch-status-chip"
                                   :class="`status-${scrapeBatchJob?.status || 'pending'}`"
                                   x-text="getScrapeBatchJobStatusLabel(scrapeBatchJob?.status)"></span>
                             <span><span x-text="scrapeBatchTaskLabel"></span> <span x-text="scrapeBatchJob?.processed || 0">0</span> / <span x-text="scrapeBatchJob?.total || 0">0</span></span>
                         </span>
-                        <span class="batch-rail-caret" x-html="getUiIcon('chevron_down')"></span>
-                    </button>
+                    </div>
                     <div class="batch-rail-actions">
                         <button class="rail-button"
                                 x-show="scrapeBatchCancelable"
-                                @click="cancelScrapeBatch"
+                                @click.stop="cancelScrapeBatch"
                                 :disabled="scrapeBatchCancelling">
                             <span x-text="scrapeBatchCancelling ? '取消中...' : '取消'"></span>
+                        </button>
+                        <button class="rail-button batch-panel-corner-toggle"
+                                type="button"
+                                @click.stop="toggleScrapeBatchExpanded()"
+                                :aria-expanded="scrapeBatchExpanded"
+                                :aria-label="scrapeBatchExpanded ? '收起刮削执行状态' : '展开刮削执行状态'">
+                            <span class="batch-panel-corner-toggle-icon"
+                                  x-html="getUiIcon(scrapeBatchExpanded ? 'chevron_up' : 'chevron_down')"></span>
                         </button>
                     </div>
                 </div>

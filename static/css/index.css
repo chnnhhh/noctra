@@ -1366,42 +1366,69 @@
 
         .batch-rail-header {
             justify-content: space-between;
+            cursor: pointer;
         }
 
         .batch-rail-toggle {
             display: inline-flex;
             align-items: center;
-            justify-content: space-between;
+            justify-content: flex-start;
             gap: 12px;
-            width: 100%;
-            padding: 0;
-            border: none;
-            background: transparent;
+            flex: 1 1 auto;
+            min-width: 0;
             color: #dbe5ef;
             font-size: 14px;
             font-weight: 700;
         }
 
-        .batch-rail-toggle:hover {
-            transform: none;
+        .batch-rail-actions {
+            margin-left: auto;
+            justify-content: flex-end;
+        }
+
+        .batch-panel-corner-toggle {
+            flex: 0 0 38px;
+            width: 38px;
+            min-width: 38px;
+            height: 38px;
+            padding: 0;
+            border: none;
+            border-radius: 0;
             background: transparent;
             box-shadow: none;
         }
 
-        .batch-rail-caret {
+        .batch-panel-corner-toggle-icon {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 18px;
-            height: 18px;
-            color: #8b949e;
-            flex-shrink: 0;
-            transition: transform 0.18s ease, color 0.18s ease;
+            width: 40px;
+            height: 40px;
+            color: rgba(248, 250, 252, 0.92);
+            transition: color 0.18s ease, opacity 0.18s ease;
         }
 
-        .batch-panel.expanded .batch-rail-caret {
-            transform: rotate(180deg);
-            color: #c9d1d9;
+        .batch-panel-corner-toggle-icon svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .batch-panel-corner-toggle-icon svg * {
+            fill: currentColor;
+            stroke: none;
+        }
+
+        .batch-panel-corner-toggle:hover,
+        .batch-panel-corner-toggle:focus-visible {
+            background: transparent;
+            box-shadow: none;
+        }
+
+        .batch-panel-corner-toggle:hover .batch-panel-corner-toggle-icon,
+        .batch-panel-corner-toggle:focus-visible .batch-panel-corner-toggle-icon,
+        .batch-panel.expanded .batch-panel-corner-toggle-icon {
+            color: rgba(255, 255, 255, 0.98);
         }
 
         .batch-panel-body {

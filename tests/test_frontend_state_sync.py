@@ -303,6 +303,46 @@ def test_scrape_batch_panel_markup_lives_inside_scrape_tab():
     assert scrape_panel > scrape_tab_start
 
 
+def test_batch_panels_expose_explicit_corner_toggle_buttons():
+    html = (PROJECT_ROOT / "static/index.html").read_text(encoding="utf-8")
+
+    assert 'class="rail-button batch-panel-corner-toggle"' in html
+    assert '<div class="batch-rail-header"' in html
+    assert '@click="toggleBatchExpanded()"' in html
+    assert '@click="toggleScrapeBatchExpanded()"' in html
+    assert '@keydown.enter.prevent="toggleBatchExpanded()"' in html
+    assert '@keydown.enter.prevent="toggleScrapeBatchExpanded()"' in html
+    assert '@keydown.space.prevent="toggleBatchExpanded()"' in html
+    assert '@keydown.space.prevent="toggleScrapeBatchExpanded()"' in html
+    assert '@click.stop="cancelBatch"' in html
+    assert '@click.stop="cancelScrapeBatch"' in html
+    assert '@click.stop="toggleBatchExpanded()"' in html
+    assert '@click.stop="toggleScrapeBatchExpanded()"' in html
+    assert "getUiIcon(batchExpanded ? 'chevron_up' : 'chevron_down')" in html
+    assert "getUiIcon(scrapeBatchExpanded ? 'chevron_up' : 'chevron_down')" in html
+
+
+def test_batch_panel_corner_toggle_uses_dedicated_icon_and_styles():
+    render = (PROJECT_ROOT / "static/js/render.js").read_text(encoding="utf-8")
+    css = (PROJECT_ROOT / "static/css/index.css").read_text(encoding="utf-8")
+
+    assert "chevron_up:" in render
+    assert "<polygon points=" in render
+    assert ".batch-panel-corner-toggle" in css
+    assert ".batch-panel-corner-toggle-icon" in css
+    assert "background: transparent;" in css
+    assert "border: none;" in css
+    assert "box-shadow: none;" in css
+    assert ".batch-panel-corner-toggle-icon {" in css
+    assert "width: 40px;\n            height: 40px;" in css
+    assert "color: rgba(248, 250, 252, 0.92);" in css
+    assert ".batch-panel-corner-toggle-icon svg" in css
+    assert "fill: currentColor;" in css
+    assert "stroke: none;" in css
+    assert ".batch-rail-header {" in css
+    assert "cursor: pointer;" in css
+
+
 def test_scrape_status_static_branch_uses_single_root_node():
     html = (PROJECT_ROOT / "static/index.html").read_text(encoding="utf-8")
 

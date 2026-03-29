@@ -637,7 +637,12 @@
                     `,
                     chevron_down: `
                         <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="M6.5 9.5L12 15l5.5-5.5"/>
+                            <polygon points="7 9 17 9 12 16"/>
+                        </svg>
+                    `,
+                    chevron_up: `
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <polygon points="12 8 17 15 7 15"/>
                         </svg>
                     `,
                     delete: `
