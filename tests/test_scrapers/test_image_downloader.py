@@ -86,6 +86,24 @@ class TestDownloadPoster:
         assert session_kwargs["connector"] is mock_connector
 
     @pytest.mark.asyncio
+    async def test_uses_proxy_from_environment_for_poster_download(self, tmp_path: Path, poster_url: str):
+        output_path = tmp_path / "poster.jpg"
+        session_cm, _ = _build_mock_session_and_response()
+
+        with patch.dict("os.environ", {"HTTPS_PROXY": "192.168.7.2:7890"}, clear=False), \
+             patch("app.scrapers.writers.image.aiohttp.ClientSession", return_value=session_cm), \
+             patch("app.scrapers.writers.image.aiofiles.open", create=True) as mock_open:
+
+            mock_file = _make_async_context_manager(AsyncMock())
+            mock_open.return_value = mock_file
+
+            await download_poster(poster_url, output_path)
+
+        session = session_cm.__aenter__.return_value
+        assert session.get.call_count == 1
+        assert session.get.call_args.kwargs["proxy"] == "http://192.168.7.2:7890"
+
+    @pytest.mark.asyncio
     async def test_successful_download(self, tmp_path: Path, poster_url: str):
         """Verify image data is written to the output file."""
         output_path = tmp_path / "posters" / "SSIS-743-poster.jpg"

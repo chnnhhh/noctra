@@ -77,6 +77,32 @@ async def test_javdb_request_retries_with_safari_after_cloudflare_challenge():
 
 
 @pytest.mark.asyncio
+async def test_javdb_request_uses_normalized_proxy_from_environment():
+    crawler = JavDBCrawler()
+    mock_session = MagicMock()
+    mock_session.get.return_value = SimpleNamespace(
+        status_code=200,
+        text="<html><body>ok</body></html>",
+        headers={},
+    )
+
+    with patch.dict(
+        "os.environ",
+        {"HTTPS_PROXY": "192.168.7.2:7890"},
+        clear=False,
+    ), patch("app.scrapers.base.requests.Session", return_value=mock_session), \
+         patch("app.scrapers.base.asyncio.sleep", new=AsyncMock()):
+        result = await crawler._request(
+            "https://javdb.com/search?q=EBOD-829&locale=zh",
+            context="搜索页",
+        )
+
+    assert result == "<html><body>ok</body></html>"
+    assert mock_session.get.call_count == 1
+    assert mock_session.get.call_args.kwargs["proxy"] == "http://192.168.7.2:7890"
+
+
+@pytest.mark.asyncio
 async def test_scrape_single_surfaces_crawler_diagnostics_on_source_block():
     scheduler = ScraperScheduler()
     scheduler._get_file = AsyncMock(return_value=_scrapeable_row())

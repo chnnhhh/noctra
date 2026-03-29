@@ -9,6 +9,7 @@ from typing import Optional
 from curl_cffi import requests
 
 from .metadata import ScrapingMetadata
+from .proxy import get_proxy_for_url
 
 
 class BaseCrawler(ABC):
@@ -142,12 +143,19 @@ class BaseCrawler(ABC):
                 self._session = requests.Session()
 
             for index, profile in enumerate(self.REQUEST_PROFILES):
+                request_kwargs = {
+                    "headers": profile["headers"],
+                    "timeout": 25,
+                    "verify": False,
+                    "impersonate": profile["impersonate"],
+                }
+                proxy = get_proxy_for_url(url)
+                if proxy:
+                    request_kwargs["proxy"] = proxy
+
                 response = self._session.get(
                     url,
-                    headers=profile["headers"],
-                    timeout=25,
-                    verify=False,
-                    impersonate=profile["impersonate"],
+                    **request_kwargs,
                 )
 
                 if response.status_code == 200:

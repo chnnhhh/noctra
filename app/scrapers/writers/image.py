@@ -9,6 +9,7 @@ import aiohttp
 from PIL import Image
 
 from app.scrapers.metadata import ScrapingMetadata
+from app.scrapers.proxy import get_proxy_for_url
 
 DOWNLOAD_TIMEOUT = 30
 CHUNK_SIZE = 8192
@@ -45,7 +46,12 @@ async def _download_with_session(
     url: str,
     output_path: Path,
 ) -> Path:
-    async with session.get(url) as response:
+    request_kwargs = {}
+    proxy = get_proxy_for_url(url)
+    if proxy:
+        request_kwargs["proxy"] = proxy
+
+    async with session.get(url, **request_kwargs) as response:
         response.raise_for_status()
         await _write_response_to_path(response, output_path)
     return output_path
