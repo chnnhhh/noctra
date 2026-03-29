@@ -415,6 +415,11 @@
                 return this.getUiIcon(iconMap[field] || 'sort_default');
             },
 
+            getSortFieldLabel(options, field) {
+                const match = (options || []).find(option => option.value === field);
+                return match?.label || '默认排序';
+            },
+
             compareNatural(left, right) {
                 return this.collator.compare(left || '', right || '');
             },
@@ -643,6 +648,11 @@
                     chevron_up: `
                         <svg viewBox="0 0 24 24" aria-hidden="true">
                             <polygon points="12 8 17 15 7 15"/>
+                        </svg>
+                    `,
+                    check: `
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M6.5 12.5l3.2 3.2 7.8-8.2"/>
                         </svg>
                     `,
                     delete: `

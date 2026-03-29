@@ -160,6 +160,7 @@ def test_scrape_view_defaults_to_status_priority_with_failed_first():
 
         console.log(JSON.stringify({
           scrapeSortField: app.scrapeSortField,
+          scrapeSortFieldOptions: app.scrapeSortFieldOptions.map(option => option.value),
           scrapeSortDirection: app.scrapeSortDirection,
           orderedCodes: app.scrapeSortedFiles.map(file => file.identified_code),
         }));
@@ -168,7 +169,8 @@ def test_scrape_view_defaults_to_status_priority_with_failed_first():
 
     result = run_frontend_script(script)
 
-    assert result["scrapeSortField"] == "status"
+    assert result["scrapeSortField"] == "default"
+    assert result["scrapeSortFieldOptions"] == ["default", "code", "scrape_time", "status"]
     assert result["scrapeSortDirection"] == "asc"
     assert result["orderedCodes"] == ["ABP-200", "MIDE-300", "SSIS-100"]
 
@@ -394,6 +396,23 @@ def test_batch_panel_corner_toggle_uses_dedicated_icon_and_styles():
     assert "stroke: none;" in css
     assert ".batch-rail-header {" in css
     assert "cursor: pointer;" in css
+
+
+def test_sort_controls_use_custom_dark_menu_instead_of_native_select():
+    html = (PROJECT_ROOT / "static/index.html").read_text(encoding="utf-8")
+    css = (PROJECT_ROOT / "static/css/index.css").read_text(encoding="utf-8")
+    render = (PROJECT_ROOT / "static/js/render.js").read_text(encoding="utf-8")
+
+    assert 'class="sort-menu-button"' in html
+    assert 'class="sort-menu-panel"' in html
+    assert 'class="sort-menu-item"' in html
+    assert 'class="sort-menu-check"' in html
+    assert '<select class="sort-select"' not in html
+    assert ".sort-menu-button" in css
+    assert ".sort-menu-panel" in css
+    assert ".sort-menu-item.active" in css
+    assert ".sort-menu-check" in css
+    assert "check:" in render
 
 
 def test_scrape_status_static_branch_uses_single_root_node():

@@ -463,6 +463,9 @@
             },
 
             toggleScrapeSortDirection() {
+                if (this.view === 'scrape' && this.scrapeSortField === 'default') {
+                    return;
+                }
                 this.scrapeSortDirection = this.scrapeSortDirection === 'desc' ? 'asc' : 'desc';
                 this.scrapePage = 1;
                 this.closeStatusMenu();

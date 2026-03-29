@@ -203,13 +203,33 @@
                     </div>
                     <div class="control-rail">
                         <span class="control-label">排序</span>
-                        <div class="sort-composer">
-                            <span class="sort-icon" x-html="getSortFieldIcon(sortField)"></span>
-                            <select class="sort-select" :value="sortField" @change="setSortField($event.target.value)">
+                        <div class="sort-composer" x-data="{ open: false }" @keydown.escape.prevent.stop="open = false">
+                            <button class="sort-menu-button"
+                                    type="button"
+                                    @click="open = !open"
+                                    :aria-expanded="open"
+                                    aria-haspopup="menu">
+                                <span class="sort-icon" x-html="getSortFieldIcon(sortField)"></span>
+                                <span class="sort-menu-label" x-text="getSortFieldLabel(sortFieldOptions, sortField)"></span>
+                                <span class="sort-menu-caret" x-html="getUiIcon(open ? 'chevron_up' : 'chevron_down')"></span>
+                            </button>
+                            <div class="sort-menu-panel"
+                                 x-show="open"
+                                 x-transition.origin.top.left
+                                 @click.outside="open = false"
+                                 style="display: none;">
                                 <template x-for="option in sortFieldOptions" :key="option.value">
-                                    <option :value="option.value" x-text="option.label"></option>
+                                    <button class="sort-menu-item"
+                                            type="button"
+                                            :class="{ 'active': sortField === option.value }"
+                                            @click="setSortField(option.value); open = false">
+                                        <span class="sort-menu-check" aria-hidden="true">
+                                            <span x-show="sortField === option.value" x-html="getUiIcon('check')"></span>
+                                        </span>
+                                        <span class="sort-menu-item-label" x-text="option.label"></span>
+                                    </button>
                                 </template>
-                            </select>
+                            </div>
                             <button class="rail-button sort-direction-button"
                                     @click="toggleSortDirection()"
                                     :disabled="sortField === 'default'"
@@ -512,15 +532,36 @@
                     </div>
                     <div class="control-rail">
                         <span class="control-label">排序</span>
-                        <div class="sort-composer">
-                            <span class="sort-icon" x-html="getSortFieldIcon(scrapeSortField)"></span>
-                            <select class="sort-select" :value="scrapeSortField" @change="setScrapeSortField($event.target.value)">
+                        <div class="sort-composer" x-data="{ open: false }" @keydown.escape.prevent.stop="open = false">
+                            <button class="sort-menu-button"
+                                    type="button"
+                                    @click="open = !open"
+                                    :aria-expanded="open"
+                                    aria-haspopup="menu">
+                                <span class="sort-icon" x-html="getSortFieldIcon(scrapeSortField)"></span>
+                                <span class="sort-menu-label" x-text="getSortFieldLabel(scrapeSortFieldOptions, scrapeSortField)"></span>
+                                <span class="sort-menu-caret" x-html="getUiIcon(open ? 'chevron_up' : 'chevron_down')"></span>
+                            </button>
+                            <div class="sort-menu-panel"
+                                 x-show="open"
+                                 x-transition.origin.top.left
+                                 @click.outside="open = false"
+                                 style="display: none;">
                                 <template x-for="option in scrapeSortFieldOptions" :key="option.value">
-                                    <option :value="option.value" x-text="option.label"></option>
+                                    <button class="sort-menu-item"
+                                            type="button"
+                                            :class="{ 'active': scrapeSortField === option.value }"
+                                            @click="setScrapeSortField(option.value); open = false">
+                                        <span class="sort-menu-check" aria-hidden="true">
+                                            <span x-show="scrapeSortField === option.value" x-html="getUiIcon('check')"></span>
+                                        </span>
+                                        <span class="sort-menu-item-label" x-text="option.label"></span>
+                                    </button>
                                 </template>
-                            </select>
+                            </div>
                             <button class="rail-button sort-direction-button"
                                     @click="toggleScrapeSortDirection()"
+                                    :disabled="scrapeSortField === 'default'"
                                     :title="scrapeSortDirection === 'desc' ? '降序' : '升序'">
                                 <span class="icon-glyph" x-html="scrapeSortDirection === 'desc' ? getUiIcon('sort_desc') : getUiIcon('sort_asc')"></span>
                             </button>

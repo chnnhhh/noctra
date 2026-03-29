@@ -1093,9 +1093,10 @@
         }
 
         .sort-composer {
+            position: relative;
             display: inline-flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
         }
 
         .sort-icon {
@@ -1107,8 +1108,10 @@
             color: #7dd3fc;
         }
 
-        .sort-select {
-            appearance: none;
+        .sort-menu-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
             border: 1px solid rgba(48, 54, 61, 0.92);
             border-radius: 12px;
             background: rgba(10, 16, 28, 0.8);
@@ -1117,25 +1120,126 @@
             font-weight: 700;
             line-height: 1;
             height: 36px;
-            padding: 0 32px 0 12px;
-            min-width: 108px;
+            padding: 0 12px;
+            min-width: 132px;
             cursor: pointer;
-            transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
-            background-image:
-                linear-gradient(45deg, transparent 50%, rgba(148, 163, 184, 0.66) 50%),
-                linear-gradient(135deg, rgba(148, 163, 184, 0.66) 50%, transparent 50%);
-            background-position:
-                calc(100% - 16px) calc(50% - 2px),
-                calc(100% - 11px) calc(50% - 2px);
-            background-size: 5px 5px, 5px 5px;
-            background-repeat: no-repeat;
+            transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
         }
 
-        .sort-select:hover,
-        .sort-select:focus-visible {
+        .sort-menu-button:hover,
+        .sort-menu-button:focus-visible {
             border-color: rgba(96, 165, 250, 0.34);
             color: #e6edf3;
             outline: none;
+            box-shadow: 0 0 0 1px rgba(56, 139, 253, 0.08);
+        }
+
+        .sort-menu-label {
+            flex: 1 1 auto;
+            min-width: 0;
+            text-align: left;
+            white-space: nowrap;
+        }
+
+        .sort-menu-caret {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 14px;
+            height: 14px;
+            color: rgba(148, 163, 184, 0.82);
+            flex: 0 0 auto;
+        }
+
+        .sort-menu-caret svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .sort-menu-caret svg * {
+            fill: currentColor;
+            stroke: none;
+        }
+
+        .sort-menu-panel {
+            position: absolute;
+            top: calc(100% + 8px);
+            left: 0;
+            z-index: 40;
+            min-width: 176px;
+            padding: 6px;
+            border-radius: 14px;
+            border: 1px solid rgba(48, 54, 61, 0.96);
+            background:
+                linear-gradient(180deg, rgba(17, 24, 39, 0.96), rgba(9, 14, 24, 0.98));
+            box-shadow:
+                0 16px 36px rgba(2, 6, 23, 0.48),
+                inset 0 1px 0 rgba(255, 255, 255, 0.04);
+            backdrop-filter: blur(16px);
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .sort-menu-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            min-height: 34px;
+            padding: 0 10px;
+            border: none;
+            border-radius: 10px;
+            background: transparent;
+            color: rgba(201, 209, 217, 0.82);
+            font-size: 12px;
+            font-weight: 600;
+            justify-content: flex-start;
+            text-align: left;
+            transition: background 0.14s ease, color 0.14s ease;
+        }
+
+        .sort-menu-item:hover,
+        .sort-menu-item:focus-visible {
+            background: rgba(255, 255, 255, 0.045);
+            color: #e6edf3;
+            outline: none;
+        }
+
+        .sort-menu-item.active {
+            background: rgba(56, 139, 253, 0.14);
+            color: #f8fafc;
+            font-weight: 700;
+        }
+
+        .sort-menu-check {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 14px;
+            height: 14px;
+            flex: 0 0 14px;
+            color: rgba(248, 250, 252, 0.96);
+        }
+
+        .sort-menu-check svg {
+            width: 12px;
+            height: 12px;
+            display: block;
+        }
+
+        .sort-menu-check svg * {
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2.2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .sort-menu-item-label {
+            flex: 1 1 auto;
+            min-width: 0;
         }
 
         .sort-direction-button {
@@ -3521,10 +3625,14 @@
                 flex-wrap: wrap;
             }
 
-            .sort-select {
+            .sort-menu-button {
                 flex: 1 1 0;
                 min-width: 0;
                 width: 100%;
+            }
+
+            .sort-menu-panel {
+                min-width: 100%;
             }
 
             .mini-page-status,
