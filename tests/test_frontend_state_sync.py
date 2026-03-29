@@ -120,6 +120,110 @@ def test_refresh_after_batch_completion_invalidates_stale_scrape_cache():
     assert result["finalView"] == "scrape"
 
 
+def test_summary_flow_view_model_exposes_main_and_branch_pipeline_stats():
+    script = textwrap.dedent(
+        """
+        import fs from 'node:fs';
+        import vm from 'node:vm';
+
+        const context = vm.createContext({
+          console,
+          setTimeout,
+          clearTimeout,
+          setInterval,
+          clearInterval,
+          Intl,
+          URLSearchParams,
+          Date,
+        });
+        context.window = context;
+        context.globalThis = context;
+
+        const source = fs.readFileSync('static/js/state.js', 'utf8');
+        vm.runInContext(source, context, { filename: 'static/js/state.js' });
+
+        const app = context.NoctraState.createState();
+        app.stats = {
+          total_files: 12,
+          identified: 9,
+          unidentified: 3,
+          pending: 4,
+          processed: 5,
+          scraped: 2,
+          scrape_failed: 1,
+        };
+
+        console.log(JSON.stringify({
+          overview: app.overviewStats,
+          mainFlow: app.summaryMainFlow.map(card => ({
+            key: card.key,
+            value: card.value,
+            column: card.column,
+            footerLabel: card.footerLabel || null,
+            footerValue: card.footerValue ?? null,
+            footerVariant: card.footerVariant || null,
+          })),
+        }));
+        """
+    )
+
+    result = run_frontend_script(script)
+
+    assert result["overview"] == {
+        "total": 12,
+        "recognized": 9,
+        "unresolved": 3,
+        "pending": 4,
+        "done": 5,
+        "scraped": 2,
+        "scrapeFailed": 1,
+    }
+    assert result["mainFlow"] == [
+        {"key": "total", "value": 12, "column": 1, "footerLabel": None, "footerValue": None, "footerVariant": None},
+        {"key": "recognized", "value": 9, "column": 2, "footerLabel": "未识别", "footerValue": 3, "footerVariant": "unresolved"},
+        {"key": "pending", "value": 4, "column": 3, "footerLabel": None, "footerValue": None, "footerVariant": None},
+        {"key": "done", "value": 5, "column": 4, "footerLabel": None, "footerValue": None, "footerVariant": None},
+        {"key": "scraped", "value": 2, "column": 5, "footerLabel": "刮削失败", "footerValue": 1, "footerVariant": "scrape-failed"},
+    ]
+
+
+def test_summary_flow_markup_uses_pipeline_main_and_branch_rows():
+    html = (PROJECT_ROOT / "static/index.html").read_text(encoding="utf-8")
+
+    assert 'class="stats-pipeline"' in html
+    assert 'class="stats-flow-row stats-flow-row--main"' in html
+    assert 'x-for="card in summaryMainFlow"' in html
+    assert 'summary-card__content' in html
+    assert 'summary-card__footer' in html
+    assert 'summary-card__footer-label' in html
+    assert 'summary-card__footer-value' in html
+    assert 'summary-card__footer--empty' in html
+    assert 'stats-flow-row stats-flow-row--branch' not in html
+    assert 'summary-branch-badge' not in html
+    assert 'summary-link--branch' not in html
+
+
+def test_summary_flow_styles_compact_branch_spacing_and_stronger_connectors():
+    css = (PROJECT_ROOT / "static/css/index.css").read_text(encoding="utf-8")
+
+    assert ".summary-card {" in css
+    assert "grid-template-rows: minmax(0, 1fr) 52px;" in css
+    assert "height: 180px;" in css
+    assert ".summary-card__content {" in css
+    assert "padding-bottom: 12px;" in css
+    assert ".summary-card__footer {" in css
+    assert "height: 52px;" in css
+    assert "padding: 16px 16px 10px;" in css
+    assert "rgba(255, 255, 255, 0) 0%" in css
+    assert "rgba(7, 12, 21, 0.12) 100%" in css
+    assert ".summary-card__footer::before {" in css
+    assert "top: 10px;" in css
+    assert "rgba(148, 163, 184, 0.18) 40%" in css
+    assert ".summary-card__footer--empty {" in css
+    assert "width: calc(var(--flow-gap) + 44px);" in css
+    assert ".summary-link--branch {" not in css
+
+
 def test_scrape_batch_panel_surfaces_concise_progress_copy():
     script = textwrap.dedent(
         """

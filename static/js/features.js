@@ -266,7 +266,22 @@
                     identified: data.identified,
                     unidentified: data.unidentified,
                     pending: data.pending,
-                    processed: data.processed
+                    processed: data.processed,
+                    scraped: Number.isFinite(Number(data.scraped)) ? Number(data.scraped) : 0,
+                    scrape_failed: Number.isFinite(Number(data.scrape_failed)) ? Number(data.scrape_failed) : 0,
+                };
+            },
+
+            syncScrapeOverviewStats(scrapeStats = {}) {
+                const organized = Number(scrapeStats.organized);
+                const scraped = Number(scrapeStats.scraped);
+                const scrapeFailed = Number(scrapeStats.failed ?? scrapeStats.scrape_failed);
+
+                this.stats = {
+                    ...this.stats,
+                    processed: Number.isFinite(organized) ? organized : this.stats.processed,
+                    scraped: Number.isFinite(scraped) ? scraped : this.stats.scraped,
+                    scrape_failed: Number.isFinite(scrapeFailed) ? scrapeFailed : this.stats.scrape_failed,
                 };
             },
 
@@ -408,6 +423,7 @@
                     const data = await this.fetchAllScrapeListData();
 
                     this.scrapeFilesCache = (data.items || []).map(item => this.normalizeScrapeFile(item));
+                    this.syncScrapeOverviewStats(data.stats || {});
 
                     const activeJob = data.active_job || null;
                     if (activeJob) {

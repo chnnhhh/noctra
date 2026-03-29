@@ -524,6 +524,12 @@
                 card.style.setProperty('--y', `${event.clientY - rect.top}px`);
             },
 
+            getSummaryFlowPlacement(card) {
+                const column = Number(card?.column || 1);
+                const span = Number(card?.span || 1);
+                return `grid-column: ${column} / span ${span};`;
+            },
+
             getStatusActions(file) {
                 if (['pending', 'duplicate'].includes(file.status)) {
                     return [

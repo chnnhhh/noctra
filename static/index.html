@@ -24,56 +24,43 @@
             </div>
         </div>
 
-        <div class="stats">
-            <div class="stat-card total" @mousemove="updateStatGlow($event)">
-                <div class="stat-card__meta">
-                    <span class="stat-card__meta-dot"></span>
-                    <span>SCAN / TOTAL</span>
-                </div>
-                <div class="stat-card__id">M-01</div>
-                <div class="stat-value" x-text="stats.total_files">0</div>
-                <div class="stat-label">总文件数</div>
-                <div class="stat-subtext">当前扫描结果</div>
-            </div>
-            <div class="stat-card identified" @mousemove="updateStatGlow($event)">
-                <div class="stat-card__meta">
-                    <span class="stat-card__meta-dot"></span>
-                    <span>RECOGNITION</span>
-                </div>
-                <div class="stat-card__id">M-02</div>
-                <div class="stat-value" x-text="stats.identified">0</div>
-                <div class="stat-label">已识别</div>
-                <div class="stat-subtext">已完成番号解析</div>
-            </div>
-            <div class="stat-card unidentified" @mousemove="updateStatGlow($event)">
-                <div class="stat-card__meta">
-                    <span class="stat-card__meta-dot"></span>
-                    <span>UNRESOLVED</span>
-                </div>
-                <div class="stat-card__id">M-03</div>
-                <div class="stat-value" x-text="stats.unidentified">0</div>
-                <div class="stat-label">未识别</div>
-                <div class="stat-subtext">需要人工确认</div>
-            </div>
-            <div class="stat-card pending" @mousemove="updateStatGlow($event)">
-                <div class="stat-card__meta">
-                    <span class="stat-card__meta-dot"></span>
-                    <span>QUEUE / PENDING</span>
-                </div>
-                <div class="stat-card__id">M-04</div>
-                <div class="stat-value" x-text="stats.pending">0</div>
-                <div class="stat-label">待整理</div>
-                <div class="stat-subtext">等待整理执行</div>
-            </div>
-            <div class="stat-card processed" @mousemove="updateStatGlow($event)">
-                <div class="stat-card__meta">
-                    <span class="stat-card__meta-dot"></span>
-                    <span>ARCHIVE / DONE</span>
-                </div>
-                <div class="stat-card__id">M-05</div>
-                <div class="stat-value" x-text="stats.processed">0</div>
-                <div class="stat-label">已整理</div>
-                <div class="stat-subtext">已完成落盘</div>
+        <div class="stats-pipeline">
+            <div class="stats-flow-row stats-flow-row--main">
+                <template x-for="card in summaryMainFlow" :key="card.key">
+                    <div class="summary-flow-slot summary-flow-slot--main"
+                         :style="getSummaryFlowPlacement(card)">
+                        <div class="summary-link summary-link--main" x-show="card.column > 1" aria-hidden="true">
+                            <span class="summary-link__line"></span>
+                            <span class="summary-link__arrow"></span>
+                        </div>
+                        <div class="stat-card summary-card"
+                             :class="card.variant"
+                             @mousemove="updateStatGlow($event)">
+                            <div class="summary-card__content">
+                                <div class="stat-card__meta">
+                                    <span class="stat-card__meta-dot"></span>
+                                    <span x-text="card.meta"></span>
+                                </div>
+                                <div class="stat-card__id" x-text="card.id"></div>
+                                <div class="stat-value" x-text="card.value">0</div>
+                                <div class="stat-label" x-text="card.label"></div>
+                                <div class="stat-subtext" x-text="card.subtext"></div>
+                            </div>
+                            <div class="summary-card__footer"
+                                 :class="[card.footerVariant || '', !card.footerLabel ? 'summary-card__footer--empty' : '']">
+                                <template x-if="card.footerLabel">
+                                    <span class="summary-card__footer-dot" aria-hidden="true"></span>
+                                </template>
+                                <template x-if="card.footerLabel">
+                                    <span class="summary-card__footer-label" x-text="card.footerLabel"></span>
+                                </template>
+                                <template x-if="card.footerLabel">
+                                    <span class="summary-card__footer-value" x-text="card.footerValue">0</span>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                </template>
             </div>
         </div>
 

@@ -606,14 +606,18 @@ def build_global_stats(files: list[object]) -> dict[str, int]:
     unidentified = 0
     pending = 0
     processed = 0
+    scraped = 0
+    scrape_failed = 0
 
     for file in files:
         if isinstance(file, dict):
             identified_code = file.get('identified_code')
             status = file.get('status')
+            scrape_status = file.get('scrape_status')
         else:
             identified_code = getattr(file, 'identified_code', None)
             status = getattr(file, 'status', None)
+            scrape_status = getattr(file, 'scrape_status', None)
 
         if status == 'ignored':
             continue
@@ -630,12 +634,19 @@ def build_global_stats(files: list[object]) -> dict[str, int]:
         elif status in PROCESSED_LIKE_STATUSES and _is_processed_history_like(file):
             processed += 1
 
+        if scrape_status == 'success':
+            scraped += 1
+        elif scrape_status == 'failed':
+            scrape_failed += 1
+
     return {
         'total_files': total_files,
         'identified': identified,
         'unidentified': unidentified,
         'pending': pending,
         'processed': processed,
+        'scraped': scraped,
+        'scrape_failed': scrape_failed,
     }
 
 
@@ -805,6 +816,8 @@ async def scan_files(force_rescan: bool = False):
         unidentified=stats['unidentified'],
         pending=stats['pending'],
         processed=stats['processed'],
+        scraped=stats['scraped'],
+        scrape_failed=stats['scrape_failed'],
         files=file_records
     )
 
@@ -1011,6 +1024,8 @@ async def get_history():
         unidentified=stats['unidentified'],
         pending=stats['pending'],
         processed=len(processed_files),
+        scraped=stats['scraped'],
+        scrape_failed=stats['scrape_failed'],
         skipped=skipped,
         files=file_records
     )

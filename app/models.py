@@ -22,6 +22,8 @@ class StatsSummary(BaseModel):
     unidentified: int
     pending: int
     processed: int
+    scraped: int = 0
+    scrape_failed: int = 0
 
 
 class ScanResult(StatsSummary):

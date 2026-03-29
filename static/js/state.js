@@ -14,7 +14,9 @@
                 identified: 0,
                 unidentified: 0,
                 pending: 0,
-                processed: 0
+                processed: 0,
+                scraped: 0,
+                scrape_failed: 0
             },
             scanLoaded: false,
             scrapeLoaded: false,
@@ -79,6 +81,86 @@
             scrapeBatchExpandTimer: null,
             scrapeBatchExpanding: false,
             distDir: '/dist',
+
+            get overviewStats() {
+                const stats = this.stats || {};
+                const readCount = (value) => {
+                    const count = Number(value);
+                    return Number.isFinite(count) ? Math.max(0, count) : 0;
+                };
+
+                return {
+                    total: readCount(stats.total_files),
+                    recognized: readCount(stats.identified),
+                    unresolved: readCount(stats.unidentified),
+                    pending: readCount(stats.pending),
+                    done: readCount(stats.processed),
+                    scraped: readCount(stats.scraped),
+                    scrapeFailed: readCount(stats.scrape_failed),
+                };
+            },
+
+            get summaryMainFlow() {
+                const stats = this.overviewStats;
+                return [
+                    {
+                        key: 'total',
+                        column: 1,
+                        variant: 'total',
+                        meta: 'SCAN / TOTAL',
+                        id: 'M-01',
+                        value: stats.total,
+                        label: '总文件数',
+                        subtext: '当前扫描基线',
+                    },
+                    {
+                        key: 'recognized',
+                        column: 2,
+                        variant: 'recognized',
+                        meta: 'RECOGNITION',
+                        id: 'M-02',
+                        value: stats.recognized,
+                        label: '已识别',
+                        subtext: '已完成番号解析',
+                        footerLabel: '未识别',
+                        footerValue: stats.unresolved,
+                        footerVariant: 'unresolved',
+                    },
+                    {
+                        key: 'pending',
+                        column: 3,
+                        variant: 'pending',
+                        meta: 'QUEUE / PENDING',
+                        id: 'M-03',
+                        value: stats.pending,
+                        label: '待整理',
+                        subtext: '等待整理执行',
+                    },
+                    {
+                        key: 'done',
+                        column: 4,
+                        variant: 'done',
+                        meta: 'ARCHIVE / DONE',
+                        id: 'M-04',
+                        value: stats.done,
+                        label: '已整理',
+                        subtext: '已完成移动 / 落盘',
+                    },
+                    {
+                        key: 'scraped',
+                        column: 5,
+                        variant: 'scraped',
+                        meta: 'SCRAPED / COMPLETE',
+                        id: 'M-05',
+                        value: stats.scraped,
+                        label: '已刮削',
+                        subtext: '元数据 / NFO / 图片已生成',
+                        footerLabel: '刮削失败',
+                        footerValue: stats.scrapeFailed,
+                        footerVariant: 'scrape-failed',
+                    },
+                ];
+            },
 
             get allSelected() {
                 return this.currentPageSelectableFiles.length > 0 &&
