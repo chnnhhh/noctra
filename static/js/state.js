@@ -25,7 +25,7 @@
             sortField: 'default',
             sortDirection: 'asc',
             scrapeFilter: 'all',
-            scrapeSortField: 'code',
+            scrapeSortField: 'status',
             scrapeSortDirection: 'asc',
             scrapeSelectedFiles: {},
             scrapePage: 1,
@@ -222,7 +222,7 @@
                         return this.compareNatural(a.identified_code || '', b.identified_code || '');
                     }
                     if (this.scrapeSortField === 'status') {
-                        const statusOrder = { pending: 0, success: 1, failed: 2 };
+                        const statusOrder = { failed: 0, pending: 1, success: 2 };
                         const diff = ((statusOrder[a.scrape_status] ?? 9) - (statusOrder[b.scrape_status] ?? 9)) * dir;
                         if (diff !== 0) return diff;
                         return this.compareNatural(a.identified_code || '', b.identified_code || '');

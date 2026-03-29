@@ -120,6 +120,59 @@ def test_refresh_after_batch_completion_invalidates_stale_scrape_cache():
     assert result["finalView"] == "scrape"
 
 
+def test_scrape_view_defaults_to_status_priority_with_failed_first():
+    script = textwrap.dedent(
+        """
+        import fs from 'node:fs';
+        import vm from 'node:vm';
+
+        const context = vm.createContext({
+          console,
+          setTimeout,
+          clearTimeout,
+          setInterval,
+          clearInterval,
+          Intl,
+          URLSearchParams,
+          Date,
+        });
+        context.window = context;
+        context.globalThis = context;
+
+        for (const path of ['static/js/state.js', 'static/js/render.js']) {
+          const source = fs.readFileSync(path, 'utf8');
+          vm.runInContext(source, context, { filename: path });
+        }
+
+        function mergeSection(target, section) {
+          Object.defineProperties(target, Object.getOwnPropertyDescriptors(section));
+          return target;
+        }
+
+        const app = {};
+        mergeSection(app, context.NoctraState.createState());
+        mergeSection(app, context.NoctraRender.createRender());
+        app.scrapeFilesCache = [
+          { id: 1, identified_code: 'SSIS-100', scrape_status: 'success', last_scrape_at: '2026-03-29T00:00:00' },
+          { id: 2, identified_code: 'ABP-200', scrape_status: 'failed', last_scrape_at: '2026-03-28T00:00:00' },
+          { id: 3, identified_code: 'MIDE-300', scrape_status: 'pending', last_scrape_at: null },
+        ];
+
+        console.log(JSON.stringify({
+          scrapeSortField: app.scrapeSortField,
+          scrapeSortDirection: app.scrapeSortDirection,
+          orderedCodes: app.scrapeSortedFiles.map(file => file.identified_code),
+        }));
+        """
+    )
+
+    result = run_frontend_script(script)
+
+    assert result["scrapeSortField"] == "status"
+    assert result["scrapeSortDirection"] == "asc"
+    assert result["orderedCodes"] == ["ABP-200", "MIDE-300", "SSIS-100"]
+
+
 def test_summary_flow_view_model_exposes_main_and_branch_pipeline_stats():
     script = textwrap.dedent(
         """
