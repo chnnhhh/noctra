@@ -1,3 +1,5 @@
+import errno
+
 from app.organizer import JAVOrganizer
 
 
@@ -78,7 +80,83 @@ class TestJAVOrganizer:
         source.write_text('source fixture')
         target.write_text('existing target')
 
-        success, reason = organizer.move_file(str(source), str(target))
+        success, reason, move_method = organizer.move_file(str(source), str(target))
 
         assert success is False
         assert reason == '目标文件已存在'
+        assert move_method is None
+
+    def test_move_file_uses_rename_on_same_filesystem(self, tmp_path):
+        organizer = JAVOrganizer(str(tmp_path / 'dist'))
+        source = tmp_path / 'source' / 'SSIS-123.mp4'
+        target = tmp_path / 'dist' / 'SSIS-123' / 'SSIS-123.mp4'
+
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_text('rename fixture')
+
+        success, reason, move_method = organizer.move_file(str(source), str(target))
+
+        assert success is True
+        assert reason is None
+        assert move_method == 'rename'
+        assert source.exists() is False
+        assert target.read_text() == 'rename fixture'
+
+    def test_move_file_reports_missing_source(self, tmp_path):
+        organizer = JAVOrganizer(str(tmp_path / 'dist'))
+        source = tmp_path / 'source' / 'missing.mp4'
+        target = tmp_path / 'dist' / 'SSIS-999' / 'SSIS-999.mp4'
+
+        success, reason, move_method = organizer.move_file(str(source), str(target))
+
+        assert success is False
+        assert reason == '源文件不存在'
+        assert move_method is None
+
+    def test_move_file_falls_back_to_copy_delete_on_exdev(self, tmp_path, monkeypatch):
+        organizer = JAVOrganizer(str(tmp_path / 'dist'))
+        source = tmp_path / 'source' / 'ABW-100.mp4'
+        target = tmp_path / 'dist' / 'ABW-100' / 'ABW-100.mp4'
+
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_bytes(b'cross-device fixture')
+
+        def fake_replace(src, dst):
+            raise OSError(errno.EXDEV, 'Invalid cross-device link')
+
+        monkeypatch.setattr('app.organizer.os.replace', fake_replace)
+
+        success, reason, move_method = organizer.move_file(str(source), str(target))
+
+        assert success is True
+        assert reason is None
+        assert move_method == 'copy_delete'
+        assert source.exists() is False
+        assert target.exists() is True
+        assert target.read_bytes() == b'cross-device fixture'
+
+    def test_organize_includes_move_method(self, tmp_path):
+        organizer = JAVOrganizer(str(tmp_path / 'dist'))
+        source = tmp_path / 'source' / 'SSIS-321.mp4'
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_text('organize fixture')
+
+        results = organizer.organize([
+            {
+                'file_id': 1,
+                'original_path': str(source),
+                'identified_code': 'SSIS-321',
+                'filename': source.name,
+            }
+        ])
+
+        assert results == [
+            {
+                'file_id': 1,
+                'original_path': str(source),
+                'target_path': str(tmp_path / 'dist' / 'SSIS-321' / 'SSIS-321.mp4'),
+                'status': 'moved',
+                'reason': None,
+                'move_method': 'rename',
+            }
+        ]
