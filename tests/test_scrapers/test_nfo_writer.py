@@ -219,6 +219,7 @@ def test_write_nfo_rich_fields_match_reference_shape(tmp_path: Path):
     assert root.find("cover").text == "SSIS-743-poster.jpg"
     assert root.find("fanart/thumb").text == "SSIS-743-fanart.jpg"
     assert [genre.text for genre in root.findall("genre")] == ["巨乳", "單體作品"]
+    assert [tag.text for tag in root.findall("tag")] == ["巨乳", "單體作品"]
     assert [director.text for director in root.findall("director")] == ["監督A"]
 
     actors = root.findall("actor")
@@ -249,6 +250,12 @@ def test_write_nfo_uses_output_stem_for_artifact_references_and_uc_genres(tmp_pa
         "中字",
         "无码破解",
     ]
+    assert [tag.text for tag in root.findall("tag")] == [
+        "巨乳",
+        "單體作品",
+        "中字",
+        "无码破解",
+    ]
 
 
 def test_write_nfo_adds_subtitle_genre_for_c_suffix(tmp_path: Path):
@@ -261,3 +268,4 @@ def test_write_nfo_adds_subtitle_genre_for_c_suffix(tmp_path: Path):
     root = tree.getroot()
 
     assert [genre.text for genre in root.findall("genre")] == ["熟女", "中字"]
+    assert [tag.text for tag in root.findall("tag")] == ["熟女", "中字"]

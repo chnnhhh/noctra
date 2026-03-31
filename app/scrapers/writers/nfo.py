@@ -35,8 +35,11 @@ def write_nfo(metadata: ScrapingMetadata, output_path: Path) -> None:
     _text_element(movie, "rating", metadata.rating or "")
     _text_element(movie, "votes", str(metadata.votes) if metadata.votes is not None else "")
 
-    for genre in _normalized_genres(metadata.tags, artifact_base_name):
+    normalized_genres = _normalized_genres(metadata.tags, artifact_base_name)
+    for genre in normalized_genres:
         _text_element(movie, "genre", genre or "")
+    for tag in normalized_genres:
+        _text_element(movie, "tag", tag or "")
 
     _text_element(movie, "studio", metadata.studio or "")
 
