@@ -49,6 +49,7 @@ class BatchItemResult(BaseModel):
     target_path: Optional[str] = None
     status: str  # pending, processing, success, skipped, failed
     message: Optional[str] = None
+    move_method: Optional[str] = None
     started_at: Optional[str] = None
     finished_at: Optional[str] = None
 
@@ -79,6 +80,7 @@ class OrganizeResultItem(BaseModel):
     target_path: Optional[str]
     status: str  # moved, failed, skipped
     reason: Optional[str] = None
+    move_method: Optional[str] = None
 
 
 class OrganizeResult(BaseModel):

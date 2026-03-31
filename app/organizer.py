@@ -1,3 +1,4 @@
+import errno
 import os
 import re
 import shutil
@@ -94,32 +95,71 @@ class JAVOrganizer:
         target_path = target_dir / filename
         return str(target_path)
 
-    def move_file(self, source_path: str, target_path: str) -> tuple[bool, Optional[str]]:
+    def _copy_then_unlink(self, source: Path, target: Path) -> tuple[bool, Optional[str], Optional[str]]:
+        """
+        跨文件系统回退逻辑。
+
+        EXDEV 表示源和目标不在同一个文件系统上，rename 无法原子跨设备移动，
+        这时只能显式复制到目标端，确保目标文件落盘后再删除源文件。
+        """
+        try:
+            shutil.copy2(str(source), str(target))
+
+            # copy2 已经关闭写句柄，这里重新打开并 fsync，尽量确保目标文件已落盘。
+            with target.open('rb') as target_file:
+                os.fsync(target_file.fileno())
+
+            if not target.exists():
+                return (False, '复制完成后未找到目标文件', None)
+
+            source.unlink()
+            return (True, None, 'copy_delete')
+        except OSError as e:
+            return (False, f'跨文件系统复制失败: {e}', None)
+        except shutil.Error as e:
+            return (False, f'跨文件系统复制失败: {e}', None)
+
+    def _move_file_atomic_or_copy_fallback(self, source: Path, target: Path) -> tuple[bool, Optional[str], Optional[str]]:
+        """
+        先尝试同文件系统原子移动，只有在 EXDEV 时才显式降级为 copy + delete。
+
+        不能直接依赖 shutil.move，因为它会在内部悄悄决定走 rename 还是 copy+delete，
+        调用层既看不到本次使用了哪条路径，也不方便后续排查跨盘性能问题。
+        """
+        try:
+            # 同一文件系统下优先使用原子 replace，速度快且不会出现“复制到一半”的中间态。
+            os.replace(str(source), str(target))
+            return (True, None, 'rename')
+        except OSError as e:
+            if e.errno == errno.EXDEV:
+                # EXDEV 说明发生了跨设备/跨文件系统移动，rename 无法直接完成。
+                return self._copy_then_unlink(source, target)
+            return (False, f'原子移动失败: {e}', None)
+
+    def move_file(self, source_path: str, target_path: str) -> tuple[bool, Optional[str], Optional[str]]:
         """
         移动文件
 
-        返回：(是否成功, 失败原因)
+        返回：(是否成功, 失败原因, 移动方式)
         """
         try:
             source = Path(source_path)
             target = Path(target_path)
 
             if not source.exists():
-                return (False, '源文件不存在')
+                return (False, '源文件不存在', None)
 
             # 创建目标目录
             target.parent.mkdir(parents=True, exist_ok=True)
 
             # 如果目标文件已存在，跳过
             if target.exists():
-                return (False, '目标文件已存在')
+                return (False, '目标文件已存在', None)
 
-            # 移动文件
-            shutil.move(str(source), str(target))
-            return (True, None)
-        except (OSError, shutil.Error) as e:
+            return self._move_file_atomic_or_copy_fallback(source, target)
+        except OSError as e:
             print(f'移动失败: {source_path} -> {target_path}: {e}')
-            return (False, str(e))
+            return (False, f'移动失败: {e}', None)
 
     def organize(self, files: list[dict]) -> list[dict]:
         """
@@ -158,7 +198,7 @@ class JAVOrganizer:
             target_path = self.get_target_path(code, filename)
 
             # 执行移动
-            (success, reason) = self.move_file(original_path, target_path)
+            (success, reason, move_method) = self.move_file(original_path, target_path)
             result_status = 'moved'
             if not success:
                 result_status = 'skipped' if reason == '目标文件已存在' else 'failed'
@@ -169,6 +209,7 @@ class JAVOrganizer:
                 'target_path': target_path,
                 'status': result_status,
                 'reason': reason,
+                'move_method': move_method,
             })
 
         return results

@@ -553,7 +553,7 @@ async def run_batch_job(batch_id: str):
             target_path = organizer.get_target_path(code, Path(source_path).name)
             pending_item['target_path'] = target_path
 
-        success, reason = await asyncio.to_thread(organizer.move_file, source_path, target_path)
+        success, reason, move_method = await asyncio.to_thread(organizer.move_file, source_path, target_path)
         finished_at = utcnow_iso()
 
         if success:
@@ -588,6 +588,7 @@ async def run_batch_job(batch_id: str):
 
             item['status'] = final_status
             item['message'] = final_message
+            item['move_method'] = move_method
             item['finished_at'] = finished_at
             job['processed'] += 1
 

@@ -339,12 +339,13 @@ class TestJAVScanner:
                         file for file in first_scan.files
                         if Path(file.original_path).name == 'ABW-6007-C.mp4'
                     )
-                    success, reason = await asyncio.to_thread(
+                    success, reason, move_method = await asyncio.to_thread(
                         main_mod.organizer.move_file,
                         chosen.original_path,
                         chosen.target_path
                     )
                     assert success, reason
+                    assert move_method == 'rename'
 
                     await main_mod.update_file_status(chosen.id, 'processed', chosen.target_path)
                     await main_mod.mark_related_files_target_exists(chosen.id, chosen.identified_code)
@@ -419,12 +420,13 @@ class TestJAVScanner:
                         file for file in first_scan.files
                         if Path(file.original_path).name == 'ABP-456-C.mp4'
                     )
-                    success, reason = await asyncio.to_thread(
+                    success, reason, move_method = await asyncio.to_thread(
                         main_mod.organizer.move_file,
                         chosen.original_path,
                         chosen.target_path
                     )
                     assert success, reason
+                    assert move_method == 'rename'
 
                     await main_mod.update_file_status(chosen.id, 'processed', chosen.target_path)
                     await main_mod.mark_related_files_target_exists(chosen.id, chosen.identified_code)
