@@ -224,3 +224,40 @@ def test_write_nfo_rich_fields_match_reference_shape(tmp_path: Path):
     actors = root.findall("actor")
     assert actors[0].find("name").text == "女優A"
     assert actors[0].find("type").text == "Actor"
+
+
+def test_write_nfo_uses_output_stem_for_artifact_references_and_uc_genres(tmp_path: Path):
+    metadata = _make_metadata(code="JUR-271", tags=["巨乳", "單體作品"])
+    output_path = tmp_path / "JUR-271-UC.nfo"
+
+    write_nfo(metadata, output_path)
+
+    tree = ET.parse(output_path)
+    root = tree.getroot()
+
+    assert root.find("poster").text == "JUR-271-UC-poster.jpg"
+    assert root.find("cover").text == "JUR-271-UC-poster.jpg"
+    assert root.find("fanart/thumb").text == "JUR-271-UC-fanart.jpg"
+    assert [thumb.text for thumb in root.findall("fanart/thumb")] == [
+        "JUR-271-UC-fanart.jpg",
+        "JUR-271-UC-preview-01.jpg",
+        "JUR-271-UC-preview-02.jpg",
+    ]
+    assert [genre.text for genre in root.findall("genre")] == [
+        "巨乳",
+        "單體作品",
+        "中字",
+        "无码破解",
+    ]
+
+
+def test_write_nfo_adds_subtitle_genre_for_c_suffix(tmp_path: Path):
+    metadata = _make_metadata(code="JUR-271", tags=["熟女"], poster_url="", fanart_url="", preview_urls=[])
+    output_path = tmp_path / "JUR-271-C.nfo"
+
+    write_nfo(metadata, output_path)
+
+    tree = ET.parse(output_path)
+    root = tree.getroot()
+
+    assert [genre.text for genre in root.findall("genre")] == ["熟女", "中字"]

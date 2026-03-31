@@ -189,6 +189,54 @@ class TestScrapeSingle:
         assert persisted_logs[-1]["stage"] == "finalizing"
 
     @pytest.mark.asyncio
+    async def test_scrape_single_uses_media_stem_for_all_artifact_names(self):
+        """Scrape outputs should follow the real media filename stem, including -C/-UC suffixes."""
+        file_id = 1
+        code = "JUR-271"
+        media_stem = "JUR-271-UC"
+        record = _make_file_record(
+            file_id=file_id,
+            code=code,
+            target_path=f"/dist/{code}/{media_stem}.mp4",
+        )
+        metadata = _make_metadata(code=code)
+
+        scheduler = ScraperScheduler()
+        scheduler._get_file = AsyncMock(return_value=record)
+        scheduler._persist_attempt_update = AsyncMock()
+
+        mock_crawler = AsyncMock()
+        mock_crawler.crawl = AsyncMock(return_value=metadata)
+
+        with (
+            patch("app.scraper.JavDBCrawler", return_value=mock_crawler),
+            patch("app.scraper.write_nfo") as mock_write_nfo,
+            patch("app.scraper.download_poster", new_callable=AsyncMock) as mock_download,
+            patch(
+                "app.scraper.download_additional_artwork",
+                new_callable=AsyncMock,
+                create=True,
+                return_value={
+                    "fanart": Path(record["target_path"]).parent / f"{media_stem}-fanart.jpg",
+                    "poster": Path(record["target_path"]).parent / f"{media_stem}-poster.jpg",
+                    "previews": [],
+                },
+            ) as mock_download_additional,
+        ):
+            result = await scheduler.scrape_single(file_id)
+
+        assert result.success is True
+        mock_write_nfo.assert_called_once_with(
+            metadata,
+            Path(record["target_path"]).parent / f"{media_stem}.nfo",
+        )
+        mock_download.assert_not_called()
+        args = mock_download_additional.await_args
+        assert args.args == (metadata, Path(record["target_path"]).parent)
+        assert args.kwargs["poster_output_path"] == Path(record["target_path"]).parent / f"{media_stem}-poster.jpg"
+        assert args.kwargs["base_name"] == media_stem
+
+    @pytest.mark.asyncio
     async def test_file_not_found(self):
         """Test when DB returns None (file record not found)."""
         scheduler = ScraperScheduler()
@@ -525,8 +573,8 @@ class TestScrapeSingle:
             await scheduler.scrape_single(file_id)
 
         expected_dir = Path("/dist/SSIS-789")
-        assert actual_nfo_path == expected_dir / f"{code}.nfo"
-        assert actual_poster_path == expected_dir / f"{code}-poster.jpg"
+        assert actual_nfo_path == expected_dir / "SSIS-789-C.nfo"
+        assert actual_poster_path == expected_dir / "SSIS-789-C-poster.jpg"
 
 
 def test_scrape_timestamps_match_app_local_clock():

@@ -11,6 +11,8 @@ XML_DECLARATION = '<?xml version="1.0" encoding="utf-8" standalone="yes"?>'
 
 def write_nfo(metadata: ScrapingMetadata, output_path: Path) -> None:
     """Write a movie NFO next to the organized media file."""
+    output_path = Path(output_path)
+    artifact_base_name = output_path.stem
     movie = ET.Element("movie")
 
     _text_element(movie, "outline", metadata.plot or "")
@@ -33,7 +35,7 @@ def write_nfo(metadata: ScrapingMetadata, output_path: Path) -> None:
     _text_element(movie, "rating", metadata.rating or "")
     _text_element(movie, "votes", str(metadata.votes) if metadata.votes is not None else "")
 
-    for genre in metadata.tags:
+    for genre in _normalized_genres(metadata.tags, artifact_base_name):
         _text_element(movie, "genre", genre or "")
 
     _text_element(movie, "studio", metadata.studio or "")
@@ -51,21 +53,20 @@ def write_nfo(metadata: ScrapingMetadata, output_path: Path) -> None:
 
     _text_element(movie, "website", metadata.website or "")
 
-    poster_filename = _poster_filename(metadata)
+    poster_filename = _poster_filename(metadata, artifact_base_name)
     _text_element(movie, "poster", poster_filename or "")
     _text_element(movie, "cover", poster_filename or "")
 
     if metadata.fanart_url:
         fanart = ET.SubElement(movie, "fanart")
-        _text_element(fanart, "thumb", _fanart_filename(metadata))
+        _text_element(fanart, "thumb", _fanart_filename(metadata, artifact_base_name))
         for index, _ in enumerate(metadata.preview_urls, start=1):
-            _text_element(fanart, "thumb", _preview_filename(metadata, index))
+            _text_element(fanart, "thumb", _preview_filename(metadata, artifact_base_name, index))
 
     ET.indent(movie, space="  ")
     raw = ET.tostring(movie, encoding="unicode")
     raw = _inject_plot_cdata(raw, metadata.plot)
 
-    output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as file_obj:
         file_obj.write(XML_DECLARATION + "\n")
@@ -85,18 +86,39 @@ def _release_year(release_date: str) -> str:
     return ""
 
 
-def _poster_filename(metadata: ScrapingMetadata) -> str:
+def _normalized_genres(tags: list[str], artifact_base_name: str) -> list[str]:
+    genres: list[str] = []
+    for genre in tags:
+        normalized = (genre or "").strip()
+        if normalized and normalized not in genres:
+            genres.append(normalized)
+
+    upper_name = artifact_base_name.upper()
+    extra_genres: list[str] = []
+    if upper_name.endswith("-UC"):
+        extra_genres = ["中字", "无码破解"]
+    elif upper_name.endswith("-C"):
+        extra_genres = ["中字"]
+
+    for genre in extra_genres:
+        if genre not in genres:
+            genres.append(genre)
+
+    return genres
+
+
+def _poster_filename(metadata: ScrapingMetadata, artifact_base_name: str) -> str:
     if metadata.poster_url:
-        return f"{metadata.code}-poster.jpg"
+        return f"{artifact_base_name}-poster.jpg"
     return ""
 
 
-def _fanart_filename(metadata: ScrapingMetadata) -> str:
-    return f"{metadata.code}-fanart.jpg"
+def _fanart_filename(metadata: ScrapingMetadata, artifact_base_name: str) -> str:
+    return f"{artifact_base_name}-fanart.jpg"
 
 
-def _preview_filename(metadata: ScrapingMetadata, index: int) -> str:
-    return f"{metadata.code}-preview-{index:02d}.jpg"
+def _preview_filename(metadata: ScrapingMetadata, artifact_base_name: str, index: int) -> str:
+    return f"{artifact_base_name}-preview-{index:02d}.jpg"
 
 
 def _escape_cdata_end(text: str) -> str:
