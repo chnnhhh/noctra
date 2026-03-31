@@ -274,6 +274,34 @@ class TestDownloadAdditionalArtwork:
             {"kind": "preview_downloaded", "index": 2, "total": 2},
         ]
 
+    @pytest.mark.asyncio
+    async def test_downloads_artwork_with_custom_base_name(self, tmp_path: Path):
+        metadata = ScrapingMetadata(
+            code="EBOD-829",
+            title="Title",
+            plot="",
+            poster_url="https://example.com/poster.jpg",
+            fanart_url="https://example.com/fanart.jpg",
+            preview_urls=["https://example.com/preview-1.jpg"],
+        )
+
+        session_cm, _ = _build_mock_session_and_response()
+        with patch("app.scrapers.writers.image.aiohttp.ClientSession", return_value=session_cm), \
+             patch("app.scrapers.writers.image.aiofiles.open", create=True) as mock_open, \
+             patch("app.scrapers.writers.image.crop_poster_from_fanart", return_value=tmp_path / "EBOD-829-UC-poster.jpg"):
+            mock_open.return_value = _make_async_context_manager(AsyncMock())
+
+            downloaded = await download_additional_artwork(
+                metadata,
+                tmp_path,
+                poster_output_path=tmp_path / "EBOD-829-UC-poster.jpg",
+                base_name="EBOD-829-UC",
+            )
+
+        assert downloaded["fanart"] == tmp_path / "EBOD-829-UC-fanart.jpg"
+        assert downloaded["poster"] == tmp_path / "EBOD-829-UC-poster.jpg"
+        assert downloaded["previews"] == [tmp_path / "EBOD-829-UC-preview-01.jpg"]
+
 
 class TestCropPosterFromFanart:
     def test_crops_right_cover_panel_into_portrait_poster(self, tmp_path: Path):

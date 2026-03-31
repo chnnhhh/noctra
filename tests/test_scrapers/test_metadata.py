@@ -33,3 +33,21 @@ def test_metadata_to_dict():
     assert result["code"] == "SSIS-123"
     assert result["poster"] == "SSIS-123-poster.jpg"
     assert result["studio"] == ""  # 默认值
+
+
+def test_metadata_to_dict_supports_custom_base_name():
+    """自定义输出基准名时，附属文件名应与视频 stem 对齐。"""
+    metadata = ScrapingMetadata(
+        code="JUR-271",
+        title="タイトル",
+        plot="プロット",
+        poster_url="https://example.com/poster.jpg",
+        fanart_url="https://example.com/fanart.jpg",
+        preview_urls=["https://example.com/preview-1.jpg"],
+    )
+
+    result = metadata.to_dict(base_name="JUR-271-UC")
+
+    assert result["poster"] == "JUR-271-UC-poster.jpg"
+    assert result["fanart"] == "JUR-271-UC-fanart.jpg"
+    assert result["previews"] == ["JUR-271-UC-preview-01.jpg"]

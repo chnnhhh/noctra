@@ -29,8 +29,9 @@ class ScrapingMetadata:
     fanart_url: str = ""
     preview_urls: List[str] = field(default_factory=list)
 
-    def to_dict(self) -> dict:
+    def to_dict(self, base_name: Optional[str] = None) -> dict:
         """Convert to a simple dictionary for template-style consumers."""
+        artifact_base_name = base_name or self.code
         return {
             "code": self.code,
             "title": self.title,
@@ -45,10 +46,10 @@ class ScrapingMetadata:
             "tags": self.tags,
             "rating": self.rating,
             "votes": self.votes,
-            "poster": f"{self.code}-poster.jpg" if self.poster_url else None,
-            "fanart": f"{self.code}-fanart.jpg" if self.fanart_url else None,
+            "poster": f"{artifact_base_name}-poster.jpg" if self.poster_url else None,
+            "fanart": f"{artifact_base_name}-fanart.jpg" if self.fanart_url else None,
             "previews": [
-                f"{self.code}-preview-{index:02d}.jpg"
+                f"{artifact_base_name}-preview-{index:02d}.jpg"
                 for index, _ in enumerate(self.preview_urls, start=1)
             ],
         }

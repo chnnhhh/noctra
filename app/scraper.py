@@ -51,6 +51,11 @@ def _source_label(source: str | None) -> str:
     return mapping.get(source or "", source or "")
 
 
+def _scrape_artifact_base_name(target_path: str) -> str:
+    """Use the real media filename stem so sidecar files stay Emby-compatible."""
+    return Path(target_path).stem
+
+
 def _map_failure(stage: str | None, source: str | None, technical_error: str | None) -> str:
     source_label = _source_label(source)
     text = (technical_error or "").lower()
@@ -248,8 +253,9 @@ class ScraperScheduler:
 
             # Step 4: Derive output paths
             target_dir = Path(target_path).parent
-            nfo_path = target_dir / f"{code}.nfo"
-            poster_path = target_dir / f"{code}-poster.jpg"
+            artifact_base_name = _scrape_artifact_base_name(target_path)
+            nfo_path = target_dir / f"{artifact_base_name}.nfo"
+            poster_path = target_dir / f"{artifact_base_name}-poster.jpg"
 
             # Step 5: Write NFO file
             await emit(
@@ -314,6 +320,7 @@ class ScraperScheduler:
                     metadata,
                     target_dir,
                     poster_output_path=poster_path,
+                    base_name=artifact_base_name,
                     progress_callback=on_artwork_progress,
                 )
 

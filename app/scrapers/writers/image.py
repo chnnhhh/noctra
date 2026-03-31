@@ -76,11 +76,13 @@ async def download_additional_artwork(
     output_dir: Path,
     *,
     poster_output_path: Path | None = None,
+    base_name: str | None = None,
     progress_callback=None,
 ) -> dict[str, Path | list[Path] | None]:
     """Download fanart and preview images on a best-effort basis."""
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    artifact_base_name = base_name or metadata.code
 
     downloaded_previews: list[Path] = []
     fanart_path: Path | None = None
@@ -94,7 +96,7 @@ async def download_additional_artwork(
         connector=connector,
     ) as session:
         if metadata.fanart_url:
-            fanart_path = output_dir / f"{metadata.code}-fanart{_guess_image_extension(metadata.fanart_url)}"
+            fanart_path = output_dir / f"{artifact_base_name}-fanart{_guess_image_extension(metadata.fanart_url)}"
             try:
                 if progress_callback:
                     callback_result = progress_callback({
@@ -123,7 +125,7 @@ async def download_additional_artwork(
         total_previews = len(metadata.preview_urls)
         for index, preview_url in enumerate(metadata.preview_urls, start=1):
             preview_path = output_dir / (
-                f"{metadata.code}-preview-{index:02d}{_guess_image_extension(preview_url)}"
+                f"{artifact_base_name}-preview-{index:02d}{_guess_image_extension(preview_url)}"
             )
             try:
                 await _download_with_session(session, preview_url, preview_path)
