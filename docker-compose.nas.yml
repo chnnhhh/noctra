@@ -18,6 +18,10 @@ services:
       DIST_DIR: /dist
       DB_PATH: /app/data/noctra.db
       NOCTRA_PROFILE: ${NOCTRA_PROFILE:-nas-docker}
+      HTTP_PROXY: ${NOCTRA_HTTP_PROXY:-}
+      HTTPS_PROXY: ${NOCTRA_HTTPS_PROXY:-}
+      http_proxy: ${NOCTRA_HTTP_PROXY:-}
+      https_proxy: ${NOCTRA_HTTPS_PROXY:-}
     restart: unless-stopped
     deploy:
       resources:

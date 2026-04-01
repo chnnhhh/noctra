@@ -24,6 +24,8 @@ NOCTRA_REMOTE_PATH=/home/jieliu/noctra
 NOCTRA_REMOTE_DEPLOY_MODE=docker-image
 NOCTRA_REMOTE_COMPOSE_FILE=docker-compose.nas-image.yml
 NOCTRA_DOCKER_IMAGE=acyua/noctra:latest
+NOCTRA_HTTP_PROXY=
+NOCTRA_HTTPS_PROXY=
 ```
 
 ## 部署命令
@@ -41,9 +43,23 @@ NOCTRA_DOCKER_IMAGE=acyua/noctra:latest
 - `noctra`: 主服务
 - `noctra-watchtower`: 轮询 Docker Hub 并在镜像变化时自动更新 `noctra`
 
-默认轮询间隔是 86400 秒（1 天），可通过 `NOCTRA_WATCHTOWER_INTERVAL` 调整。
-如果 NAS 需要代理访问 Docker Hub，给 `NOCTRA_WATCHTOWER_HTTP_PROXY`、
-`NOCTRA_WATCHTOWER_HTTPS_PROXY` 和 `NOCTRA_WATCHTOWER_NO_PROXY` 赋值即可。
+默认会通过 `NOCTRA_WATCHTOWER_SCHEDULE` 在每天凌晨 1 点检查一次新镜像。
+如果需要改时间，使用 Watchtower 的 6 段 cron 表达式，例如：
+
+```bash
+NOCTRA_WATCHTOWER_SCHEDULE="0 0 1 * * *"
+```
+
+如果 NAS 上的 Noctra 容器本身也需要代理访问外网，请设置：
+
+- `NOCTRA_HTTP_PROXY`
+- `NOCTRA_HTTPS_PROXY`
+
+如果 Watchtower 也需要代理访问 Docker Hub，再额外设置：
+
+- `NOCTRA_WATCHTOWER_HTTP_PROXY`
+- `NOCTRA_WATCHTOWER_HTTPS_PROXY`
+- `NOCTRA_WATCHTOWER_NO_PROXY`
 
 ## Docker Hub 代理
 
