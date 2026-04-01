@@ -16,6 +16,10 @@ services:
       DIST_DIR: /dist
       DB_PATH: /app/data/noctra.db
       NOCTRA_PROFILE: ${NOCTRA_PROFILE:-nas-docker}
+      HTTP_PROXY: ${NOCTRA_HTTP_PROXY:-}
+      HTTPS_PROXY: ${NOCTRA_HTTPS_PROXY:-}
+      http_proxy: ${NOCTRA_HTTP_PROXY:-}
+      https_proxy: ${NOCTRA_HTTPS_PROXY:-}
     restart: unless-stopped
     deploy:
       resources:
@@ -38,7 +42,7 @@ services:
       https_proxy: ${NOCTRA_WATCHTOWER_HTTPS_PROXY:-}
       no_proxy: ${NOCTRA_WATCHTOWER_NO_PROXY:-}
     command:
-      - --interval
-      - ${NOCTRA_WATCHTOWER_INTERVAL:-86400}
+      - --schedule
+      - "${NOCTRA_WATCHTOWER_SCHEDULE:-0 0 1 * * *}"
       - --cleanup
       - --label-enable
