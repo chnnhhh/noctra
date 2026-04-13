@@ -1,5 +1,16 @@
 # Noctra NAS 部署
 
+这份文档主要面向“从本机脚本化部署到 NAS”的场景。
+
+如果你是普通用户，直接在 NAS 的 Docker 图形界面里 pull `acyua/noctra:latest`，
+然后把目录映射到：
+
+- `/source`
+- `/dist`
+- `/app/data`
+
+通常会更容易理解，也更适合作为默认部署方式。
+
 ## 推荐方式
 
 优先使用 Docker Hub 预构建镜像部署，而不是在 NAS 本机 `build`。这样发布更快，也能避免 NAS 上 Python 依赖和镜像构建链路不稳定。

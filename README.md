@@ -78,6 +78,14 @@ NOCTRA_PORT=4020
 
 ### 3. Docker 运行
 
+默认推荐把宿主机目录分别映射到容器固定路径：
+
+- 原始目录 -> `/source`
+- 整理目录 -> `/dist`
+- 数据目录 -> `/app/data`
+
+这样用户在 Docker 图形界面、`docker run`、`docker compose` 三种方式下看到的配置都是同一套。
+
 直接运行镜像：
 
 ```bash
@@ -87,11 +95,16 @@ docker run -d \
   -v /path/to/source:/source \
   -v /path/to/dist:/dist \
   -v /path/to/data:/app/data \
-  -e SOURCE_DIR=/source \
-  -e DIST_DIR=/dist \
-  -e DB_PATH=/app/data/noctra.db \
   acyua/noctra:latest
 ```
+
+因为镜像默认就会读取：
+
+- `SOURCE_DIR=/source`
+- `DIST_DIR=/dist`
+- `DB_PATH=/app/data/noctra.db`
+
+所以如果你使用这组标准挂载路径，上面 3 个环境变量可以完全省略。
 
 如果刮削数据源需要代理，请额外传入代理环境变量：
 
@@ -102,9 +115,6 @@ docker run -d \
   -v /path/to/source:/source \
   -v /path/to/dist:/dist \
   -v /path/to/data:/app/data \
-  -e SOURCE_DIR=/source \
-  -e DIST_DIR=/dist \
-  -e DB_PATH=/app/data/noctra.db \
   -e HTTP_PROXY=http://192.168.7.2:7890 \
   -e HTTPS_PROXY=http://192.168.7.2:7890 \
   -e ALL_PROXY=http://192.168.7.2:7890 \
@@ -133,11 +143,63 @@ export NO_PROXY=127.0.0.1,localhost
 docker compose up --build
 ```
 
+默认 `docker-compose.yml` 就是这套标准映射方式，适合大多数用户。
+
 如果只是使用 Docker Hub 预构建镜像而不是本地 build，也同样可以在运行容器时传入这些变量。
+
+### 3.1 存储诊断
+
+Noctra 总是优先尝试原子 `rename`，如果当前部署方式或文件系统边界不允许，就会自动安全降级为 `copy_delete`。
+
+可以直接查看健康检查返回的存储诊断：
+
+```bash
+curl http://127.0.0.1:4020/api/health
+```
+
+返回里的 `storage_diagnostic` 会告诉你当前部署实际探测到的是：
+
+- `rename`: 当前部署支持原子重命名
+- `copy_delete`: 当前部署会走复制后删除
+- `unknown`: 当前无法完成探测，通常是目录不存在或权限异常
+
+### 3.2 同盘优化（高级可选）
+
+如果你明确知道 `source` 和 `dist` 在同一个文件系统，并且你希望 Docker 场景尽量命中原子 `rename`，可以改用“共同父目录单挂载”的高级方式。
+
+例如宿主机目录是：
+
+- `/mnt/media/inbox`
+- `/mnt/media/library`
+
+共同父目录是 `/mnt/media`，那么可以这样启动：
+
+```bash
+docker run -d \
+  --name noctra \
+  -p 4020:8000 \
+  -v /mnt/media:/mnt/media \
+  -v /path/to/data:/app/data \
+  -e SOURCE_DIR=/mnt/media/inbox \
+  -e DIST_DIR=/mnt/media/library \
+  acyua/noctra:latest
+```
+
+这不是默认推荐方式，只适合同盘优化场景。跨盘部署仍然建议继续使用标准的 `/source` + `/dist` 双映射。
 
 ### 4. NAS 部署
 
-NAS 推荐使用 Docker Hub 预构建镜像：
+如果你是在群晖、威联通、飞牛等 NAS 的图形界面里直接部署，推荐优先沿用上面的标准路径模型：
+
+- 媒体源目录映射到 `/source`
+- 媒体库目录映射到 `/dist`
+- 数据目录映射到 `/app/data`
+
+这条路径最容易理解，也最适合分享给其他用户。
+
+如果你需要从本机一键部署到自己的 NAS，再使用下面这套脚本化方式。
+
+NAS 脚本化部署推荐使用 Docker Hub 预构建镜像：
 
 ```bash
 cp config/profiles/nas.env.example config/profiles/nas.env
@@ -236,7 +298,7 @@ python3 -m pytest tests/test_scanner.py -v
 
 - [本地启动说明](/Users/liujiejian/git/noctra/docs/local-startup.md)
 - [运行时工作流](/Users/liujiejian/git/noctra/docs/runtime-workflow.md)
-- [NAS 部署说明](/Users/liujiejian/git/noctra/docs/nas-deployment.md)
+- [NAS 部署说明（高级 / 脚本化部署）](/Users/liujiejian/git/noctra/docs/nas-deployment.md)
 - [Docker Hub Overview（中英双语）](/Users/liujiejian/git/noctra/docs/dockerhub-overview.md)
 
 ## Docker Hub
