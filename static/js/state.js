@@ -81,6 +81,22 @@
             scrapeBatchExpandTimer: null,
             scrapeBatchExpanding: false,
             distDir: '/dist',
+            storageDiagnostic: null,
+
+            get scanSubtitle() {
+                return '按番号整理，未识别保留，已存在跳过。';
+            },
+
+            get scanStorageModeText() {
+                const mode = this.storageDiagnostic?.mode;
+                if (mode === 'rename') {
+                    return '当前模式：快速移动。同盘场景会直接重命名，速度更快。';
+                }
+                if (mode === 'copy_delete') {
+                    return '当前模式：复制后删除。常见于跨盘，或当前挂载方式不支持直接重命名。';
+                }
+                return '当前模式：暂时无法判断。';
+            },
 
             get overviewStats() {
                 const stats = this.stats || {};

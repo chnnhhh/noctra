@@ -724,6 +724,12 @@
             opacity: 0.8;
         }
 
+        .table-subtitle--mode {
+            margin-top: 4px;
+            color: #9dc8ff;
+            opacity: 0.95;
+        }
+
         .table-toolbar {
             display: flex;
             flex-wrap: wrap;

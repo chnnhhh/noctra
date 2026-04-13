@@ -353,6 +353,23 @@
                 }
             },
 
+            async loadHealthStatus() {
+                try {
+                    const response = await fetch('/api/health');
+                    const data = await response.json();
+                    if (!response.ok) {
+                        throw new Error(data.detail || '加载健康状态失败');
+                    }
+                    this.storageDiagnostic = data.storage_diagnostic || null;
+                } catch (_error) {
+                    this.storageDiagnostic = {
+                        mode: 'unknown',
+                        rename_capable: null,
+                        reason: 'load_failed',
+                    };
+                }
+            },
+
             normalizeScrapeFile(item) {
                 return {
                     id: item.file_id,
@@ -1021,6 +1038,7 @@
             },
 
             init() {
+                this.loadHealthStatus();
                 this.scanFiles();
             },
 
