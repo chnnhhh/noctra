@@ -104,7 +104,8 @@
             <div class="table-header">
                 <div>
                     <div class="table-title">扫描结果</div>
-                    <div class="table-subtitle">扫描后会按番号整理到目标目录，未识别文件保留原样，已存在文件不会重复处理。</div>
+                    <div class="table-subtitle" x-text="scanSubtitle"></div>
+                    <div class="table-subtitle table-subtitle--mode" x-text="scanStorageModeText"></div>
                 </div>
                 <div class="table-toolbar">
                     <div class="toolbar-pill" x-show="!loading && files.length > 0">

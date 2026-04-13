@@ -242,6 +242,120 @@ def test_summary_flow_view_model_exposes_main_and_branch_pipeline_stats():
     ]
 
 
+def test_scan_intro_copy_and_storage_mode_copy_are_exposed_from_state():
+    script = textwrap.dedent(
+        """
+        import fs from 'node:fs';
+        import vm from 'node:vm';
+
+        const context = vm.createContext({
+          console,
+          setTimeout,
+          clearTimeout,
+          setInterval,
+          clearInterval,
+          Intl,
+          URLSearchParams,
+          Date,
+        });
+        context.window = context;
+        context.globalThis = context;
+
+        const source = fs.readFileSync('static/js/state.js', 'utf8');
+        vm.runInContext(source, context, { filename: 'static/js/state.js' });
+
+        const app = context.NoctraState.createState();
+        app.storageDiagnostic = {
+          mode: 'copy_delete',
+          rename_capable: false,
+          reason: 'probe',
+        };
+
+        console.log(JSON.stringify({
+          scanSubtitle: app.scanSubtitle,
+          scanStorageModeText: app.scanStorageModeText,
+        }));
+        """
+    )
+
+    result = run_frontend_script(script)
+
+    assert result["scanSubtitle"] == "按番号整理，未识别保留，已存在跳过。"
+    assert result["scanStorageModeText"] == "当前模式：复制后删除。常见于跨盘，或当前挂载方式不支持直接重命名。"
+
+
+def test_load_health_status_populates_storage_diagnostic_state():
+    script = textwrap.dedent(
+        """
+        import fs from 'node:fs';
+        import vm from 'node:vm';
+
+        const context = vm.createContext({
+          console,
+          setTimeout,
+          clearTimeout,
+          setInterval,
+          clearInterval,
+          Intl,
+          URLSearchParams,
+          Date,
+        });
+        context.window = context;
+        context.globalThis = context;
+
+        for (const path of ['static/js/state.js', 'static/js/features.js']) {
+          const source = fs.readFileSync(path, 'utf8');
+          vm.runInContext(source, context, { filename: path });
+        }
+
+        function mergeSection(target, section) {
+          Object.defineProperties(target, Object.getOwnPropertyDescriptors(section));
+          return target;
+        }
+
+        const app = {};
+        mergeSection(app, context.NoctraState.createState());
+        mergeSection(app, context.NoctraFeatures.createFeatures());
+
+        context.fetch = async (url) => {
+          if (url !== '/api/health') {
+            throw new Error(`unexpected url: ${url}`);
+          }
+
+          return {
+            ok: true,
+            async json() {
+              return {
+                status: 'ok',
+                storage_diagnostic: {
+                  mode: 'rename',
+                  rename_capable: true,
+                  reason: 'probe',
+                },
+              };
+            },
+          };
+        };
+
+        await app.loadHealthStatus();
+
+        console.log(JSON.stringify({
+          storageDiagnostic: app.storageDiagnostic,
+          scanStorageModeText: app.scanStorageModeText,
+        }));
+        """
+    )
+
+    result = run_frontend_script(script)
+
+    assert result["storageDiagnostic"] == {
+        "mode": "rename",
+        "rename_capable": True,
+        "reason": "probe",
+    }
+    assert result["scanStorageModeText"] == "当前模式：快速移动。同盘场景会直接重命名，速度更快。"
+
+
 def test_summary_flow_markup_uses_pipeline_main_and_branch_rows():
     html = (PROJECT_ROOT / "static/index.html").read_text(encoding="utf-8")
 
@@ -256,6 +370,14 @@ def test_summary_flow_markup_uses_pipeline_main_and_branch_rows():
     assert 'stats-flow-row stats-flow-row--branch' not in html
     assert 'summary-branch-badge' not in html
     assert 'summary-link--branch' not in html
+
+
+def test_scan_header_uses_bound_subtitle_and_storage_mode_copy():
+    html = (PROJECT_ROOT / "static/index.html").read_text(encoding="utf-8")
+
+    assert 'x-text="scanSubtitle"' in html
+    assert 'x-text="scanStorageModeText"' in html
+    assert 'table-subtitle table-subtitle--mode' in html
 
 
 def test_summary_flow_styles_compact_branch_spacing_and_stronger_connectors():
