@@ -1,0 +1,47 @@
+services:
+  noctra:
+    image: ${NOCTRA_DOCKER_IMAGE:-acyua/noctra:latest}
+    pull_policy: ${NOCTRA_DOCKER_PULL_POLICY:-always}
+    container_name: noctra
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+    ports:
+      - "${NOCTRA_PORT:-4020}:8000"
+    volumes:
+      - ${NOCTRA_MEDIA_BIND_ROOT:?set NOCTRA_MEDIA_BIND_ROOT}:${NOCTRA_MEDIA_BIND_ROOT:?set NOCTRA_MEDIA_BIND_ROOT}
+      - ${NOCTRA_DATA_DIR:-./data}:/app/data
+    environment:
+      SOURCE_DIR: ${NOCTRA_SOURCE_DIR:?set NOCTRA_SOURCE_DIR}
+      DIST_DIR: ${NOCTRA_DIST_DIR:?set NOCTRA_DIST_DIR}
+      DB_PATH: /app/data/noctra.db
+      NOCTRA_PROFILE: ${NOCTRA_PROFILE:-nas-docker}
+      HTTP_PROXY: ${NOCTRA_HTTP_PROXY:-}
+      HTTPS_PROXY: ${NOCTRA_HTTPS_PROXY:-}
+      http_proxy: ${NOCTRA_HTTP_PROXY:-}
+      https_proxy: ${NOCTRA_HTTPS_PROXY:-}
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+
+  watchtower:
+    image: ${NOCTRA_WATCHTOWER_IMAGE:-containrrr/watchtower:latest}
+    container_name: noctra-watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      TZ: ${NOCTRA_TIMEZONE:-Asia/Shanghai}
+      HTTP_PROXY: ${NOCTRA_WATCHTOWER_HTTP_PROXY:-}
+      HTTPS_PROXY: ${NOCTRA_WATCHTOWER_HTTPS_PROXY:-}
+      NO_PROXY: ${NOCTRA_WATCHTOWER_NO_PROXY:-}
+      http_proxy: ${NOCTRA_WATCHTOWER_HTTP_PROXY:-}
+      https_proxy: ${NOCTRA_WATCHTOWER_HTTPS_PROXY:-}
+      no_proxy: ${NOCTRA_WATCHTOWER_NO_PROXY:-}
+    command:
+      - --schedule
+      - "${NOCTRA_WATCHTOWER_SCHEDULE:-0 0 1 * * *}"
+      - --cleanup
+      - --label-enable
