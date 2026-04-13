@@ -53,6 +53,17 @@ source './scripts/lib/noctra.sh'
 export NOCTRA_PROFILE='$NOCTRA_REMOTE_PROFILE'
 export NOCTRA_PROFILE_FILE='$REMOTE_PROFILE_FILE'
 noctra_load_env
+eval "\$("\$NOCTRA_REMOTE_PYTHON_BIN" ./scripts/resolve_nas_mounts.py \
+    --source-dir "\$NOCTRA_SOURCE_DIR" \
+    --dist-dir "\$NOCTRA_DIST_DIR" \
+    --compose-file "\$NOCTRA_REMOTE_COMPOSE_FILE" \
+    --mount-mode "\$NOCTRA_REMOTE_MOUNT_MODE" \
+    \${NOCTRA_MEDIA_BIND_ROOT:+--media-bind-root "\$NOCTRA_MEDIA_BIND_ROOT"})"
+echo "Selected mount mode: \$NOCTRA_SELECTED_MOUNT_MODE"
+echo "Selected compose file: \$NOCTRA_SELECTED_COMPOSE_FILE"
+if [ -n "\${NOCTRA_MEDIA_BIND_ROOT:-}" ]; then
+    echo "Selected media bind root: \$NOCTRA_MEDIA_BIND_ROOT"
+fi
 LEGACY_UVICORN_PATTERN="\$NOCTRA_REMOTE_PATH/.venv/bin/uvicorn app.main:app"
 
 if [ "\$NOCTRA_REMOTE_DEPLOY_MODE" = "docker" ]; then
@@ -67,7 +78,7 @@ if [ "\$NOCTRA_REMOTE_DEPLOY_MODE" = "docker" ]; then
         sleep 2
     fi
 
-    docker compose -p "\$NOCTRA_REMOTE_DOCKER_PROJECT_NAME" -f "\$NOCTRA_REMOTE_COMPOSE_FILE" up -d --build
+    docker compose -p "\$NOCTRA_REMOTE_DOCKER_PROJECT_NAME" -f "\$NOCTRA_SELECTED_COMPOSE_FILE" up -d --build
 elif [ "\$NOCTRA_REMOTE_DEPLOY_MODE" = "docker-image" ]; then
     command -v docker >/dev/null 2>&1 || {
         echo "Docker is required for docker-image deploy mode." >&2
@@ -80,8 +91,8 @@ elif [ "\$NOCTRA_REMOTE_DEPLOY_MODE" = "docker-image" ]; then
         sleep 2
     fi
 
-    docker compose -p "\$NOCTRA_REMOTE_DOCKER_PROJECT_NAME" -f "\$NOCTRA_REMOTE_COMPOSE_FILE" pull
-    docker compose -p "\$NOCTRA_REMOTE_DOCKER_PROJECT_NAME" -f "\$NOCTRA_REMOTE_COMPOSE_FILE" up -d
+    docker compose -p "\$NOCTRA_REMOTE_DOCKER_PROJECT_NAME" -f "\$NOCTRA_SELECTED_COMPOSE_FILE" pull
+    docker compose -p "\$NOCTRA_REMOTE_DOCKER_PROJECT_NAME" -f "\$NOCTRA_SELECTED_COMPOSE_FILE" up -d
 else
     if [ ! -x '.venv/bin/python' ]; then
         '$NOCTRA_REMOTE_PYTHON_BIN' -m venv .venv

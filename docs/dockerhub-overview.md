@@ -40,11 +40,15 @@ docker run -d \
   -v /path/to/source:/source \
   -v /path/to/dist:/dist \
   -v /path/to/data:/app/data \
-  -e SOURCE_DIR=/source \
-  -e DIST_DIR=/dist \
-  -e DB_PATH=/app/data/noctra.db \
   acyua/noctra:latest
 ```
+
+If you keep the standard mount points above, you do not need to pass
+`SOURCE_DIR`, `DIST_DIR`, or `DB_PATH` explicitly. The container defaults to:
+
+- `SOURCE_DIR=/source`
+- `DIST_DIR=/dist`
+- `DB_PATH=/app/data/noctra.db`
 
 ### Proxy support for scraping
 
@@ -70,6 +74,28 @@ Open:
 ```text
 http://127.0.0.1:4020
 ```
+
+### Storage diagnostics
+
+Noctra always tries atomic `rename` first and falls back to `copy_delete` when
+the current deployment layout cannot support it. You can inspect the effective
+mode with:
+
+```bash
+curl http://127.0.0.1:4020/api/health
+```
+
+Look for `storage_diagnostic.mode`:
+
+- `rename`: atomic rename is available
+- `copy_delete`: the current deployment will copy then delete
+- `unknown`: the probe could not complete
+
+### Advanced same-filesystem optimization
+
+If your input and output directories are on the same filesystem and you want
+Docker to preserve atomic rename, mount their common parent once and point
+`SOURCE_DIR` / `DIST_DIR` at subdirectories under that parent.
 
 ## 中文
 
@@ -111,11 +137,20 @@ docker run -d \
   -v /path/to/source:/source \
   -v /path/to/dist:/dist \
   -v /path/to/data:/app/data \
-  -e SOURCE_DIR=/source \
-  -e DIST_DIR=/dist \
-  -e DB_PATH=/app/data/noctra.db \
   acyua/noctra:latest
 ```
+
+如果你沿用上面的标准挂载路径，其实不需要再额外传：
+
+- `SOURCE_DIR`
+- `DIST_DIR`
+- `DB_PATH`
+
+因为容器默认就是：
+
+- `SOURCE_DIR=/source`
+- `DIST_DIR=/dist`
+- `DB_PATH=/app/data/noctra.db`
 
 ### 刮削代理支持
 
@@ -140,3 +175,22 @@ docker run -d \
 ```text
 http://127.0.0.1:4020
 ```
+
+### 存储诊断
+
+Noctra 会优先尝试原子 `rename`，如果当前部署方式不允许，就自动退化成 `copy_delete`。
+你可以通过下面的接口查看当前容器实际探测到的模式：
+
+```bash
+curl http://127.0.0.1:4020/api/health
+```
+
+重点看返回里的 `storage_diagnostic.mode`：
+
+- `rename`：当前部署支持原子重命名
+- `copy_delete`：当前部署会走复制后删除
+- `unknown`：本次探测没有成功完成
+
+### 同盘优化（高级可选）
+
+如果你明确知道输入目录和输出目录在同一个文件系统，并且想让 Docker 场景尽量命中原子 `rename`，可以把它们的共同父目录只挂载一次，再用 `SOURCE_DIR` / `DIST_DIR` 指向其中的子目录。

@@ -47,6 +47,7 @@ from app.scrape_jobs import (
     run_scrape_job,
 )
 from app.scraper import ScraperScheduler
+from app.storage_diagnostics import diagnose_storage_move_mode
 from app.statuses import (
     SELECTABLE_SCAN_STATUSES,
     assign_batch_duplicate_statuses,
@@ -67,6 +68,7 @@ scanner = JAVScanner(SOURCE_DIR, DIST_DIR)
 organizer = JAVOrganizer(DIST_DIR)
 batch_jobs: dict[str, dict] = {}
 batch_jobs_lock = asyncio.Lock()
+storage_diagnostic_cache: Optional[dict] = None
 
 # 挂载静态文件
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -124,6 +126,15 @@ async def ensure_scrape_schema(db: aiosqlite.Connection):
 @app.on_event("startup")
 async def startup_event():
     await init_db()
+    get_storage_diagnostic(refresh=True)
+
+
+def get_storage_diagnostic(*, refresh: bool = False) -> dict:
+    global storage_diagnostic_cache
+
+    if storage_diagnostic_cache is None or refresh:
+        storage_diagnostic_cache = diagnose_storage_move_mode(SOURCE_DIR, DIST_DIR)
+    return storage_diagnostic_cache
 
 
 async def upsert_file(
@@ -1317,4 +1328,5 @@ async def health_check():
         "dist_dir": DIST_DIR,
         "db_path": DB_PATH,
         "cwd": str(Path.cwd()),
+        "storage_diagnostic": get_storage_diagnostic(),
     }

@@ -1,5 +1,16 @@
 # Noctra NAS 部署
 
+这份文档主要面向“从本机脚本化部署到 NAS”的场景。
+
+如果你是普通用户，直接在 NAS 的 Docker 图形界面里 pull `acyua/noctra:latest`，
+然后把目录映射到：
+
+- `/source`
+- `/dist`
+- `/app/data`
+
+通常会更容易理解，也更适合作为默认部署方式。
+
 ## 推荐方式
 
 优先使用 Docker Hub 预构建镜像部署，而不是在 NAS 本机 `build`。这样发布更快，也能避免 NAS 上 Python 依赖和镜像构建链路不稳定。
@@ -22,11 +33,19 @@ NOCTRA_DATA_DIR=/vol1/1000/docker/noctra/data
 NOCTRA_REMOTE_HOST=nas-jieliu
 NOCTRA_REMOTE_PATH=/home/jieliu/noctra
 NOCTRA_REMOTE_DEPLOY_MODE=docker-image
+NOCTRA_REMOTE_MOUNT_MODE=auto
 NOCTRA_REMOTE_COMPOSE_FILE=docker-compose.nas-image.yml
 NOCTRA_DOCKER_IMAGE=acyua/noctra:latest
+NOCTRA_MEDIA_BIND_ROOT=
 NOCTRA_HTTP_PROXY=
 NOCTRA_HTTPS_PROXY=
 ```
+
+`NOCTRA_REMOTE_MOUNT_MODE` 支持：
+
+- `auto`: 部署时自动判断。如果 `SOURCE_DIR` 和 `DIST_DIR` 在同一文件系统上，且能推导出安全的共同父目录，就自动切到 shared-root 挂载以保留 rename；否则保持独立挂载，兼容跨盘 copy+delete。
+- `separate`: 始终使用独立挂载，最保守，永远兼容跨盘。
+- `shared-root`: 强制使用共同父目录挂载。此时必须提供 `NOCTRA_MEDIA_BIND_ROOT`，并且它必须同时包含 `SOURCE_DIR` 和 `DIST_DIR`。
 
 ## 部署命令
 
