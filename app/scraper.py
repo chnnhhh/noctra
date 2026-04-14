@@ -62,7 +62,7 @@ def _map_failure(stage: str | None, source: str | None, technical_error: str | N
 
     if stage == "querying_source":
         if "cloudflare" in text or "just a moment" in text or "http 403" in text:
-            return f"{source_label} 当前拦截了程序化访问，请稍后重试"
+            return f"{source_label} 当前拦截了程序化访问，请稍后重试；如持续失败可切换网络或配置代理"
         if "没有找到匹配番号" in (technical_error or ""):
             return f"在 {source_label} 没有找到这个番号的元数据"
         if "not found" in text or "failed to crawl metadata" in text:

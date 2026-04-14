@@ -77,6 +77,39 @@ async def test_javdb_request_retries_with_safari_after_cloudflare_challenge():
 
 
 @pytest.mark.asyncio
+async def test_javdb_request_keeps_cloudflare_context_when_retry_is_still_forbidden():
+    crawler = JavDBCrawler()
+    mock_session = MagicMock()
+    mock_session.get.side_effect = [
+        SimpleNamespace(
+            status_code=403,
+            text="""
+            <!DOCTYPE html>
+            <html><head><title>Just a moment...</title></head><body></body></html>
+            """,
+            headers={"server": "cloudflare"},
+        ),
+        SimpleNamespace(
+            status_code=403,
+            text="<html><body>forbidden</body></html>",
+            headers={"server": "cloudflare"},
+        ),
+    ]
+
+    with patch("app.scrapers.base.requests.Session", return_value=mock_session), \
+         patch("app.scrapers.base.asyncio.sleep", new=AsyncMock()):
+        result = await crawler._request(
+            "https://javdb.com/search?q=EBOD-829&locale=zh",
+            context="搜索页",
+        )
+
+    assert result is None
+    assert "HTTP 403" in crawler.last_error
+    assert "Cloudflare" in crawler.last_error
+    assert "Just a moment..." in crawler.last_error
+
+
+@pytest.mark.asyncio
 async def test_javdb_request_uses_normalized_proxy_from_environment():
     crawler = JavDBCrawler()
     mock_session = MagicMock()
@@ -121,7 +154,7 @@ async def test_scrape_single_surfaces_crawler_diagnostics_on_source_block():
 
     assert result.success is False
     assert result.error == mock_crawler.last_error
-    assert result.user_message == "JavDB 当前拦截了程序化访问，请稍后重试"
+    assert result.user_message == "JavDB 当前拦截了程序化访问，请稍后重试；如持续失败可切换网络或配置代理"
     assert [entry.message for entry in result.logs][-2:] == [
         "正在请求 JavDB 搜索页",
         "JavDB 搜索页返回 HTTP 403，疑似被 Cloudflare 拦截（Just a moment...）",
