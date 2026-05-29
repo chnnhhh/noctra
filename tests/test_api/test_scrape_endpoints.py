@@ -316,10 +316,10 @@ def test_get_scrape_list_returns_failure_details_and_active_job(mock_active_job,
             'original_path': '/source/ABC-001.mp4',
             'status': 'organized',
             'scrape_stage': 'querying_source',
-            'scrape_source': 'javdb',
+            'scrape_source': 'official',
             'scrape_error': 'timeout',
-            'scrape_error_user_message': '连接 JavDB 失败，请稍后重试',
-            'scrape_logs': '[{"at":"2026-03-27T10:00:00","level":"info","stage":"querying_source","source":"javdb","message":"正在查询 JavDB"}]',
+            'scrape_error_user_message': '连接 官方/DMM 失败，请稍后重试',
+            'scrape_logs': '[{"at":"2026-03-27T10:00:00","level":"info","stage":"querying_source","source":"official","message":"正在查询官方/DMM"}]',
             'scrape_started_at': '2026-03-27T10:00:00',
             'scrape_finished_at': '2026-03-27T10:00:10',
         }
@@ -343,12 +343,12 @@ def test_get_scrape_list_returns_failure_details_and_active_job(mock_active_job,
     payload = response.json()
     assert payload["active_job"]["id"] == "job123"
     assert payload["items"][0]["scrape_stage"] == "querying_source"
-    assert payload["items"][0]["scrape_source"] == "javdb"
+    assert payload["items"][0]["scrape_source"] == "official"
     assert payload["items"][0]["scrape_started_at"] == "2026-03-27T10:00:00"
     assert payload["items"][0]["scrape_finished_at"] == "2026-03-27T10:00:10"
     assert payload["items"][0]["scrape_error"] == "timeout"
-    assert payload["items"][0]["scrape_error_user_message"] == '连接 JavDB 失败，请稍后重试'
-    assert payload["items"][0]["scrape_logs"][0]["message"] == '正在查询 JavDB'
+    assert payload["items"][0]["scrape_error_user_message"] == '连接 官方/DMM 失败，请稍后重试'
+    assert payload["items"][0]["scrape_logs"][0]["message"] == '正在查询官方/DMM'
 
 
 def test_get_scrape_list_invalid_filter():
@@ -654,7 +654,7 @@ def test_scrape_list_item_skips_malformed_logs(mock_connect, sample_rows):
             'at': '2026-03-27T10:00:00',
             'level': 'info',
             'stage': 'querying_source',
-            'message': '正在查询 JavDB',
+            'message': '正在查询官方/DMM',
         },
         {'at': '2026-03-27T10:00:01', 'level': 'info'},
         'bad-entry',
@@ -674,7 +674,7 @@ def test_scrape_list_item_skips_malformed_logs(mock_connect, sample_rows):
     assert response.status_code == 200
     logs = response.json()['items'][0]['scrape_logs']
     assert len(logs) == 1
-    assert logs[0]['message'] == '正在查询 JavDB'
+    assert logs[0]['message'] == '正在查询官方/DMM'
 
 
 @patch('app.main.aiosqlite.connect')

@@ -79,13 +79,13 @@ class TestScrapeSingle:
 
         scheduler._persist_attempt_update = AsyncMock()
 
-        # Mock JavDBCrawler.crawl
+        # Mock metadata provider crawl
         mock_crawler = AsyncMock()
         mock_crawler.crawl = AsyncMock(return_value=metadata)
 
         # Mock write_nfo and download_poster
         with (
-            patch("app.scraper.JavDBCrawler", return_value=mock_crawler),
+            patch("app.scraper.OfficialMetadataProvider", return_value=mock_crawler),
             patch("app.scraper.write_nfo") as mock_write_nfo,
             patch("app.scraper.download_poster", new_callable=AsyncMock) as mock_download,
             patch(
@@ -106,7 +106,7 @@ class TestScrapeSingle:
         assert result.error is None
         assert result.user_message == "刮削完成"
         assert result.stage == "success"
-        assert result.source == "javdb"
+        assert result.source == "official"
 
         mock_crawler.crawl.assert_called_once_with(code)
         mock_write_nfo.assert_called_once()
@@ -137,7 +137,7 @@ class TestScrapeSingle:
         mock_crawler.crawl = AsyncMock(return_value=metadata)
 
         with (
-            patch("app.scraper.JavDBCrawler", return_value=mock_crawler),
+            patch("app.scraper.OfficialMetadataProvider", return_value=mock_crawler),
             patch("app.scraper.write_nfo"),
             patch("app.scraper.download_poster", new_callable=AsyncMock),
             patch(
@@ -163,7 +163,7 @@ class TestScrapeSingle:
         assert result.code == code
         assert result.user_message == "刮削完成"
         assert result.stage == "success"
-        assert result.source == "javdb"
+        assert result.source == "official"
 
         observed_stages = [event["stage"] for event in observed]
         assert observed_stages == [
@@ -178,13 +178,13 @@ class TestScrapeSingle:
         ]
         observed_progress = [event.get("progress_percent") for event in observed]
         assert observed_progress == [10, 22, 46, 58, 65, 82, 88, 99]
-        assert any(event["source"] == "javdb" for event in observed)
+        assert any(event["source"] == "official" for event in observed)
         assert result.logs[-1].stage == "finalizing"
 
         final_persisted = mock_persist.await_args_list[-1].kwargs
         assert final_persisted["scrape_status"] == "success"
         assert final_persisted["scrape_stage"] == "success"
-        assert final_persisted["scrape_source"] == "javdb"
+        assert final_persisted["scrape_source"] == "official"
         persisted_logs = json.loads(final_persisted["scrape_logs"])
         assert persisted_logs[-1]["stage"] == "finalizing"
 
@@ -209,7 +209,7 @@ class TestScrapeSingle:
         mock_crawler.crawl = AsyncMock(return_value=metadata)
 
         with (
-            patch("app.scraper.JavDBCrawler", return_value=mock_crawler),
+            patch("app.scraper.OfficialMetadataProvider", return_value=mock_crawler),
             patch("app.scraper.write_nfo") as mock_write_nfo,
             patch("app.scraper.download_poster", new_callable=AsyncMock) as mock_download,
             patch(
@@ -291,7 +291,7 @@ class TestScrapeSingle:
         mock_crawler.crawl = AsyncMock(return_value=metadata)
 
         with (
-            patch("app.scraper.JavDBCrawler", return_value=mock_crawler),
+            patch("app.scraper.OfficialMetadataProvider", return_value=mock_crawler),
             patch("app.scraper.write_nfo"),
             patch("app.scraper.download_poster", new_callable=AsyncMock),
             patch(
@@ -321,13 +321,13 @@ class TestScrapeSingle:
         mock_crawler = AsyncMock()
         mock_crawler.crawl = AsyncMock(return_value=None)
 
-        with patch("app.scraper.JavDBCrawler", return_value=mock_crawler):
+        with patch("app.scraper.OfficialMetadataProvider", return_value=mock_crawler):
             result = await scheduler.scrape_single(1)
 
         assert result.success is False
-        assert "Failed to crawl" in result.error
+        assert "Failed to retrieve" in result.error
         assert result.stage == "querying_source"
-        assert result.user_message == "在 JavDB 没有找到这个番号的元数据"
+        assert result.user_message == "在 官方/DMM 没有找到这个番号的元数据"
 
     @pytest.mark.asyncio
     async def test_no_identified_code(self):
@@ -375,7 +375,7 @@ class TestScrapeSingle:
         mock_crawler.crawl = AsyncMock(return_value=metadata)
 
         with (
-            patch("app.scraper.JavDBCrawler", return_value=mock_crawler),
+            patch("app.scraper.OfficialMetadataProvider", return_value=mock_crawler),
             patch("app.scraper.write_nfo", side_effect=OSError("Disk full")),
         ):
             result = await scheduler.scrape_single(1)
@@ -399,7 +399,7 @@ class TestScrapeSingle:
         mock_crawler.crawl = AsyncMock(return_value=metadata)
 
         with (
-            patch("app.scraper.JavDBCrawler", return_value=mock_crawler),
+            patch("app.scraper.OfficialMetadataProvider", return_value=mock_crawler),
             patch("app.scraper.write_nfo"),
             patch(
                 "app.scraper.download_additional_artwork",
@@ -429,7 +429,7 @@ class TestScrapeSingle:
         mock_crawler.crawl = AsyncMock(return_value=metadata)
 
         with (
-            patch("app.scraper.JavDBCrawler", return_value=mock_crawler),
+            patch("app.scraper.OfficialMetadataProvider", return_value=mock_crawler),
             patch("app.scraper.write_nfo"),
             patch(
                 "app.scraper.download_additional_artwork",
@@ -475,7 +475,7 @@ class TestScrapeSingle:
         mock_crawler.crawl = AsyncMock(return_value=metadata)
 
         with (
-            patch("app.scraper.JavDBCrawler", return_value=mock_crawler),
+            patch("app.scraper.OfficialMetadataProvider", return_value=mock_crawler),
             patch("app.scraper.write_nfo"),
             patch("app.scraper.download_poster", new_callable=AsyncMock) as mock_download,
         ):
@@ -484,7 +484,7 @@ class TestScrapeSingle:
         assert result.success is True
         assert result.code == code
         assert result.stage == "success"
-        assert result.source == "javdb"
+        assert result.source == "official"
         # download_poster should NOT have been called since poster_url is empty
         mock_download.assert_not_called()
 
@@ -560,7 +560,7 @@ class TestScrapeSingle:
             actual_poster_path = path
 
         with (
-            patch("app.scraper.JavDBCrawler", return_value=mock_crawler),
+            patch("app.scraper.OfficialMetadataProvider", return_value=mock_crawler),
             patch("app.scraper.write_nfo", side_effect=capture_nfo),
             patch("app.scraper.download_poster", new_callable=AsyncMock, side_effect=capture_poster),
             patch(

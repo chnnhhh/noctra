@@ -1,6 +1,6 @@
 """Scraping subsystem for Noctra."""
 
 from .metadata import ScrapingMetadata
-from .javdb import JavDBCrawler
+from .official import OfficialMetadataProvider
 
-__all__ = ['ScrapingMetadata', 'JavDBCrawler']
+__all__ = ["ScrapingMetadata", "OfficialMetadataProvider"]

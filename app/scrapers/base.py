@@ -63,6 +63,7 @@ class BaseCrawler(ABC):
 
     def _display_name(self) -> str:
         mapping = {
+            "official": "官方/DMM",
             "javdb": "JavDB",
             "javtrailers": "JavTrailers",
         }

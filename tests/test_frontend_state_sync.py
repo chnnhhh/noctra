@@ -442,13 +442,13 @@ def test_scrape_batch_panel_surfaces_concise_progress_copy():
           failed: 0,
           current_file_code: 'SSIS-123',
           current_stage: 'writing_nfo',
-          current_source: 'javdb',
+          current_source: 'official',
           recent_logs: [
             {
               at: '2026-03-28T10:00:00',
               level: 'info',
               stage: 'writing_nfo',
-              source: 'javdb',
+              source: 'official',
               message: '元数据解析成功，正在生成 NFO 文件',
             },
           ],
@@ -754,17 +754,17 @@ def test_scrape_processing_rows_surface_progress_percent_stage_and_batch_index()
           processed: 1,
           current_file_id: 13,
           current_stage: 'parsing_metadata',
-          current_source: 'javdb',
+          current_source: 'official',
           current_progress_percent: 65,
           items: [
             { id: 7, status: 'success', progress_percent: 100 },
-            { id: 13, status: 'processing', stage: 'parsing_metadata', source: 'javdb', progress_percent: 65 },
+            { id: 13, status: 'processing', stage: 'parsing_metadata', source: 'official', progress_percent: 65 },
             { id: 18, status: 'pending' },
             { id: 19, status: 'pending' },
           ],
         };
         app.scrapeBatchItemsIndex = {
-          13: { id: 13, status: 'processing', stage: 'parsing_metadata', source: 'javdb', progress_percent: 65 },
+          13: { id: 13, status: 'processing', stage: 'parsing_metadata', source: 'official', progress_percent: 65 },
         };
 
         const file = {

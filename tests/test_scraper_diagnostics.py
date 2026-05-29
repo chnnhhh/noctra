@@ -143,21 +143,21 @@ async def test_scrape_single_surfaces_crawler_diagnostics_on_source_block():
 
     mock_crawler = MagicMock()
     mock_crawler.crawl = AsyncMock(return_value=None)
-    mock_crawler.last_error = "JavDB 搜索页返回 HTTP 403，疑似被 Cloudflare 拦截（Just a moment...）"
+    mock_crawler.last_error = "官方/DMM 请求返回 HTTP 403，疑似被 Cloudflare 拦截（Just a moment...）"
     mock_crawler.diagnostics = [
-        {"level": "info", "message": "正在请求 JavDB 搜索页"},
+        {"level": "info", "message": "正在请求官方/DMM"},
         {"level": "error", "message": mock_crawler.last_error},
     ]
 
-    with patch("app.scraper.JavDBCrawler", return_value=mock_crawler):
+    with patch("app.scraper.OfficialMetadataProvider", return_value=mock_crawler):
         result = await scheduler.scrape_single(1)
 
     assert result.success is False
     assert result.error == mock_crawler.last_error
-    assert result.user_message == "JavDB 当前拦截了程序化访问，请稍后重试；如持续失败可切换网络或配置代理"
+    assert result.user_message == "官方/DMM 当前拦截了程序化访问，请稍后重试；如持续失败可切换网络或配置代理"
     assert [entry.message for entry in result.logs][-2:] == [
-        "正在请求 JavDB 搜索页",
-        "JavDB 搜索页返回 HTTP 403，疑似被 Cloudflare 拦截（Just a moment...）",
+        "正在请求官方/DMM",
+        "官方/DMM 请求返回 HTTP 403，疑似被 Cloudflare 拦截（Just a moment...）",
     ]
 
 
@@ -169,13 +169,13 @@ async def test_scrape_single_writes_stage_diagnostics_to_backend_logger():
 
     mock_crawler = MagicMock()
     mock_crawler.crawl = AsyncMock(return_value=None)
-    mock_crawler.last_error = "JavDB 搜索页返回 HTTP 403，疑似被 Cloudflare 拦截（Just a moment...）"
+    mock_crawler.last_error = "官方/DMM 请求返回 HTTP 403，疑似被 Cloudflare 拦截（Just a moment...）"
     mock_crawler.diagnostics = [
-        {"level": "info", "message": "正在请求 JavDB 搜索页"},
+        {"level": "info", "message": "正在请求官方/DMM"},
         {"level": "error", "message": mock_crawler.last_error},
     ]
 
-    with patch("app.scraper.JavDBCrawler", return_value=mock_crawler), \
+    with patch("app.scraper.OfficialMetadataProvider", return_value=mock_crawler), \
          patch("app.scraper.logger") as mock_logger:
         await scheduler.scrape_single(1)
 
@@ -183,6 +183,6 @@ async def test_scrape_single_writes_stage_diagnostics_to_backend_logger():
     error_calls = [call.args[0] for call in mock_logger.error.call_args_list]
 
     assert any("正在检查文件信息" in message for message in info_calls)
-    assert any("正在查询 JavDB" in message for message in info_calls)
-    assert any("正在请求 JavDB 搜索页" in message for message in info_calls)
+    assert any("正在查询官方/DMM" in message for message in info_calls)
+    assert any("正在请求官方/DMM" in message for message in info_calls)
     assert any("Cloudflare" in message for message in error_calls)

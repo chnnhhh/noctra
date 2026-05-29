@@ -432,7 +432,7 @@ class TestCompleteScrapingFlow:
 
         with (
             patch.object(scheduler, "_get_file", new_callable=AsyncMock) as mock_get,
-            patch("app.scraper.JavDBCrawler") as MockCrawler,
+            patch("app.scraper.OfficialMetadataProvider") as MockCrawler,
             patch("app.scraper.write_nfo") as mock_write_nfo,
             patch("app.scraper.download_poster", new_callable=AsyncMock) as mock_download,
             patch("app.scraper.aiosqlite") as mock_aiosqlite,
@@ -505,7 +505,7 @@ class TestCompleteScrapingFlow:
 
             with (
                 patch.object(scheduler, "_get_file", new_callable=AsyncMock) as mock_get,
-                patch("app.scraper.JavDBCrawler") as MockCrawler,
+                patch("app.scraper.OfficialMetadataProvider") as MockCrawler,
                 patch("app.scraper.write_nfo") as mock_write_nfo,
                 patch("app.scraper.download_poster", new_callable=AsyncMock) as mock_download,
                 patch("app.scraper.aiosqlite") as mock_aiosqlite,
@@ -657,7 +657,7 @@ class TestNfoEmbyCompatibility:
         # Poster
         poster_elem = root.find("poster")
         assert poster_elem is not None
-        assert poster_elem.text == "ABW-100-poster.jpg"
+        assert poster_elem.text == "test-poster.jpg"
 
     def test_nfo_plot_with_special_characters(self, tmp_path):
         """NFO must handle special XML characters in plot text (CDATA)."""
@@ -830,7 +830,7 @@ class TestApiIntegration:
 
         with (
             patch.object(scheduler, "_get_file", side_effect=get_real_file),
-            patch("app.scraper.JavDBCrawler") as MockCrawler,
+            patch("app.scraper.OfficialMetadataProvider") as MockCrawler,
             patch("app.scraper.write_nfo", side_effect=lambda m, p: write_nfo(m, Path(p))),
             patch("app.scraper.download_poster", new_callable=AsyncMock,
                   side_effect=_fake_download_poster),
@@ -880,14 +880,14 @@ class TestApiIntegration:
             "current_file_id": 2,
             "current_file_code": "FPRE-055",
             "current_stage": "querying_source",
-            "current_source": "javdb",
+            "current_source": "official",
             "recent_logs": [
                 {
                     "at": "2026-03-27T10:00:02",
                     "level": "info",
                     "stage": "querying_source",
-                    "source": "javdb",
-                    "message": "正在查询 JavDB",
+                    "source": "official",
+                    "message": "正在查询官方/DMM",
                 }
             ],
             "items": [],
@@ -898,7 +898,7 @@ class TestApiIntegration:
         assert response.status_code == 200
         payload = response.json()
         assert payload["active_job"]["current_file_code"] == "FPRE-055"
-        assert payload["active_job"]["recent_logs"][0]["message"] == "正在查询 JavDB"
+        assert payload["active_job"]["recent_logs"][0]["message"] == "正在查询官方/DMM"
 
 
 # ===========================================================================
@@ -961,7 +961,7 @@ class TestErrorHandling:
 
         with (
             patch.object(scheduler, "_get_file", side_effect=get_real),
-            patch("app.scraper.JavDBCrawler") as MockCrawler,
+            patch("app.scraper.OfficialMetadataProvider") as MockCrawler,
             patch("app.scraper.aiosqlite") as mock_aiosqlite,
         ):
             mock_crawler_instance = AsyncMock()
@@ -971,7 +971,7 @@ class TestErrorHandling:
             result = await scheduler.scrape_single(file_id)
 
         assert result.success is False
-        assert "Failed to crawl" in result.error
+        assert "Failed to retrieve" in result.error
         record = _query_file(test_db, file_id)
         assert record["scrape_status"] == "failed"
         assert record["scrape_stage"] == "querying_source"
@@ -995,7 +995,7 @@ class TestErrorHandling:
 
         with (
             patch.object(scheduler, "_get_file", side_effect=get_real),
-            patch("app.scraper.JavDBCrawler") as MockCrawler,
+            patch("app.scraper.OfficialMetadataProvider") as MockCrawler,
             patch("app.scraper.aiosqlite") as mock_aiosqlite,
         ):
             mock_aiosqlite.connect.return_value = _make_mock_conn_cm_for_real_db(test_db)
@@ -1006,11 +1006,11 @@ class TestErrorHandling:
             result = await scheduler.scrape_single(file_id)
 
         assert result.success is False
-        assert "Failed to crawl" in result.error
+        assert "Failed to retrieve" in result.error
         record = _query_file(test_db, file_id)
         assert record["scrape_status"] == "failed"
         assert record["scrape_stage"] == "querying_source"
-        assert record["scrape_error_user_message"] == "在 JavDB 没有找到这个番号的元数据"
+        assert record["scrape_error_user_message"] == "在 官方/DMM 没有找到这个番号的元数据"
 
     @pytest.mark.asyncio
     async def test_failed_scrape_persists_last_attempt_details(self, test_db, test_dist_dir):
@@ -1029,7 +1029,7 @@ class TestErrorHandling:
 
         with (
             patch.object(scheduler, "_get_file", side_effect=get_real),
-            patch("app.scraper.JavDBCrawler") as MockCrawler,
+            patch("app.scraper.OfficialMetadataProvider") as MockCrawler,
             patch("app.scraper.aiosqlite") as mock_aiosqlite,
         ):
             mock_aiosqlite.connect.return_value = _make_mock_conn_cm_for_real_db(test_db)
@@ -1044,9 +1044,9 @@ class TestErrorHandling:
 
         assert result.success is False
         assert record["scrape_status"] == "failed"
-        assert record["scrape_source"] == "javdb"
+        assert record["scrape_source"] == "official"
         assert record["scrape_stage"] == "querying_source"
-        assert record["scrape_error_user_message"] == "在 JavDB 没有找到这个番号的元数据"
+        assert record["scrape_error_user_message"] == "在 官方/DMM 没有找到这个番号的元数据"
         assert record["scrape_logs"]
 
     @pytest.mark.asyncio
@@ -1117,7 +1117,7 @@ class TestErrorHandling:
 
         with (
             patch.object(scheduler, "_get_file", side_effect=get_real),
-            patch("app.scraper.JavDBCrawler") as MockCrawler,
+            patch("app.scraper.OfficialMetadataProvider") as MockCrawler,
             patch("app.scraper.write_nfo", side_effect=OSError("Permission denied")),
             patch("app.scraper.aiosqlite") as mock_aiosqlite,
         ):
@@ -1162,7 +1162,7 @@ class TestErrorHandling:
 
         with (
             patch.object(scheduler, "_get_file", side_effect=get_real),
-            patch("app.scraper.JavDBCrawler") as MockCrawler,
+            patch("app.scraper.OfficialMetadataProvider") as MockCrawler,
             patch("app.scraper.write_nfo",
                   side_effect=lambda m, p: write_nfo(m, Path(p))),
             patch("app.scraper.download_poster", new_callable=AsyncMock,

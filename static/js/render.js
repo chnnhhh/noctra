@@ -266,6 +266,7 @@
 
             getScrapeSourceLabel(source) {
                 const map = {
+                    official: '官方/DMM',
                     javdb: 'JavDB',
                     javtrailers: 'JavTrailers'
                 };

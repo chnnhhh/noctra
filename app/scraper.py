@@ -11,14 +11,14 @@ from typing import Optional
 import aiosqlite
 
 from app.models import ScrapeResponse
-from app.scrapers.javdb import JavDBCrawler
+from app.scrapers.official import OfficialMetadataProvider
 from app.scrapers.writers.nfo import write_nfo
 from app.scrapers.writers.image import download_additional_artwork, download_poster
 
 DB_PATH = os.getenv("DB_PATH", "/app/data/noctra.db")
 SCRAPE_ELIGIBLE_STATUSES = {"processed", "organized"}
 MAX_SCRAPE_LOGS = 30
-SCRAPE_SOURCE_JAVDB = "javdb"
+SCRAPE_SOURCE_OFFICIAL = "official"
 logger = logging.getLogger("uvicorn.error")
 
 SCRAPE_PROGRESS = {
@@ -45,7 +45,7 @@ def _utcnow_iso() -> str:
 
 def _source_label(source: str | None) -> str:
     mapping = {
-        SCRAPE_SOURCE_JAVDB: "JavDB",
+        SCRAPE_SOURCE_OFFICIAL: "官方/DMM",
         "javtrailers": "JavTrailers",
     }
     return mapping.get(source or "", source or "")
@@ -65,7 +65,7 @@ def _map_failure(stage: str | None, source: str | None, technical_error: str | N
             return f"{source_label} 当前拦截了程序化访问，请稍后重试；如持续失败可切换网络或配置代理"
         if "没有找到匹配番号" in (technical_error or ""):
             return f"在 {source_label} 没有找到这个番号的元数据"
-        if "not found" in text or "failed to crawl metadata" in text:
+        if "not found" in text or "failed to crawl metadata" in text or "failed to retrieve metadata" in text:
             return f"在 {source_label} 没有找到这个番号的元数据"
         return f"连接 {source_label} 失败，请稍后重试"
     if stage == "parsing_metadata":
@@ -208,19 +208,19 @@ class ScraperScheduler:
             if not target_path:
                 raise ValueError("File has no target_path")
 
-            # Step 3: Crawl metadata
+            # Step 3: Retrieve metadata
             await emit(
                 "querying_source",
-                "正在查询 JavDB",
-                source=SCRAPE_SOURCE_JAVDB,
+                "正在查询官方/DMM",
+                source=SCRAPE_SOURCE_OFFICIAL,
                 progress_percent=SCRAPE_PROGRESS["querying_source"],
             )
-            crawler = JavDBCrawler()
+            crawler = OfficialMetadataProvider()
             metadata = await crawler.crawl(code)
             await emit_crawler_diagnostics(
                 crawler,
                 stage="querying_source",
-                source=SCRAPE_SOURCE_JAVDB,
+                source=SCRAPE_SOURCE_OFFICIAL,
             )
 
             if metadata is None:
@@ -228,26 +228,26 @@ class ScraperScheduler:
                 if not isinstance(crawler_error, str) or not crawler_error.strip():
                     crawler_error = None
                 raise ValueError(
-                    crawler_error or f"Failed to crawl metadata for code '{code}'"
+                    crawler_error or f"Failed to retrieve metadata for code '{code}'"
                 )
 
             await emit(
                 "fetching_detail",
-                "已拿到详情页，正在整理页面信息",
-                source=SCRAPE_SOURCE_JAVDB,
+                "已拿到官方/DMM结果，正在整理页面信息",
+                source=SCRAPE_SOURCE_OFFICIAL,
                 progress_percent=SCRAPE_PROGRESS["fetching_detail"],
             )
 
             await emit(
                 "parsing_metadata",
                 "详情页读取成功，正在解析基础信息",
-                source=SCRAPE_SOURCE_JAVDB,
+                source=SCRAPE_SOURCE_OFFICIAL,
                 progress_percent=SCRAPE_PROGRESS["parsing_metadata_summary"],
             )
             await emit(
                 "parsing_metadata",
                 "正在解析演员、标签和发行信息",
-                source=SCRAPE_SOURCE_JAVDB,
+                source=SCRAPE_SOURCE_OFFICIAL,
                 progress_percent=SCRAPE_PROGRESS["parsing_metadata_full"],
             )
 
@@ -357,7 +357,7 @@ class ScraperScheduler:
                 last_scrape_at=finished_at,
                 scrape_finished_at=finished_at,
                 scrape_stage="success",
-                scrape_source=SCRAPE_SOURCE_JAVDB,
+                scrape_source=SCRAPE_SOURCE_OFFICIAL,
                 scrape_error=None,
                 scrape_error_user_message=None,
                 scrape_logs=json.dumps(logs, ensure_ascii=False),
@@ -368,7 +368,7 @@ class ScraperScheduler:
                 code=code,
                 user_message="刮削完成",
                 stage="success",
-                source=SCRAPE_SOURCE_JAVDB,
+                source=SCRAPE_SOURCE_OFFICIAL,
                 logs=logs,
             )
 

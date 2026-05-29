@@ -19,6 +19,11 @@ services:
       HTTPS_PROXY: ${NOCTRA_HTTPS_PROXY:-}
       http_proxy: ${NOCTRA_HTTP_PROXY:-}
       https_proxy: ${NOCTRA_HTTPS_PROXY:-}
+      NOCTRA_LLM_ENABLED: ${NOCTRA_LLM_ENABLED:-}
+      NOCTRA_LLM_BASE_URL: ${NOCTRA_LLM_BASE_URL:-}
+      NOCTRA_LLM_WIRE_API: ${NOCTRA_LLM_WIRE_API:-responses}
+      NOCTRA_LLM_MODEL: ${NOCTRA_LLM_MODEL:-gpt-5.4-mini}
+      NOCTRA_LLM_API_KEY: ${NOCTRA_LLM_API_KEY:-}
     restart: unless-stopped
     deploy:
       resources:
