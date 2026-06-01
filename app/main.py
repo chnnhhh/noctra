@@ -62,6 +62,7 @@ SOURCE_DIR = os.getenv('SOURCE_DIR', '/source')
 DIST_DIR = os.getenv('DIST_DIR', '/dist')
 DB_PATH = os.getenv('DB_PATH', '/app/data/noctra.db')
 PROCESSED_LIKE_STATUSES = ('processed', 'organized')
+SCAN_QUEUE_STATUSES = ('pending', 'duplicate', 'target_exists')
 
 # 初始化组件
 scanner = JAVScanner(SOURCE_DIR, DIST_DIR)
@@ -662,6 +663,56 @@ def build_global_stats(files: list[object]) -> dict[str, int]:
     }
 
 
+def build_scan_overview_stats(scan_files: list[object], all_files: list[object]) -> dict[str, int]:
+    """生成扫描页总览统计，避免历史脏路径污染当前扫描基线。"""
+    current_files = [
+        file for file in scan_files
+        if _get_file_field(file, 'status') != 'ignored'
+    ]
+    processed_history_files = [
+        file for file in all_files
+        if is_history_processed_record(file)
+    ]
+
+    total_files = len(current_files) + len(processed_history_files)
+    identified = sum(1 for file in current_files if _get_file_field(file, 'identified_code'))
+    identified += sum(1 for file in processed_history_files if _get_file_field(file, 'identified_code'))
+
+    pending = sum(
+        1
+        for file in current_files
+        if _get_file_field(file, 'identified_code')
+        and _get_file_field(file, 'status') in SCAN_QUEUE_STATUSES
+    )
+    processed = len(processed_history_files)
+    scraped = sum(
+        1
+        for file in processed_history_files
+        if _get_file_field(file, 'scrape_status') == 'success'
+    )
+    scrape_failed = sum(
+        1
+        for file in processed_history_files
+        if _get_file_field(file, 'scrape_status') == 'failed'
+    )
+
+    return {
+        'total_files': total_files,
+        'identified': identified,
+        'unidentified': total_files - identified,
+        'pending': pending,
+        'processed': processed,
+        'scraped': scraped,
+        'scrape_failed': scrape_failed,
+    }
+
+
+def _get_file_field(file: object, field: str):
+    if isinstance(file, dict):
+        return file.get(field)
+    return getattr(file, field, None)
+
+
 def is_history_processed_record(file: dict) -> bool:
     """历史记录只展示真正已移动走源文件的已处理项。"""
     if file.get('status') not in PROCESSED_LIKE_STATUSES:
@@ -820,7 +871,7 @@ async def scan_files(force_rescan: bool = False):
         ))
 
     all_files = await get_all_files()
-    stats = build_global_stats(all_files)
+    stats = build_scan_overview_stats(file_records, all_files)
 
     return ScanResult(
         total_files=stats['total_files'],

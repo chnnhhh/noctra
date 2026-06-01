@@ -79,6 +79,51 @@ class TestJAVScanner:
             'scrape_failed': 1,
         }
 
+    def test_build_scan_overview_stats_uses_current_scan_and_processed_history_only(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            missing_processed = str(Path(tmpdir) / 'moved-source.mp4')
+            missing_failed = str(Path(tmpdir) / 'failed-source.mp4')
+            stale_pending = str(Path(tmpdir) / 'stale-pending.mp4')
+            current_scan_files = [
+                {'status': 'pending', 'identified_code': 'AAA-001'},
+                {'status': 'duplicate', 'identified_code': 'AAA-002'},
+                {'status': 'target_exists', 'identified_code': 'AAA-003'},
+                {'status': 'skipped', 'identified_code': None},
+            ]
+            all_files = [
+                *current_scan_files,
+                {
+                    'status': 'pending',
+                    'identified_code': 'OLD-001',
+                    'original_path': stale_pending,
+                    'scrape_status': 'pending',
+                },
+                {
+                    'status': 'processed',
+                    'identified_code': 'DONE-001',
+                    'original_path': missing_processed,
+                    'scrape_status': 'success',
+                },
+                {
+                    'status': 'organized',
+                    'identified_code': 'DONE-002',
+                    'original_path': missing_failed,
+                    'scrape_status': 'failed',
+                },
+            ]
+
+            stats = main_mod.build_scan_overview_stats(current_scan_files, all_files)
+
+        assert stats == {
+            'total_files': 6,
+            'identified': 5,
+            'unidentified': 1,
+            'pending': 3,
+            'processed': 2,
+            'scraped': 1,
+            'scrape_failed': 1,
+        }
+
     def test_identify_code(self):
         """测试番号识别"""
         scanner = JAVScanner('/tmp/source', '/tmp/dist')
