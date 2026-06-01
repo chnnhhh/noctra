@@ -76,6 +76,16 @@ NOCTRA_DB_PATH=/path/to/data/noctra.db
 NOCTRA_PORT=4020
 ```
 
+刮削默认使用官方/DMM 固定 URL 抓取并本地解析。可选启用 LLM 对已抓到的页面片段做结构化抽取：
+
+```bash
+NOCTRA_LLM_ENABLED=1
+NOCTRA_LLM_BASE_URL=http://example.com:18082
+NOCTRA_LLM_WIRE_API=responses
+NOCTRA_LLM_MODEL=gpt-5.4-mini
+NOCTRA_LLM_API_KEY=...
+```
+
 ### 3. Docker 运行
 
 默认推荐把宿主机目录分别映射到容器固定路径：
@@ -125,9 +135,8 @@ docker run -d \
 注意：
 
 - 代理地址建议显式带上协议头，例如 `http://192.168.7.2:7890`
-- 当前版本会让元数据请求和图片下载都跟随这些代理变量
-- `JavDB` 这类站点对出口节点比较敏感，不要使用日本节点
-- 代理节点优先选择香港或台湾，通常比日本节点更稳定
+- 当前版本会让官方/DMM 元数据请求、可选 LLM 请求和图片下载都跟随这些代理变量
+- 如果某个出口节点访问 DMM 或厂商站不稳定，可以切换到香港或台湾节点重试
 - 如果你配置了 `NO_PROXY`，命中的域名会跳过代理
 
 或者使用 Compose：

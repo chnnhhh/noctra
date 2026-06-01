@@ -442,13 +442,13 @@ def test_scrape_batch_panel_surfaces_concise_progress_copy():
           failed: 0,
           current_file_code: 'SSIS-123',
           current_stage: 'writing_nfo',
-          current_source: 'javdb',
+          current_source: 'official',
           recent_logs: [
             {
               at: '2026-03-28T10:00:00',
               level: 'info',
               stage: 'writing_nfo',
-              source: 'javdb',
+              source: 'official',
               message: '元数据解析成功，正在生成 NFO 文件',
             },
           ],
@@ -754,17 +754,17 @@ def test_scrape_processing_rows_surface_progress_percent_stage_and_batch_index()
           processed: 1,
           current_file_id: 13,
           current_stage: 'parsing_metadata',
-          current_source: 'javdb',
+          current_source: 'official',
           current_progress_percent: 65,
           items: [
             { id: 7, status: 'success', progress_percent: 100 },
-            { id: 13, status: 'processing', stage: 'parsing_metadata', source: 'javdb', progress_percent: 65 },
+            { id: 13, status: 'processing', stage: 'parsing_metadata', source: 'official', progress_percent: 65 },
             { id: 18, status: 'pending' },
             { id: 19, status: 'pending' },
           ],
         };
         app.scrapeBatchItemsIndex = {
-          13: { id: 13, status: 'processing', stage: 'parsing_metadata', source: 'javdb', progress_percent: 65 },
+          13: { id: 13, status: 'processing', stage: 'parsing_metadata', source: 'official', progress_percent: 65 },
         };
 
         const file = {
@@ -860,6 +860,119 @@ def test_show_scrape_detail_modal_loads_preview_payload():
     assert result["scrapeDetailCode"] == "EBOD-829"
     assert result["scrapeDetailPoster"] == "/api/scrape/13/artifacts/EBOD-829-poster.jpg"
     assert result["fileCount"] == 2
+
+
+def test_nsfw_image_mask_toggle_persists_to_local_storage():
+    script = textwrap.dedent(
+        """
+        import fs from 'node:fs';
+        import vm from 'node:vm';
+
+        const storage = new Map([['noctra.nsfwImageMaskEnabled', '1']]);
+        const context = vm.createContext({
+          console,
+          setTimeout,
+          clearTimeout,
+          setInterval,
+          clearInterval,
+          Intl,
+          URLSearchParams,
+          Date,
+          localStorage: {
+            getItem(key) {
+              return storage.has(key) ? storage.get(key) : null;
+            },
+            setItem(key, value) {
+              storage.set(key, String(value));
+            },
+          },
+        });
+        context.window = context;
+        context.globalThis = context;
+
+        for (const path of ['static/js/state.js', 'static/js/features.js']) {
+          const source = fs.readFileSync(path, 'utf8');
+          vm.runInContext(source, context, { filename: path });
+        }
+
+        function mergeSection(target, section) {
+          Object.defineProperties(target, Object.getOwnPropertyDescriptors(section));
+          return target;
+        }
+
+        const app = {};
+        mergeSection(app, context.NoctraState.createState());
+        mergeSection(app, context.NoctraFeatures.createFeatures());
+
+        const initial = app.nsfwImageMaskEnabled;
+        app.toggleNsfwImageMask();
+
+        console.log(JSON.stringify({
+          initial,
+          after: app.nsfwImageMaskEnabled,
+          stored: storage.get('noctra.nsfwImageMaskEnabled'),
+        }));
+        """
+    )
+
+    result = run_frontend_script(script)
+
+    assert result == {
+        "initial": True,
+        "after": False,
+        "stored": "0",
+    }
+
+
+def test_nsfw_image_mask_prevents_poster_lightbox_opening():
+    script = textwrap.dedent(
+        """
+        import fs from 'node:fs';
+        import vm from 'node:vm';
+
+        const context = vm.createContext({
+          console,
+          setTimeout,
+          clearTimeout,
+          setInterval,
+          clearInterval,
+          Intl,
+          URLSearchParams,
+          Date,
+        });
+        context.window = context;
+        context.globalThis = context;
+
+        for (const path of ['static/js/state.js', 'static/js/features.js']) {
+          const source = fs.readFileSync(path, 'utf8');
+          vm.runInContext(source, context, { filename: path });
+        }
+
+        function mergeSection(target, section) {
+          Object.defineProperties(target, Object.getOwnPropertyDescriptors(section));
+          return target;
+        }
+
+        const app = {};
+        mergeSection(app, context.NoctraState.createState());
+        mergeSection(app, context.NoctraFeatures.createFeatures());
+
+        app.nsfwImageMaskEnabled = true;
+        app.openScrapePosterPreview('/api/scrape/13/artifacts/EBOD-829-poster.jpg');
+
+        console.log(JSON.stringify({
+          visible: app.showScrapePosterModal,
+          preview: app.scrapeDetailPosterPreview,
+        }));
+        """
+    )
+
+    result = run_frontend_script(script)
+
+    assert result == {
+        "visible": False,
+        "preview": None,
+    }
 
 
 def test_scrape_detail_groups_preview_images_into_summary():
@@ -1074,6 +1187,10 @@ def test_scrape_detail_modal_markup_contains_preview_sections():
     html = (PROJECT_ROOT / "static/index.html").read_text(encoding="utf-8")
 
     assert "刮削内容概览" in html
+    assert "图片脱敏" in html
+    assert "nsfwImageMaskEnabled" in html
+    assert "scrape-poster-masked" in html
+    assert "scrape-preview-masked" in html
     assert "封面预览" in html
     assert "生成文件" in html
     assert "重点文件" in html

@@ -600,6 +600,9 @@
             },
 
             openScrapePosterPreview(url) {
+                if (this.nsfwImageMaskEnabled) {
+                    return;
+                }
                 if (!url) {
                     return;
                 }
@@ -623,6 +626,25 @@
                 this.scrapePreviewGalleryIndex = nextIndex;
                 this.showScrapePreviewGalleryModal = true;
                 this.syncCurrentScrapePreviewThumb();
+            },
+
+            setNsfwImageMaskEnabled(enabled) {
+                this.nsfwImageMaskEnabled = Boolean(enabled);
+                if (this.nsfwImageMaskEnabled) {
+                    this.closeScrapePosterPreview();
+                }
+                try {
+                    window.localStorage?.setItem(
+                        this.nsfwImageMaskStorageKey || 'noctra.nsfwImageMaskEnabled',
+                        this.nsfwImageMaskEnabled ? '1' : '0'
+                    );
+                } catch (error) {
+                    // Local storage may be unavailable in private or test contexts.
+                }
+            },
+
+            toggleNsfwImageMask() {
+                this.setNsfwImageMaskEnabled(!this.nsfwImageMaskEnabled);
             },
 
             closeScrapePreviewGallery() {

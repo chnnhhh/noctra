@@ -21,6 +21,8 @@ class ScrapingMetadata:
     runtime_minutes: Optional[int] = None
     directors: List[str] = field(default_factory=list)
     tags: List[str] = field(default_factory=list)
+    label: str = ""
+    series: str = ""
     rating: str = ""
     votes: Optional[int] = None
 
@@ -44,6 +46,8 @@ class ScrapingMetadata:
             "runtime_minutes": self.runtime_minutes,
             "directors": self.directors,
             "tags": self.tags,
+            "label": self.label,
+            "series": self.series,
             "rating": self.rating,
             "votes": self.votes,
             "poster": f"{artifact_base_name}-poster.jpg" if self.poster_url else None,

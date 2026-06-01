@@ -133,15 +133,15 @@ def test_get_scrape_job_returns_snapshot(mock_get_scrape_job):
         current_file_id=1,
         current_file_code="ALDN-480",
         current_stage="querying_source",
-        current_source="javdb",
+        current_source="official",
         current_progress_percent=35,
         recent_logs=[
             {
                 "at": "2026-03-27T10:00:02",
                 "level": "info",
                 "stage": "querying_source",
-                "source": "javdb",
-                "message": "正在查询 JavDB",
+                "source": "official",
+                "message": "正在查询官方/DMM",
             }
         ],
     )
@@ -155,7 +155,7 @@ def test_get_scrape_job_returns_snapshot(mock_get_scrape_job):
     assert payload["status"] == "running"
     assert payload["current_stage"] == "querying_source"
     assert payload["current_progress_percent"] == 35
-    assert payload["recent_logs"][0]["message"] == "正在查询 JavDB"
+    assert payload["recent_logs"][0]["message"] == "正在查询官方/DMM"
     mock_get_scrape_job.assert_awaited_once_with("job123")
 
 
@@ -265,15 +265,15 @@ async def test_run_scrape_job_progress_percent_never_regresses_when_source_retri
                     "at": "2026-03-29T10:00:01",
                     "level": "info",
                     "stage": "querying_source",
-                    "source": "javdb",
-                    "message": "正在查询 JavDB",
+                    "source": "official",
+                    "message": "正在查询官方/DMM",
                 })
                 await progress_callback({
                     "at": "2026-03-29T10:00:02",
                     "level": "warning",
                     "stage": "fetching_detail",
-                    "source": "javdb",
-                    "message": "JavDB 已返回结果，正在读取详情页",
+                    "source": "official",
+                    "message": "官方/DMM 已返回结果，正在读取详情页",
                 })
                 await progress_callback({
                     "at": "2026-03-29T10:00:03",

@@ -63,6 +63,7 @@ class BaseCrawler(ABC):
 
     def _display_name(self) -> str:
         mapping = {
+            "official": "官方/DMM",
             "javdb": "JavDB",
             "javtrailers": "JavTrailers",
         }
@@ -142,6 +143,8 @@ class BaseCrawler(ABC):
             if self._session is None:
                 self._session = requests.Session()
 
+            proxy = get_proxy_for_url(url)
+            cloudflare_error_message: str | None = None
             for index, profile in enumerate(self.REQUEST_PROFILES):
                 request_kwargs = {
                     "headers": profile["headers"],
@@ -149,7 +152,6 @@ class BaseCrawler(ABC):
                     "verify": False,
                     "impersonate": profile["impersonate"],
                 }
-                proxy = get_proxy_for_url(url)
                 if proxy:
                     request_kwargs["proxy"] = proxy
 
@@ -170,6 +172,12 @@ class BaseCrawler(ABC):
                     status_code=response.status_code,
                     body=response.text,
                 )
+                if is_cloudflare and not cloudflare_error_message:
+                    cloudflare_error_message = self._build_http_error_message(
+                        status_code=response.status_code,
+                        body=response.text,
+                        context=context,
+                    )
                 has_fallback = index < len(self.REQUEST_PROFILES) - 1
                 if is_cloudflare and has_fallback:
                     next_profile = self.REQUEST_PROFILES[index + 1]
@@ -179,13 +187,12 @@ class BaseCrawler(ABC):
                     )
                     continue
 
-                self._set_error(
-                    self._build_http_error_message(
-                        status_code=response.status_code,
-                        body=response.text,
-                        context=context,
-                    )
+                error_message = cloudflare_error_message or self._build_http_error_message(
+                    status_code=response.status_code,
+                    body=response.text,
+                    context=context,
                 )
+                self._set_error(error_message)
                 return None
 
         except Exception as e:

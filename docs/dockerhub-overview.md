@@ -65,9 +65,8 @@ environment variables into the container:
 Notes:
 
 - Include the URL scheme when possible, for example `http://192.168.7.2:7890`
-- Proxy settings are used by both metadata requests and artwork downloads
-- Avoid Japan exit nodes for JavDB-like sites because they are more likely to be blocked
-- Hong Kong and Taiwan nodes are usually safer choices
+- Proxy settings are used by official/DMM metadata requests, optional LLM requests, and artwork downloads
+- If one exit node is unstable for DMM or maker sites, try Hong Kong or Taiwan nodes
 
 Open:
 
@@ -166,9 +165,20 @@ docker run -d \
 注意：
 
 - 建议代理地址带上协议头，例如 `http://192.168.7.2:7890`
-- 这些代理变量会同时用于元数据请求和图片下载
-- 不要使用日本节点，`JavDB` 这类站点更容易直接封禁或触发风控
-- 优先选择香港或台湾节点，通常更稳定
+- 这些代理变量会同时用于官方/DMM 元数据请求、可选 LLM 请求和图片下载
+- 如果某个出口节点访问 DMM 或厂商站不稳定，可以切换到香港或台湾节点重试
+
+### 可选 LLM 抽取
+
+刮削默认会按固定 URL 抓取官方/DMM 页面并本地解析。需要让模型辅助结构化抽取时，可额外传入：
+
+```bash
+-e NOCTRA_LLM_ENABLED=1 \
+-e NOCTRA_LLM_BASE_URL=http://example.com:18082 \
+-e NOCTRA_LLM_WIRE_API=responses \
+-e NOCTRA_LLM_MODEL=gpt-5.4-mini \
+-e NOCTRA_LLM_API_KEY=...
+```
 
 访问地址：
 
