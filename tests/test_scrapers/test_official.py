@@ -71,6 +71,29 @@ def test_normalize_code_variants_for_aldn():
     assert variants.lower_hyphen_code == "aldn-480"
 
 
+def test_dmm_fsdss_candidates_include_confirmed_fanza_digital_cid():
+    provider = OfficialMetadataProvider()
+    variants = normalize_code_variants("FSDSS-615")
+
+    assert provider._dmm_digital_cids(variants) == ["1fsdss00615", "fsdss00615"]
+    assert provider._dmm_detail_candidates(variants) == [
+        "https://www.dmm.co.jp/mono/dvd/-/detail/=/cid=fsdss615/",
+        "https://video.dmm.co.jp/av/content/?id=1fsdss00615",
+        "https://video.dmm.co.jp/av/content/?id=fsdss00615",
+    ]
+
+
+def test_dmm_candidates_do_not_add_leading_one_for_other_prefixes():
+    provider = OfficialMetadataProvider()
+    variants = normalize_code_variants("ALDN-480")
+
+    assert provider._dmm_digital_cids(variants) == ["aldn00480"]
+    assert provider._dmm_detail_candidates(variants) == [
+        "https://www.dmm.co.jp/mono/dvd/-/detail/=/cid=aldn480/",
+        "https://video.dmm.co.jp/av/content/?id=aldn00480",
+    ]
+
+
 def test_deterministic_extracts_takara_and_dmm_fields():
     provider = OfficialMetadataProvider()
     variants = normalize_code_variants("ALDN-480")
@@ -140,6 +163,46 @@ async def test_crawl_returns_scraping_metadata_without_llm():
     assert metadata.fanart_url == cover_urls[0]
     assert metadata.poster_url == cover_urls[1]
     assert metadata.preview_urls == []
+
+
+@pytest.mark.asyncio
+async def test_validated_cover_urls_checks_fsdss_digital_cover_before_mono():
+    provider = OfficialMetadataProvider()
+    checked_urls = []
+
+    async def check_image_url(url):
+        checked_urls.append(url)
+        return False
+
+    provider._check_image_url = check_image_url
+
+    await provider._validated_cover_urls(normalize_code_variants("FSDSS-615"), {})
+
+    assert checked_urls == [
+        "https://takara-tv.jp/product/l/fsdss-615.jpg",
+        "https://pics.dmm.co.jp/digital/video/1fsdss00615/1fsdss00615pl.jpg",
+        "https://pics.dmm.co.jp/digital/video/fsdss00615/fsdss00615pl.jpg",
+        "https://pics.dmm.co.jp/mono/movie/adult/fsdss615/fsdss615pl.jpg",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_check_image_url_rejects_dmm_now_printing_placeholder():
+    class Response:
+        status_code = 200
+        headers = {"content-type": "image/jpeg"}
+        url = "https://imgsrc.dmm.com/pics/mono/movie/n/now_printing/now_printing.jpg"
+
+    class Session:
+        def head(self, url, **kwargs):
+            return Response()
+
+    provider = OfficialMetadataProvider()
+    provider._session = Session()
+
+    assert await provider._check_image_url(
+        "https://pics.dmm.co.jp/digital/video/fsdss00615/fsdss00615pl.jpg"
+    ) is False
 
 
 def test_apply_translation_updates_display_fields_only():

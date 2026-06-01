@@ -71,6 +71,7 @@ class OfficialMetadataProvider(BaseCrawler):
 
     TAKARA_BASE_URL = "https://takara-tv.jp"
     DMM_DETAIL_URL = "https://www.dmm.co.jp/mono/dvd/-/detail/=/cid={mono_cid}/"
+    DMM_VIDEO_DETAIL_URL = "https://video.dmm.co.jp/av/content/?id={digital_cid}"
     TAKARA_DETAIL_URL = "https://takara-tv.jp/dvd_detail.php?code={code}"
     TAKARA_COVER_URL = "https://takara-tv.jp/product/l/{lower_hyphen_code}.jpg"
     DMM_MONO_COVER_URL = (
@@ -79,6 +80,7 @@ class OfficialMetadataProvider(BaseCrawler):
     DMM_DIGITAL_COVER_URL = (
         "https://pics.dmm.co.jp/digital/video/{digital_cid}/{digital_cid}pl.jpg"
     )
+    DMM_LEADING_ONE_DIGITAL_PREFIXES = {"FSDSS"}
 
     REQUEST_TIMEOUT_SECONDS = 25
     LLM_TIMEOUT_SECONDS = 60
@@ -103,9 +105,8 @@ class OfficialMetadataProvider(BaseCrawler):
             page_html["takara"] = takara_html
             page_urls["takara"] = takara_url
 
-        dmm_url = self.DMM_DETAIL_URL.format(mono_cid=variants.mono_cid)
-        dmm_html = await self._fetch_text(dmm_url, context="DMM 详情页", headers=DMM_HEADERS)
-        if dmm_html:
+        dmm_html, dmm_url = await self._fetch_dmm_detail(variants)
+        if dmm_html and dmm_url:
             page_html["dmm"] = dmm_html
             page_urls["dmm"] = dmm_url
 
@@ -151,6 +152,16 @@ class OfficialMetadataProvider(BaseCrawler):
                 return html, url
         return None, None
 
+    async def _fetch_dmm_detail(
+        self,
+        variants: CodeVariants,
+    ) -> tuple[str | None, str | None]:
+        for url in self._dmm_detail_candidates(variants):
+            html = await self._fetch_text(url, context="DMM 详情页", headers=DMM_HEADERS)
+            if html and self._looks_like_dmm_product(html, variants, url):
+                return html, url
+        return None, None
+
     async def _fetch_text(
         self,
         url: str,
@@ -184,6 +195,7 @@ class OfficialMetadataProvider(BaseCrawler):
         try:
             text = await asyncio.to_thread(request)
         except Exception as exc:
+            self._session = None
             self._record_diagnostic(f"{context}请求异常：{exc}", level="warning")
             return None
 
@@ -196,11 +208,19 @@ class OfficialMetadataProvider(BaseCrawler):
         variants: CodeVariants,
         page_html: dict[str, str],
     ) -> list[str]:
+        digital_cover_urls = [
+            self.DMM_DIGITAL_COVER_URL.format(digital_cid=digital_cid)
+            for digital_cid in self._dmm_digital_cids(variants)
+        ]
         candidates = [
             self.TAKARA_COVER_URL.format(lower_hyphen_code=variants.lower_hyphen_code),
-            self.DMM_MONO_COVER_URL.format(mono_cid=variants.mono_cid),
-            self.DMM_DIGITAL_COVER_URL.format(digital_cid=variants.digital_cid),
         ]
+        if self._uses_leading_one_digital_cid(variants):
+            candidates.extend(digital_cover_urls)
+            candidates.append(self.DMM_MONO_COVER_URL.format(mono_cid=variants.mono_cid))
+        else:
+            candidates.append(self.DMM_MONO_COVER_URL.format(mono_cid=variants.mono_cid))
+            candidates.extend(digital_cover_urls)
         candidates.extend(self._extract_dmm_cover_candidates(page_html.get("dmm", "")))
 
         validated: list[str] = []
@@ -235,11 +255,15 @@ class OfficialMetadataProvider(BaseCrawler):
                 content_type = response.headers.get("content-type", "")
             except Exception:
                 content_type = ""
+            final_url = str(getattr(response, "url", "") or "")
+            if "now_printing" in final_url:
+                return False
             return response.status_code == 200 and content_type.lower().startswith("image/")
 
         try:
             return await asyncio.to_thread(request)
         except Exception as exc:
+            self._session = None
             self._record_diagnostic(f"封面候选校验失败：{url} ({exc})", level="warning")
             return False
 
@@ -261,7 +285,7 @@ class OfficialMetadataProvider(BaseCrawler):
             result = merge_metadata(result, takara)
 
         if "dmm" in page_html:
-            dmm = self._parse_dmm(page_html["dmm"], variants)
+            dmm = self._parse_dmm(page_html["dmm"], variants, page_urls.get("dmm", ""))
             result = merge_metadata(result, dmm)
 
         result.cover_image_urls = cover_urls[:2] or result.cover_image_urls
@@ -319,7 +343,12 @@ class OfficialMetadataProvider(BaseCrawler):
             })
         return extracted
 
-    def _parse_dmm(self, html: str, variants: CodeVariants) -> ExtractedMetadata:
+    def _parse_dmm(
+        self,
+        html: str,
+        variants: CodeVariants,
+        page_url: str = "",
+    ) -> ExtractedMetadata:
         soup = BeautifulSoup(html, "lxml")
         title = pick_text(soup, "h1#title") or meta_content(soup, "og:title")
 
@@ -383,7 +412,7 @@ class OfficialMetadataProvider(BaseCrawler):
         )):
             extracted.evidence.append({
                 "source": "dmm.co.jp",
-                "url": self.DMM_DETAIL_URL.format(mono_cid=variants.mono_cid),
+                "url": page_url or self.DMM_DETAIL_URL.format(mono_cid=variants.mono_cid),
                 "fields": [
                     name
                     for name, value in (
@@ -568,6 +597,49 @@ class OfficialMetadataProvider(BaseCrawler):
         if "table" not in html or "product_i" not in html:
             return False
         return variants.code_with_hyphen in html or variants.lower_hyphen_code in html.lower()
+
+    @classmethod
+    def _dmm_digital_cids(cls, variants: CodeVariants) -> list[str]:
+        cids: list[str] = []
+        if cls._uses_leading_one_digital_cid(variants):
+            cids.append(f"1{variants.digital_cid}")
+        cids.append(variants.digital_cid)
+        return unique_non_empty(cids)
+
+    @classmethod
+    def _uses_leading_one_digital_cid(cls, variants: CodeVariants) -> bool:
+        prefix = variants.code_with_hyphen.split("-", 1)[0]
+        return prefix in cls.DMM_LEADING_ONE_DIGITAL_PREFIXES
+
+    @classmethod
+    def _dmm_detail_candidates(cls, variants: CodeVariants) -> list[str]:
+        candidates = [
+            cls.DMM_DETAIL_URL.format(mono_cid=variants.mono_cid),
+        ]
+        candidates.extend(
+            cls.DMM_VIDEO_DETAIL_URL.format(digital_cid=digital_cid)
+            for digital_cid in cls._dmm_digital_cids(variants)
+        )
+        return unique_non_empty(candidates)
+
+    @classmethod
+    def _looks_like_dmm_product(
+        cls,
+        html: str,
+        variants: CodeVariants,
+        url: str,
+    ) -> bool:
+        lower_html = html.lower()
+        if "年齢認証" in html or "/age_check" in lower_html:
+            return False
+        identifiers = [variants.mono_cid, *cls._dmm_digital_cids(variants)]
+        if variants.code_with_hyphen in html or any(cid in lower_html for cid in identifiers):
+            return True
+        lower_url = url.lower()
+        return (
+            lower_url.startswith("https://video.dmm.co.jp/av/content/")
+            and any(f"id={cid}" in lower_url for cid in identifiers)
+        )
 
     @staticmethod
     def _to_scraping_metadata(
