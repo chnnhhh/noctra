@@ -600,11 +600,9 @@ class OfficialMetadataProvider(BaseCrawler):
 
     @classmethod
     def _dmm_digital_cids(cls, variants: CodeVariants) -> list[str]:
-        cids: list[str] = []
         if cls._uses_leading_one_digital_cid(variants):
-            cids.append(f"1{variants.digital_cid}")
-        cids.append(variants.digital_cid)
-        return unique_non_empty(cids)
+            return [f"1{variants.digital_cid}"]
+        return [variants.digital_cid]
 
     @classmethod
     def _uses_leading_one_digital_cid(cls, variants: CodeVariants) -> bool:

@@ -75,11 +75,10 @@ def test_dmm_fsdss_candidates_include_confirmed_fanza_digital_cid():
     provider = OfficialMetadataProvider()
     variants = normalize_code_variants("FSDSS-615")
 
-    assert provider._dmm_digital_cids(variants) == ["1fsdss00615", "fsdss00615"]
+    assert provider._dmm_digital_cids(variants) == ["1fsdss00615"]
     assert provider._dmm_detail_candidates(variants) == [
         "https://www.dmm.co.jp/mono/dvd/-/detail/=/cid=fsdss615/",
         "https://video.dmm.co.jp/av/content/?id=1fsdss00615",
-        "https://video.dmm.co.jp/av/content/?id=fsdss00615",
     ]
 
 
@@ -181,7 +180,6 @@ async def test_validated_cover_urls_checks_fsdss_digital_cover_before_mono():
     assert checked_urls == [
         "https://takara-tv.jp/product/l/fsdss-615.jpg",
         "https://pics.dmm.co.jp/digital/video/1fsdss00615/1fsdss00615pl.jpg",
-        "https://pics.dmm.co.jp/digital/video/fsdss00615/fsdss00615pl.jpg",
         "https://pics.dmm.co.jp/mono/movie/adult/fsdss615/fsdss615pl.jpg",
     ]
 
