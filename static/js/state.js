@@ -1,4 +1,22 @@
 (function (window) {
+    const NSFW_IMAGE_MASK_STORAGE_KEY = 'noctra.nsfwImageMaskEnabled';
+
+    function readBooleanStorage(key, fallback = false) {
+        try {
+            const storage = window.localStorage;
+            if (!storage) {
+                return fallback;
+            }
+            const value = storage.getItem(key);
+            if (value === null) {
+                return fallback;
+            }
+            return value === '1' || value === 'true';
+        } catch (error) {
+            return fallback;
+        }
+    }
+
     function createState() {
         return {
             loading: false,
@@ -82,6 +100,8 @@
             scrapeBatchExpanding: false,
             distDir: '/dist',
             storageDiagnostic: null,
+            nsfwImageMaskStorageKey: NSFW_IMAGE_MASK_STORAGE_KEY,
+            nsfwImageMaskEnabled: readBooleanStorage(NSFW_IMAGE_MASK_STORAGE_KEY, false),
 
             get scanSubtitle() {
                 return '按番号整理，未识别保留，已存在跳过。';

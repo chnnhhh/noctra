@@ -17,6 +17,18 @@
                 <h1>JAV 整理工作台</h1>
             </div>
             <div class="header-nav">
+                <button type="button"
+                        class="privacy-toggle"
+                        :class="{ 'active': nsfwImageMaskEnabled }"
+                        role="switch"
+                        :aria-checked="String(nsfwImageMaskEnabled)"
+                        :title="nsfwImageMaskEnabled ? '图片脱敏已开启' : '图片脱敏已关闭'"
+                        @click="toggleNsfwImageMask()">
+                    <span class="privacy-toggle-track" aria-hidden="true">
+                        <span class="privacy-toggle-thumb"></span>
+                    </span>
+                    <span class="privacy-toggle-label">图片脱敏</span>
+                </button>
                 <a href="#" @click.prevent="switchView('scan')" :class="{ 'active': view === 'scan' }">📂 扫描</a>
                 <a href="#" class="nav-scrape" @click.prevent="switchView('scrape')" :class="{ 'active': view === 'scrape' }">
                     <span class="nav-icon" x-html="getUiIcon('scrape')"></span> 刮削
@@ -866,7 +878,7 @@
             <div class="scrape-detail-shell" x-show="!scrapeDetailLoading">
                 <div class="scrape-detail-panel">
                     <div class="scrape-detail-section-title">封面预览</div>
-                    <template x-if="scrapeDetailFile?.poster_url">
+                    <template x-if="scrapeDetailFile?.poster_url && !nsfwImageMaskEnabled">
                         <button type="button"
                                 class="scrape-poster-button"
                                 @click="openScrapePosterPreview(scrapeDetailFile.poster_url)">
@@ -875,6 +887,14 @@
                                  :alt="`${scrapeDetailFile?.metadata?.code || scrapeDetailFile?.code || '作品'} 海报`">
                             <span class="scrape-poster-hint">点击放大查看</span>
                         </button>
+                    </template>
+                    <template x-if="scrapeDetailFile?.poster_url && nsfwImageMaskEnabled">
+                        <div class="scrape-poster-masked">
+                            <span class="scrape-poster-masked-icon" aria-hidden="true"></span>
+                            <span class="scrape-poster-masked-title">图片已隐藏</span>
+                            <span class="scrape-poster-masked-detail"
+                                  x-text="scrapeDetailFile?.poster_url?.split('/').pop() || '封面图片'"></span>
+                        </div>
                     </template>
                     <template x-if="!scrapeDetailFile?.poster_url">
                         <div class="scrape-poster-empty">暂无封面图片</div>
@@ -957,9 +977,11 @@
     <!-- Scrape Poster Preview Modal -->
     <div x-show="showScrapePosterModal" class="modal-overlay modal-overlay-immersive" @click.self="closeScrapePosterPreview()">
         <div class="scrape-poster-lightbox">
-            <img class="scrape-poster-lightbox-image"
-                 :src="scrapeDetailPosterPreview || ''"
-                 alt="刮削海报大图">
+            <template x-if="!nsfwImageMaskEnabled">
+                <img class="scrape-poster-lightbox-image"
+                     :src="scrapeDetailPosterPreview || ''"
+                     alt="刮削海报大图">
+            </template>
             <button type="button" class="secondary scrape-poster-lightbox-close" @click="closeScrapePosterPreview()">关闭</button>
         </div>
     </div>
@@ -981,9 +1003,18 @@
                 </button>
 
                 <div class="scrape-preview-canvas">
-                    <img class="scrape-preview-image"
-                         :src="currentScrapePreviewImage?.url || ''"
-                         :alt="currentScrapePreviewImage?.name || '预览图'">
+                    <template x-if="!nsfwImageMaskEnabled">
+                        <img class="scrape-preview-image"
+                             :src="currentScrapePreviewImage?.url || ''"
+                             :alt="currentScrapePreviewImage?.name || '预览图'">
+                    </template>
+                    <template x-if="nsfwImageMaskEnabled">
+                        <div class="scrape-preview-masked">
+                            <span class="scrape-preview-masked-title">图片已隐藏</span>
+                            <span class="scrape-preview-masked-name"
+                                  x-text="currentScrapePreviewImage?.name || '预览图'"></span>
+                        </div>
+                    </template>
                 </div>
 
                 <button type="button"
@@ -1005,9 +1036,14 @@
                             :class="{ 'active': index === scrapePreviewGalleryIndex }"
                             :aria-label="`查看 ${image.name}`"
                             @click="selectScrapePreview(index)">
-                        <img class="scrape-preview-thumb-image"
-                             :src="image.url"
-                             :alt="image.name">
+                        <template x-if="!nsfwImageMaskEnabled">
+                            <img class="scrape-preview-thumb-image"
+                                 :src="image.url"
+                                 :alt="image.name">
+                        </template>
+                        <template x-if="nsfwImageMaskEnabled">
+                            <span class="scrape-preview-thumb-mask" x-text="index + 1"></span>
+                        </template>
                     </button>
                 </template>
             </div>

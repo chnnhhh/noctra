@@ -4,7 +4,7 @@ import asyncio
 import json
 import os
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 import aiohttp
@@ -38,6 +38,7 @@ class CodeVariants:
 @dataclass
 class ExtractedMetadata:
     title: str = ""
+    plot: str = ""
     actors: list[str] = field(default_factory=list)
     release_date: str = ""
     runtime_minutes: int | None = None
@@ -46,11 +47,21 @@ class ExtractedMetadata:
     label: str = ""
     series: str = ""
     tags: list[str] = field(default_factory=list)
+    rating: str = ""
+    votes: int | None = None
     cover_image_urls: list[str] = field(default_factory=list)
     product_page_urls: list[str] = field(default_factory=list)
     evidence: list[dict] = field(default_factory=list)
     conflicts: list[dict] = field(default_factory=list)
     confidence: str = "low"
+
+
+@dataclass
+class TranslatedMetadata:
+    title: str = ""
+    plot: str = ""
+    tags: list[str] = field(default_factory=list)
+    series: str = ""
 
 
 class OfficialMetadataProvider(BaseCrawler):
@@ -120,8 +131,11 @@ class OfficialMetadataProvider(BaseCrawler):
             )
             return None
 
+        metadata = self._to_scraping_metadata(variants, extracted)
+        metadata = await self._translate_for_nfo(metadata)
+
         self._record_diagnostic("官方/DMM 元数据抽取成功")
-        return self._to_scraping_metadata(variants, extracted)
+        return metadata
 
     async def _fetch_takara_detail(
         self,
@@ -340,6 +354,7 @@ class OfficialMetadataProvider(BaseCrawler):
         tags = as_list(fields.get("ジャンル"))
         extracted = ExtractedMetadata(
             title=clean_text(title),
+            plot=self._extract_dmm_plot(soup),
             actors=as_list(fields.get("出演者")),
             release_date=normalize_japanese_date(str(fields.get("発売日", ""))),
             runtime_minutes=extract_minutes(str(fields.get("収録時間", ""))),
@@ -348,10 +363,13 @@ class OfficialMetadataProvider(BaseCrawler):
             label=first_value(fields.get("レーベル")),
             series=first_value(fields.get("シリーズ")),
             tags=tags,
+            rating=self._extract_dmm_rating(soup),
+            votes=self._extract_dmm_votes(soup),
             cover_image_urls=unique_non_empty(self._extract_dmm_cover_candidates(html))[:1],
         )
         if any((
             extracted.title,
+            extracted.plot,
             extracted.actors,
             extracted.release_date,
             extracted.runtime_minutes,
@@ -360,6 +378,8 @@ class OfficialMetadataProvider(BaseCrawler):
             extracted.label,
             extracted.series,
             extracted.tags,
+            extracted.rating,
+            extracted.votes,
         )):
             extracted.evidence.append({
                 "source": "dmm.co.jp",
@@ -368,6 +388,7 @@ class OfficialMetadataProvider(BaseCrawler):
                     name
                     for name, value in (
                         ("title", extracted.title),
+                        ("plot", extracted.plot),
                         ("actors", extracted.actors),
                         ("releaseDate", extracted.release_date),
                         ("runtimeMinutes", extracted.runtime_minutes),
@@ -376,11 +397,47 @@ class OfficialMetadataProvider(BaseCrawler):
                         ("label", extracted.label),
                         ("series", extracted.series),
                         ("tags", extracted.tags),
+                        ("rating", extracted.rating),
+                        ("votes", extracted.votes),
                     )
                     if value
                 ],
             })
         return extracted
+
+    def _extract_dmm_plot(self, soup: BeautifulSoup) -> str:
+        for selector in ("p.mg-b20", "div.mg-b20.lh4"):
+            for node in soup.select(selector):
+                text = clean_plot_text(node.get_text(" ", strip=True))
+                if len(text) >= 20:
+                    return text
+        return ""
+
+    @staticmethod
+    def _extract_dmm_rating(soup: BeautifulSoup) -> str:
+        rating = pick_text(soup, ".dcd-review__average strong")
+        if rating:
+            return rating
+
+        for label_cell in soup.select("td.nw"):
+            if clean_label(label_cell.get_text(" ", strip=True)) != "平均評価":
+                continue
+            value_cell = label_cell.find_next_sibling("td")
+            image = value_cell.find("img") if value_cell else None
+            src = image.get("src", "") if image else ""
+            match = re.search(r"/([0-9]{2})\.gif", src)
+            if match:
+                return str(int(match.group(1)) / 10).rstrip("0").rstrip(".")
+        return ""
+
+    @staticmethod
+    def _extract_dmm_votes(soup: BeautifulSoup) -> int | None:
+        votes = coerce_int(pick_text(soup, ".dcd-review__evaluates strong"))
+        if votes is not None:
+            return votes
+        text = pick_text(soup, ".dcd-review__evaluates")
+        match = re.search(r"総評価数\s*(\d+)", text)
+        return int(match.group(1)) if match else None
 
     def _extract_dmm_cover_candidates(self, html: str) -> list[str]:
         if not html:
@@ -460,6 +517,52 @@ class OfficialMetadataProvider(BaseCrawler):
             self._record_diagnostic("LLM 元数据抽取成功")
         return extracted
 
+    async def _translate_for_nfo(self, metadata: ScrapingMetadata) -> ScrapingMetadata:
+        if not has_llm_api_key():
+            self._record_diagnostic("未配置 LLM API key，跳过中文翻译")
+            return metadata
+        if not has_translatable_text(metadata):
+            self._record_diagnostic("没有可翻译字段，跳过中文翻译")
+            return metadata
+
+        payload = {
+            "model": os.getenv("NOCTRA_LLM_MODEL", "gpt-5.4-mini"),
+            "input": build_translation_prompt(metadata),
+            "max_output_tokens": 1600,
+        }
+        endpoint = responses_endpoint()
+        timeout = aiohttp.ClientTimeout(
+            total=int(os.getenv("NOCTRA_LLM_TIMEOUT_SECONDS", str(self.LLM_TIMEOUT_SECONDS)))
+        )
+        headers = {
+            "Authorization": f"Bearer {os.getenv('NOCTRA_LLM_API_KEY') or os.getenv('OPENAI_API_KEY')}",
+            "Content-Type": "application/json",
+        }
+
+        try:
+            async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+                async with session.post(endpoint, json=payload) as response:
+                    if response.status >= 400:
+                        text = await response.text()
+                        self._record_diagnostic(
+                            f"中文翻译请求失败：HTTP {response.status} {text[:120]}，保留原文",
+                            level="warning",
+                        )
+                        return metadata
+                    body = await response.json()
+        except Exception as exc:
+            self._record_diagnostic(f"中文翻译异常：{exc}，保留原文", level="warning")
+            return metadata
+
+        data = parse_json_object(extract_response_text(body))
+        translated = translated_from_llm(data, metadata) if data else None
+        if not translated:
+            self._record_diagnostic("中文翻译未返回可用 JSON，保留原文", level="warning")
+            return metadata
+
+        self._record_diagnostic("中文翻译成功")
+        return apply_translation(metadata, translated)
+
     @staticmethod
     def _looks_like_takara_product(html: str, variants: CodeVariants) -> bool:
         if "table" not in html or "product_i" not in html:
@@ -480,7 +583,7 @@ class OfficialMetadataProvider(BaseCrawler):
             code=variants.code_with_hyphen,
             title=variants.code_with_hyphen,
             original_title=extracted.title or variants.code_with_hyphen,
-            plot="",
+            plot=extracted.plot,
             website=website,
             actors=extracted.actors,
             studio=extracted.maker,
@@ -488,6 +591,10 @@ class OfficialMetadataProvider(BaseCrawler):
             runtime_minutes=extracted.runtime_minutes,
             directors=directors,
             tags=extracted.tags,
+            label=extracted.label,
+            series=extracted.series,
+            rating=extracted.rating,
+            votes=extracted.votes,
             poster_url=poster_url,
             fanart_url=fanart_url,
             preview_urls=[],
@@ -524,6 +631,7 @@ def merge_metadata(
         return base
     return ExtractedMetadata(
         title=override.title or base.title,
+        plot=override.plot or base.plot,
         actors=override.actors or base.actors,
         release_date=override.release_date or base.release_date,
         runtime_minutes=override.runtime_minutes if override.runtime_minutes is not None else base.runtime_minutes,
@@ -532,6 +640,8 @@ def merge_metadata(
         label=override.label or base.label,
         series=override.series or base.series,
         tags=override.tags or base.tags,
+        rating=base.rating or override.rating,
+        votes=base.votes if base.votes is not None else override.votes,
         cover_image_urls=unique_non_empty(override.cover_image_urls + base.cover_image_urls),
         product_page_urls=unique_non_empty(override.product_page_urls + base.product_page_urls),
         evidence=(base.evidence or []) + (override.evidence or []),
@@ -558,6 +668,7 @@ def extracted_from_llm(
     ]
     return ExtractedMetadata(
         title=clean_text(str(metadata.get("title") or "")),
+        plot=clean_plot_text(str(metadata.get("plot") or "")),
         actors=as_list(metadata.get("actors")),
         release_date=normalize_japanese_date(str(metadata.get("releaseDate") or "")),
         runtime_minutes=coerce_int(metadata.get("runtimeMinutes")),
@@ -566,6 +677,8 @@ def extracted_from_llm(
         label=clean_text(str(metadata.get("label") or "")),
         series=clean_text(str(metadata.get("series") or "")),
         tags=as_list(metadata.get("tags")),
+        rating=clean_text(str(metadata.get("rating") or "")),
+        votes=coerce_int(metadata.get("votes")),
         cover_image_urls=cover_urls,
         product_page_urls=[
             url for url in as_list(metadata.get("productPageUrls")) if is_allowed_product_url(url)
@@ -603,6 +716,11 @@ def build_llm_prompt(
         "レーベル",
         "ジャンル",
         "品番",
+        "mg-b20",
+        "平均評価",
+        "総評価数",
+        "dcd-review__average",
+        "dcd-review__evaluates",
         variants.mono_cid,
         variants.digital_cid,
     ))
@@ -629,6 +747,8 @@ DMM HTML 片段（URL: {page_urls.get("dmm", "")}）：
 - takara-tv.jp 的 table.product_i 中按 th/td 抽取 标题、品番、発売日、収録時間。
 - DMM 页用 h1#title 或 og:title 抽标题，用 og:image 或 package image 抽封面。
 - DMM 详情表按日文 label 抽 発売日、収録時間、出演者、監督、シリーズ、メーカー、レーベル、ジャンル、品番。
+- DMM 的 p.mg-b20 可作为官方简介 plot；只摘取原文，不要扩写或润色。
+- DMM 的 dcd-review__average / dcd-review__evaluates 可作为 rating / votes。
 - 图片 URL 只保留官方页或 pics.dmm.co.jp 的封面图，不抽样张图。
 - 不返回磁力、种子、盗版、在线播放地址。
 
@@ -643,6 +763,7 @@ DMM HTML 片段（URL: {page_urls.get("dmm", "")}）：
   }},
   "metadata": {{
     "title": "",
+    "plot": "",
     "actors": [],
     "releaseDate": "",
     "runtimeMinutes": null,
@@ -651,6 +772,8 @@ DMM HTML 片段（URL: {page_urls.get("dmm", "")}）：
     "label": "",
     "series": "",
     "tags": [],
+    "rating": "",
+    "votes": null,
     "coverImageUrls": [],
     "productPageUrls": []
   }},
@@ -695,11 +818,113 @@ def responses_endpoint() -> str:
     return f"{base_url}/v1/responses"
 
 
+def has_llm_api_key() -> bool:
+    return bool(os.getenv("NOCTRA_LLM_API_KEY") or os.getenv("OPENAI_API_KEY"))
+
+
 def should_use_llm() -> bool:
     value = os.getenv("NOCTRA_LLM_ENABLED")
     if value is not None:
         return value.strip().lower() in {"1", "true", "yes", "on"}
     return bool(os.getenv("NOCTRA_LLM_API_KEY") or os.getenv("OPENAI_API_KEY"))
+
+
+def has_translatable_text(metadata: ScrapingMetadata) -> bool:
+    return any((
+        metadata.original_title and metadata.original_title != metadata.code,
+        metadata.plot,
+        metadata.tags,
+        metadata.series,
+    ))
+
+
+def build_translation_prompt(metadata: ScrapingMetadata) -> str:
+    source = {
+        "code": metadata.code,
+        "title": metadata.original_title if metadata.original_title != metadata.code else "",
+        "plot": metadata.plot,
+        "tags": metadata.tags,
+        "series": metadata.series,
+    }
+    return f"""你是影视资料库元数据翻译器。请把输入 JSON 中已有的日文元数据翻译成简体中文。
+
+要求：
+- 只翻译已有字段，不要搜索，不要补充新情节，不要添加来源外信息。
+- 保持资料库中性的表达；成人题材只做克制、概括式翻译，不扩写露骨细节。
+- 不翻译番号、人名、厂商名、厂牌名、URL、日期、时长。
+- 如果某个字段无法翻译或你不确定，就返回空字符串或空数组，让程序保留原文。
+- tags 必须逐项翻译，并尽量保持与输入 tags 一一对应。
+- 只输出 JSON，不要 Markdown。
+
+输入：
+{json.dumps(source, ensure_ascii=False)}
+
+输出格式：
+{{
+  "title": "",
+  "plot": "",
+  "tags": [],
+  "series": ""
+}}"""
+
+
+def translated_from_llm(data: dict | None, metadata: ScrapingMetadata) -> TranslatedMetadata | None:
+    if not isinstance(data, dict):
+        return None
+
+    title = usable_translation(data.get("title"), metadata.original_title)
+    plot = usable_translation(data.get("plot"), metadata.plot)
+    series = usable_translation(data.get("series"), metadata.series)
+    tags = translated_tags(data.get("tags"), metadata.tags)
+
+    if not any((title, plot, tags, series)):
+        return None
+    return TranslatedMetadata(title=title, plot=plot, tags=tags, series=series)
+
+
+def apply_translation(metadata: ScrapingMetadata, translated: TranslatedMetadata) -> ScrapingMetadata:
+    return replace(
+        metadata,
+        title=translated.title or metadata.title,
+        plot=translated.plot or metadata.plot,
+        tags=translated.tags or metadata.tags,
+        series=translated.series or metadata.series,
+    )
+
+
+def translated_tags(value: Any, original_tags: list[str]) -> list[str]:
+    tags = [
+        item
+        for item in as_list(value)
+        if usable_translation(item, "")
+    ]
+    if not tags:
+        return []
+    if original_tags and len(tags) != len(original_tags):
+        return []
+    return tags
+
+
+def usable_translation(value: Any, original: str) -> str:
+    text = clean_text(str(value or ""))
+    if not text:
+        return ""
+    if text == clean_text(original):
+        return ""
+    lower = text.lower()
+    refusal_markers = (
+        "i can't",
+        "i cannot",
+        "cannot assist",
+        "sorry",
+        "无法翻译",
+        "不能翻译",
+        "无法提供",
+        "不能提供",
+    )
+    if text.startswith(("抱歉", "对不起")) or any(marker in lower for marker in refusal_markers):
+        return ""
+    return text
 
 
 def extract_response_text(body: dict) -> str:
@@ -799,6 +1024,27 @@ def clean_label(value: str) -> str:
 
 def clean_text(value: str) -> str:
     return re.sub(r"\s+", " ", value or "").strip()
+
+
+def clean_plot_text(value: str) -> str:
+    text = clean_text(value)
+    for marker in (
+        "「コンビニ受取」対象商品です。",
+        "詳しくはこちら をご覧ください。",
+        "詳しくはこちらをご覧ください。",
+    ):
+        if marker in text:
+            text = text.split(marker, 1)[0]
+    boilerplate = (
+        "中古品",
+        "無料サンプル動画を見る",
+        "JavaScriptを有効にして",
+        "画像をクリックして拡大",
+        "安心な梱包でお届け",
+    )
+    if any(item in text for item in boilerplate):
+        return ""
+    return clean_text(text)
 
 
 def unique_non_empty(values: list[str]) -> list[str]:

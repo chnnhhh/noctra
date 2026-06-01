@@ -42,6 +42,11 @@ def write_nfo(metadata: ScrapingMetadata, output_path: Path) -> None:
         _text_element(movie, "tag", tag or "")
 
     _text_element(movie, "studio", metadata.studio or "")
+    _text_element(movie, "label", metadata.label or "")
+    _text_element(movie, "series", metadata.series or "")
+    if metadata.series:
+        set_elem = ET.SubElement(movie, "set")
+        _text_element(set_elem, "name", metadata.series)
 
     for director_name in metadata.directors:
         _text_element(movie, "director", director_name or "")

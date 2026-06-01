@@ -23,6 +23,8 @@ def _make_metadata(**overrides) -> ScrapingMetadata:
         "runtime_minutes": 140,
         "directors": ["監督A"],
         "tags": ["巨乳", "單體作品"],
+        "label": "S1",
+        "series": "テストシリーズ",
         "rating": "4.09",
         "votes": 487,
         "poster_url": "https://example.com/poster.jpg",
@@ -83,6 +85,9 @@ def test_write_nfo_all_fields_present(tmp_path: Path):
     assert root.find("plot").text == "テストプロット内容"
     assert root.find("premiered").text == "2023-06-27"
     assert root.find("studio").text == "S1 NO.1 STYLE"
+    assert root.find("label").text == "S1"
+    assert root.find("series").text == "テストシリーズ"
+    assert root.find("set/name").text == "テストシリーズ"
     assert root.find("poster").text == "SSIS-743-poster.jpg"
 
 
@@ -212,6 +217,9 @@ def test_write_nfo_rich_fields_match_reference_shape(tmp_path: Path):
     assert root.find("premiered").text == "2023-06-27"
     assert root.find("releasedate").text == "2023-06-27"
     assert root.find("runtime").text == "140"
+    assert root.find("label").text == "S1"
+    assert root.find("series").text == "テストシリーズ"
+    assert root.find("set/name").text == "テストシリーズ"
     assert root.find("rating").text == "4.09"
     assert root.find("votes").text == "487"
     assert root.find("website").text == "https://javdb.com/v/abc123?locale=zh"
