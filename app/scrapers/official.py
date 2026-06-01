@@ -83,6 +83,8 @@ class OfficialMetadataProvider(BaseCrawler):
     DMM_LEADING_ONE_DIGITAL_PREFIXES = {"FSDSS"}
 
     REQUEST_TIMEOUT_SECONDS = 25
+    REQUEST_RETRY_ATTEMPTS = 3
+    REQUEST_RETRY_DELAY_SECONDS = 0.5
     LLM_TIMEOUT_SECONDS = 60
 
     async def crawl(self, code: str) -> ScrapingMetadata | None:
@@ -192,12 +194,17 @@ class OfficialMetadataProvider(BaseCrawler):
                 return None
             return response.text
 
-        try:
-            text = await asyncio.to_thread(request)
-        except Exception as exc:
-            self._session = None
-            self._record_diagnostic(f"{context}请求异常：{exc}", level="warning")
-            return None
+        for attempt in range(1, self.REQUEST_RETRY_ATTEMPTS + 1):
+            try:
+                text = await asyncio.to_thread(request)
+            except Exception as exc:
+                self._session = None
+                if attempt < self.REQUEST_RETRY_ATTEMPTS:
+                    await asyncio.sleep(self.REQUEST_RETRY_DELAY_SECONDS)
+                    continue
+                self._record_diagnostic(f"{context}请求异常：{exc}", level="warning")
+                return None
+            break
 
         if text:
             self._record_diagnostic(f"{context}请求成功")
@@ -260,12 +267,19 @@ class OfficialMetadataProvider(BaseCrawler):
                 return False
             return response.status_code == 200 and content_type.lower().startswith("image/")
 
-        try:
-            return await asyncio.to_thread(request)
-        except Exception as exc:
-            self._session = None
-            self._record_diagnostic(f"封面候选校验失败：{url} ({exc})", level="warning")
-            return False
+        last_error: Exception | None = None
+        for attempt in range(1, self.REQUEST_RETRY_ATTEMPTS + 1):
+            try:
+                return await asyncio.to_thread(request)
+            except Exception as exc:
+                last_error = exc
+                self._session = None
+                if attempt < self.REQUEST_RETRY_ATTEMPTS:
+                    await asyncio.sleep(self.REQUEST_RETRY_DELAY_SECONDS)
+                    continue
+
+        self._record_diagnostic(f"封面候选校验失败：{url} ({last_error})", level="warning")
+        return False
 
     def _extract_deterministic(
         self,

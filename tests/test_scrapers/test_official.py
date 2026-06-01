@@ -203,6 +203,33 @@ async def test_check_image_url_rejects_dmm_now_printing_placeholder():
     ) is False
 
 
+@pytest.mark.asyncio
+async def test_check_image_url_retries_after_ssl_error():
+    class Response:
+        status_code = 200
+        headers = {"content-type": "image/jpeg"}
+        url = "https://pics.dmm.co.jp/digital/video/1fsdss00615/1fsdss00615pl.jpg"
+
+    class FailingSession:
+        def head(self, url, **kwargs):
+            raise RuntimeError("TLS handshake failed")
+
+    class WorkingSession:
+        def head(self, url, **kwargs):
+            return Response()
+
+    provider = OfficialMetadataProvider()
+    provider.REQUEST_RETRY_DELAY_SECONDS = 0
+
+    with patch(
+        "app.scrapers.official.requests.Session",
+        side_effect=[FailingSession(), WorkingSession()],
+    ):
+        assert await provider._check_image_url(
+            "https://pics.dmm.co.jp/digital/video/1fsdss00615/1fsdss00615pl.jpg"
+        ) is True
+
+
 def test_apply_translation_updates_display_fields_only():
     metadata = ScrapingMetadata(
         code="DASD-951",
