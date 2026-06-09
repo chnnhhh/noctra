@@ -177,21 +177,21 @@ class OfficialMetadataProvider(BaseCrawler):
         self._record_diagnostic("正在请求 jav321.com")
 
         def request() -> str | None:
-            if self._session is None:
-                self._session = requests.Session()
+            # Use a fresh session for jav321 to avoid cookie/state pollution from DMM
+            session = requests.Session()
             kwargs: dict[str, Any] = {
                 "data": {"sn": variants.code_with_hyphen},
                 "headers": DEFAULT_HEADERS,
                 "timeout": self.REQUEST_TIMEOUT_SECONDS,
                 "verify": False,
                 "impersonate": "chrome",
-                "allow_redirects": True,
             }
             proxy = get_proxy_for_url(search_url)
             if proxy:
                 kwargs["proxy"] = proxy
-            response = self._session.post(search_url, **kwargs)
+            response = session.post(search_url, **kwargs)
             if response.status_code != 200:
+                logger.warning("jav321.com returned HTTP %d", response.status_code)
                 return None
             return response.text
 
@@ -201,10 +201,13 @@ class OfficialMetadataProvider(BaseCrawler):
                 html = await asyncio.to_thread(request)
             except Exception as exc:
                 self._session = None
+                self._record_diagnostic(
+                    f"jav321.com 第 {attempt} 次请求异常：{type(exc).__name__}: {exc}",
+                    level="warning",
+                )
                 if attempt < 2:
                     await asyncio.sleep(3)
                     continue
-                self._record_diagnostic(f"jav321.com 请求异常：{exc}", level="warning")
                 return None
             break
 
@@ -296,7 +299,7 @@ class OfficialMetadataProvider(BaseCrawler):
 
         # Verify product code matches
         if product_code:
-            norm_code = product_code.upper().replace(" ", "")
+            norm_code = product_code.upper().replace(" ", "").replace("-", "")
             if norm_code != code_upper.replace("-", ""):
                 return None
 
