@@ -136,8 +136,15 @@ class OfficialMetadataProvider(BaseCrawler):
         extracted = merge_metadata(deterministic, llm_result)
 
         if not extracted.title and not extracted.actors and not extracted.cover_image_urls:
+            # Fallback: try jav321.com when official sources fail
+            self._record_diagnostic("官方来源未找到数据，尝试 jav321.com 后备", level="warning")
+            jav321_result = await self._fetch_jav321_metadata(variants)
+            if jav321_result:
+                extracted = merge_metadata(extracted, jav321_result)
+
+        if not extracted.title and not extracted.actors and not extracted.cover_image_urls:
             self._set_error(
-                f"官方/DMM 来源没有找到匹配番号 {variants.code_with_hyphen} 的元数据"
+                f"官方/DMM/jav321 来源都没有找到匹配番号 {variants.code_with_hyphen} 的元数据"
             )
             return None
 
@@ -160,6 +167,168 @@ class OfficialMetadataProvider(BaseCrawler):
             if html and self._looks_like_takara_product(html, variants):
                 return html, url
         return None, None
+
+    async def _fetch_jav321_metadata(
+        self,
+        variants: CodeVariants,
+    ) -> ExtractedMetadata | None:
+        """Fetch metadata from jav321.com as a fallback when Takara/DMM fail."""
+        search_url = "https://www.jav321.com/search"
+        self._record_diagnostic("正在请求 jav321.com")
+
+        def request() -> str | None:
+            if self._session is None:
+                self._session = requests.Session()
+            kwargs: dict[str, Any] = {
+                "data": {"sn": variants.code_with_hyphen},
+                "headers": DEFAULT_HEADERS,
+                "timeout": self.REQUEST_TIMEOUT_SECONDS,
+                "verify": False,
+                "impersonate": "chrome",
+                "allow_redirects": True,
+            }
+            proxy = get_proxy_for_url(search_url)
+            if proxy:
+                kwargs["proxy"] = proxy
+            response = self._session.post(search_url, **kwargs)
+            if response.status_code != 200:
+                return None
+            return response.text
+
+        html = None
+        for attempt in range(1, 3):
+            try:
+                html = await asyncio.to_thread(request)
+            except Exception as exc:
+                self._session = None
+                if attempt < 2:
+                    await asyncio.sleep(3)
+                    continue
+                self._record_diagnostic(f"jav321.com 请求异常：{exc}", level="warning")
+                return None
+            break
+
+        if not html:
+            self._record_diagnostic("jav321.com 请求失败", level="warning")
+            return None
+
+        return self._parse_jav321(html, variants)
+
+    @staticmethod
+    def _parse_jav321(html: str, variants: CodeVariants) -> ExtractedMetadata | None:
+        """Parse jav321.com detail page into ExtractedMetadata."""
+        soup = BeautifulSoup(html, "lxml")
+
+        # Extract title from h3
+        h3 = soup.find("h3")
+        if not h3:
+            return None
+        raw_title = h3.get_text(" ", strip=True)
+        # Remove code and actors from title (format: "Title code Actor1 Actor2")
+        title = raw_title
+        code_upper = variants.code_with_hyphen.upper()
+        # Remove the code portion
+        for part in raw_title.split():
+            if part.upper().replace("-", "") == code_upper.replace("-", ""):
+                title = raw_title.split(part, 1)[0].strip()
+                break
+
+        if not title:
+            return None
+
+        # Extract structured fields from panel-body
+        fields: dict[str, str | list[str]] = {}
+        for panel in soup.select(".panel-body"):
+            text = panel.get_text(" ", strip=True)
+            # Parse label: value pairs
+            for label in ("出演者", "メーカー", "品番", "配信開始日", "発売日",
+                          "シリーズ", "レーベル", "監督", "収録時間"):
+                if label in text:
+                    # Find the text between this label and the next
+                    idx = text.index(label) + len(label)
+                    # Skip the colon
+                    remainder = text[idx:].lstrip(" :：").strip()
+                    # Get text until next known label or end
+                    next_labels = ["出演者", "メーカー", "品番", "配信開始日",
+                                   "発売日", "シリーズ", "レーベル", "監督",
+                                   "収録時間", "お気に入り登録数"]
+                    end_idx = len(remainder)
+                    for nl in next_labels:
+                        if nl in remainder:
+                            end_idx = min(end_idx, remainder.index(nl))
+                    value = remainder[:end_idx].strip().rstrip("|").strip()
+                    if value:
+                        fields[label] = value
+
+        # Extract actors from links
+        actors: list[str] = []
+        for a in soup.select("a[href*='/star/']"):
+            name = a.get_text(strip=True)
+            if name and name not in actors:
+                actors.append(name)
+
+        # Extract cover image URL (use HTTP to avoid SSL issues with pics.dmm.co.jp)
+        cover_urls: list[str] = []
+        for img in soup.select("img[src*='pics.dmm.co.jp']"):
+            src = img.get("src", "")
+            if "pl.jpg" in src:
+                # Ensure HTTP (not HTTPS) to avoid SSL issues
+                url = src if src.startswith("http") else f"http:{src}"
+                url = url.replace("https://", "http://")
+                cover_urls.append(url)
+            elif "ps.jpg" in src and not cover_urls:
+                url = src if src.startswith("http") else f"http:{src}"
+                url = url.replace("https://", "http://")
+                cover_urls.append(url)
+
+        # Also check for large poster link
+        for img in soup.select("img[src*='pics.dmm.co.jp']"):
+            src = img.get("src", "")
+            if "pl.jpg" in src:
+                url = src if src.startswith("http") else f"http:{src}"
+                url = url.replace("https://", "http://")
+                if url not in cover_urls:
+                    cover_urls.insert(0, url)
+
+        release_date = str(fields.get("配信開始日", fields.get("発売日", "")))
+        maker = str(fields.get("メーカー", ""))
+        product_code = str(fields.get("品番", ""))
+
+        # Verify product code matches
+        if product_code:
+            norm_code = product_code.upper().replace(" ", "")
+            if norm_code != code_upper.replace("-", ""):
+                return None
+
+        result = ExtractedMetadata(
+            title=title,
+            actors=actors,
+            release_date=release_date,
+            maker=maker,
+            series=str(fields.get("シリーズ", "")),
+            label=str(fields.get("レーベル", "")),
+            director=str(fields.get("監督", "")),
+            cover_image_urls=unique_non_empty(cover_urls)[:2],
+            confidence="medium" if title and actors else "low",
+        )
+
+        if result.title or result.actors:
+            result.evidence.append({
+                "source": "jav321.com",
+                "url": f"https://www.jav321.com/search?sn={variants.code_with_hyphen}",
+                "fields": [
+                    name for name, value in (
+                        ("title", result.title),
+                        ("actors", result.actors),
+                        ("releaseDate", result.release_date),
+                        ("maker", result.maker),
+                    )
+                    if value
+                ],
+            })
+            logger.info("jav321.com fallback 成功: %s", variants.code_with_hyphen)
+
+        return result if (result.title or result.actors or result.cover_image_urls) else None
 
     async def _warmup_dmm_cookies(self) -> None:
         """Visit DMM age-check endpoint to establish session cookies before detail requests."""
