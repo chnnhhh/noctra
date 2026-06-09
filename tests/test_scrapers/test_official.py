@@ -219,7 +219,8 @@ async def test_check_image_url_retries_after_ssl_error():
             return Response()
 
     provider = OfficialMetadataProvider()
-    provider.REQUEST_RETRY_DELAY_SECONDS = 0
+    provider.REQUEST_RETRY_BASE_DELAY_SECONDS = 0
+    provider.REQUEST_RETRY_MAX_DELAY_SECONDS = 0
 
     with patch(
         "app.scrapers.official.requests.Session",

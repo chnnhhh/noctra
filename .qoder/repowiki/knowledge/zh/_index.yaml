@@ -1,0 +1,39 @@
+# 知识卡导出索引文件
+schema_version: 1
+locale: zh-CN
+branch: master
+exported_at: "2026-06-09T09:53:09Z"
+modules:
+    "":
+        dir_name: 元数据刮削与媒体资产生成
+        title: 元数据刮削与媒体资产生成
+        scope:
+            - app/
+            - static/
+            - tests/
+            - docs/
+            - scripts/
+            - config/
+            - migrations/
+            - .github/
+            - .dockerignore
+            - .gitignore
+            - AGENTS.md
+            - Dockerfile
+            - README.en.md
+            - docker-compose.nas-image-shared-root.yml
+            - docker-compose.nas-image.yml
+            - docker-compose.nas-shared-root.yml
+            - docker-compose.nas.yml
+            - docker-compose.yml
+            - nas-deployment.md
+            - requirements.txt
+            - restart.sh
+            - start.sh
+            - test_crawler.py
+            - LICENSE
+            - README.md
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []

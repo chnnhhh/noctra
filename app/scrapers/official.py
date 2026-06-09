@@ -2,7 +2,9 @@
 
 import asyncio
 import json
+import logging
 import os
+import random
 import re
 from dataclasses import dataclass, field, replace
 from typing import Any
@@ -15,6 +17,8 @@ from .base import BaseCrawler
 from .metadata import ScrapingMetadata
 from .proxy import get_proxy_for_url
 
+logger = logging.getLogger("uvicorn.error")
+
 
 DEFAULT_HEADERS = {
     "User-Agent": "Mozilla/5.0",
@@ -22,7 +26,7 @@ DEFAULT_HEADERS = {
 }
 DMM_HEADERS = {
     **DEFAULT_HEADERS,
-    "Cookie": "age_check_done=1",
+    "Cookie": "age_check_done=1; ckcy=1; cklg=ja",
 }
 
 
@@ -83,8 +87,9 @@ class OfficialMetadataProvider(BaseCrawler):
     DMM_LEADING_ONE_DIGITAL_PREFIXES = {"FSDSS"}
 
     REQUEST_TIMEOUT_SECONDS = 25
-    REQUEST_RETRY_ATTEMPTS = 3
-    REQUEST_RETRY_DELAY_SECONDS = 0.5
+    REQUEST_RETRY_ATTEMPTS = 5
+    REQUEST_RETRY_BASE_DELAY_SECONDS = 2.0
+    REQUEST_RETRY_MAX_DELAY_SECONDS = 15.0
     LLM_TIMEOUT_SECONDS = 60
 
     async def crawl(self, code: str) -> ScrapingMetadata | None:
@@ -107,6 +112,8 @@ class OfficialMetadataProvider(BaseCrawler):
             page_html["takara"] = takara_html
             page_urls["takara"] = takara_url
 
+        # Warm up DMM cookies before fetching detail pages
+        await self._warmup_dmm_cookies()
         dmm_html, dmm_url = await self._fetch_dmm_detail(variants)
         if dmm_html and dmm_url:
             page_html["dmm"] = dmm_html
@@ -154,6 +161,33 @@ class OfficialMetadataProvider(BaseCrawler):
                 return html, url
         return None, None
 
+    async def _warmup_dmm_cookies(self) -> None:
+        """Visit DMM age-check endpoint to establish session cookies before detail requests."""
+        warmup_url = "https://www.dmm.co.jp/mono/dvd/-/list/=/view=text/"
+
+        def request() -> None:
+            if self._session is None:
+                self._session = requests.Session()
+            kwargs: dict[str, Any] = {
+                "headers": DMM_HEADERS,
+                "timeout": 15,
+                "verify": False,
+                "impersonate": "chrome",
+            }
+            proxy = get_proxy_for_url(warmup_url)
+            if proxy:
+                kwargs["proxy"] = proxy
+            try:
+                self._session.get(warmup_url, **kwargs)
+            except Exception:
+                pass  # Warmup failure is non-fatal
+
+        try:
+            await asyncio.to_thread(request)
+            self._record_diagnostic("DMM cookie 预热完成")
+        except Exception as exc:
+            self._record_diagnostic(f"DMM cookie 预热失败（非致命）：{exc}", level="warning")
+
     async def _fetch_dmm_detail(
         self,
         variants: CodeVariants,
@@ -173,14 +207,17 @@ class OfficialMetadataProvider(BaseCrawler):
     ) -> str | None:
         self._record_diagnostic(f"正在请求 {context}")
 
-        def request() -> str | None:
+        # Fingerprint rotation order for SSL error recovery
+        fingerprints = ["chrome", "safari17_0", "chrome"]
+
+        def request(impersonate: str) -> str | None:
             if self._session is None:
                 self._session = requests.Session()
             kwargs: dict[str, Any] = {
                 "headers": headers,
                 "timeout": self.REQUEST_TIMEOUT_SECONDS,
                 "verify": False,
-                "impersonate": "chrome",
+                "impersonate": impersonate,
             }
             proxy = get_proxy_for_url(url)
             if proxy:
@@ -195,12 +232,30 @@ class OfficialMetadataProvider(BaseCrawler):
             return response.text
 
         for attempt in range(1, self.REQUEST_RETRY_ATTEMPTS + 1):
+            fp = fingerprints[min(attempt - 1, len(fingerprints) - 1)]
             try:
-                text = await asyncio.to_thread(request)
+                text = await asyncio.to_thread(request, fp)
             except Exception as exc:
                 self._session = None
+                is_ssl = "SSL" in str(exc) or "ssl" in str(exc).lower()
                 if attempt < self.REQUEST_RETRY_ATTEMPTS:
-                    await asyncio.sleep(self.REQUEST_RETRY_DELAY_SECONDS)
+                    # Exponential backoff with jitter
+                    delay = min(
+                        self.REQUEST_RETRY_BASE_DELAY_SECONDS * (2 ** (attempt - 1)),
+                        self.REQUEST_RETRY_MAX_DELAY_SECONDS,
+                    )
+                    jitter = random.uniform(0, delay * 0.5)
+                    delay = delay + jitter
+                    note = " (SSL, rotating fingerprint)" if is_ssl else ""
+                    logger.info(
+                        "[%s] attempt %d failed: %s%s – retrying in %.1fs",
+                        context, attempt, exc, note, delay,
+                    )
+                    self._record_diagnostic(
+                        f"{context}第 {attempt} 次失败：{exc}，{delay:.1f}s 后重试{note}",
+                        level="warning",
+                    )
+                    await asyncio.sleep(delay)
                     continue
                 self._record_diagnostic(f"{context}请求异常：{exc}", level="warning")
                 return None
@@ -239,14 +294,16 @@ class OfficialMetadataProvider(BaseCrawler):
         return validated
 
     async def _check_image_url(self, url: str) -> bool:
-        def request() -> bool:
+        fingerprints = ["chrome", "safari17_0", "chrome"]
+
+        def request(impersonate: str) -> bool:
             if self._session is None:
                 self._session = requests.Session()
             kwargs: dict[str, Any] = {
                 "headers": DEFAULT_HEADERS,
                 "timeout": self.REQUEST_TIMEOUT_SECONDS,
                 "verify": False,
-                "impersonate": "chrome",
+                "impersonate": impersonate,
             }
             proxy = get_proxy_for_url(url)
             if proxy:
@@ -269,13 +326,20 @@ class OfficialMetadataProvider(BaseCrawler):
 
         last_error: Exception | None = None
         for attempt in range(1, self.REQUEST_RETRY_ATTEMPTS + 1):
+            fp = fingerprints[min(attempt - 1, len(fingerprints) - 1)]
             try:
-                return await asyncio.to_thread(request)
+                return await asyncio.to_thread(request, fp)
             except Exception as exc:
                 last_error = exc
                 self._session = None
                 if attempt < self.REQUEST_RETRY_ATTEMPTS:
-                    await asyncio.sleep(self.REQUEST_RETRY_DELAY_SECONDS)
+                    delay = min(
+                        self.REQUEST_RETRY_BASE_DELAY_SECONDS * (2 ** (attempt - 1)),
+                        self.REQUEST_RETRY_MAX_DELAY_SECONDS,
+                    )
+                    jitter = random.uniform(0, delay * 0.5)
+                    delay = delay + jitter
+                    await asyncio.sleep(delay)
                     continue
 
         self._record_diagnostic(f"封面候选校验失败：{url} ({last_error})", level="warning")

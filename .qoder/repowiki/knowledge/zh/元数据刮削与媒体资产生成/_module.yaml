@@ -1,0 +1,32 @@
+schema_version: 1
+module_path: ""
+title: 元数据刮削与媒体资产生成
+scope:
+    - app/
+    - static/
+    - tests/
+    - docs/
+    - scripts/
+    - config/
+    - migrations/
+    - .github/
+    - .dockerignore
+    - .gitignore
+    - AGENTS.md
+    - Dockerfile
+    - README.en.md
+    - docker-compose.nas-image-shared-root.yml
+    - docker-compose.nas-image.yml
+    - docker-compose.nas-shared-root.yml
+    - docker-compose.nas.yml
+    - docker-compose.yml
+    - nas-deployment.md
+    - requirements.txt
+    - restart.sh
+    - start.sh
+    - test_crawler.py
+    - LICENSE
+    - README.md
+source_files: []
+depends_on: []
+related_to: []
