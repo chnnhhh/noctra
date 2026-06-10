@@ -11,6 +11,7 @@ from typing import Optional
 import aiosqlite
 
 from app.models import ScrapeResponse
+from app.scrapers.firecrawl import FirecrawlMetadataProvider
 from app.scrapers.official import OfficialMetadataProvider
 from app.scrapers.writers.nfo import write_nfo
 from app.scrapers.writers.image import download_additional_artwork, download_poster
@@ -19,6 +20,7 @@ DB_PATH = os.getenv("DB_PATH", "/app/data/noctra.db")
 SCRAPE_ELIGIBLE_STATUSES = {"processed", "organized"}
 MAX_SCRAPE_LOGS = 30
 SCRAPE_SOURCE_OFFICIAL = "official"
+SCRAPE_SOURCE_FIRECRAWL = "firecrawl"
 logger = logging.getLogger("uvicorn.error")
 
 SCRAPE_PROGRESS = {
@@ -47,6 +49,7 @@ def _source_label(source: str | None) -> str:
     mapping = {
         SCRAPE_SOURCE_OFFICIAL: "官方/DMM",
         "javtrailers": "JavTrailers",
+        SCRAPE_SOURCE_FIRECRAWL: "Firecrawl",
     }
     return mapping.get(source or "", source or "")
 
@@ -208,19 +211,19 @@ class ScraperScheduler:
             if not target_path:
                 raise ValueError("File has no target_path")
 
-            # Step 3: Retrieve metadata
+            # Step 3: Retrieve metadata via Firecrawl search
             await emit(
                 "querying_source",
-                "正在查询官方/DMM",
-                source=SCRAPE_SOURCE_OFFICIAL,
+                f"正在通过 Firecrawl 搜索 {code}",
+                source=SCRAPE_SOURCE_FIRECRAWL,
                 progress_percent=SCRAPE_PROGRESS["querying_source"],
             )
-            crawler = OfficialMetadataProvider()
+            crawler = FirecrawlMetadataProvider()
             metadata = await crawler.crawl(code)
             await emit_crawler_diagnostics(
                 crawler,
                 stage="querying_source",
-                source=SCRAPE_SOURCE_OFFICIAL,
+                source=SCRAPE_SOURCE_FIRECRAWL,
             )
 
             if metadata is None:
@@ -233,21 +236,21 @@ class ScraperScheduler:
 
             await emit(
                 "fetching_detail",
-                "已拿到官方/DMM结果，正在整理页面信息",
-                source=SCRAPE_SOURCE_OFFICIAL,
+                "Firecrawl 搜索完成，正在整理元数据",
+                source=SCRAPE_SOURCE_FIRECRAWL,
                 progress_percent=SCRAPE_PROGRESS["fetching_detail"],
             )
 
             await emit(
                 "parsing_metadata",
-                "详情页读取成功，正在解析基础信息",
-                source=SCRAPE_SOURCE_OFFICIAL,
+                "元数据提取成功，正在解析基础信息",
+                source=SCRAPE_SOURCE_FIRECRAWL,
                 progress_percent=SCRAPE_PROGRESS["parsing_metadata_summary"],
             )
             await emit(
                 "parsing_metadata",
                 "正在解析演员、标签和发行信息",
-                source=SCRAPE_SOURCE_OFFICIAL,
+                source=SCRAPE_SOURCE_FIRECRAWL,
                 progress_percent=SCRAPE_PROGRESS["parsing_metadata_full"],
             )
 
@@ -357,7 +360,7 @@ class ScraperScheduler:
                 last_scrape_at=finished_at,
                 scrape_finished_at=finished_at,
                 scrape_stage="success",
-                scrape_source=SCRAPE_SOURCE_OFFICIAL,
+                scrape_source=SCRAPE_SOURCE_FIRECRAWL,
                 scrape_error=None,
                 scrape_error_user_message=None,
                 scrape_logs=json.dumps(logs, ensure_ascii=False),
@@ -368,7 +371,7 @@ class ScraperScheduler:
                 code=code,
                 user_message="刮削完成",
                 stage="success",
-                source=SCRAPE_SOURCE_OFFICIAL,
+                source=SCRAPE_SOURCE_FIRECRAWL,
                 logs=logs,
             )
 
